@@ -1,0 +1,18 @@
+<resources>
+    <string name="app_name">Strukt</string>
+    <string name="tagline_study_os">FLOW OS</string>
+    <string name="inbox_title">Inbox</string>
+    <string name="timeline_title">Day Flow</string>
+    <string name="templates_title">Blueprints</string>
+    <string name="focus_title">Focus Now</string>
+    <string name="matrix_title">Master Matrix</string>
+    <string name="up_next_label">UP NEXT — DO THIS NOW</string>
+    <string name="enter_focus">Start Focus</string>
+    <string name="timeless_step">Timeless Step</string>
+    <string name="timed_block">Timed Slot</string>
+    <string name="top_bubble">Top Bubble</string>
+    <string name="add_task">Add Task</string>
+    <string name="send_to_day">Send to Day</string>
+    <string name="empty_day_title">Your Flow Is Clear</string>
+    <string name="empty_day_subtitle">Add a timeless step, a timed block, or pull a task from your Inbox to structure your day without paralysis.</string>
+</resources>

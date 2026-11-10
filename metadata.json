@@ -1,0 +1,6 @@
+{
+  "name": "Strukt",
+  "description": "A Neo-Brutalist visual day and sequence planner inspired by Structured, featuring mixed timeless and timed daily flows, anti-paralysis focus mode, brain-dump inbox, and responsive tablet split-view for Redmi Pad Pro 5G.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
