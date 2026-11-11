@@ -83,6 +83,8 @@ import com.example.ui.theme.PaperCanvas
 import com.example.ui.theme.PureWhiteSurface
 import com.example.ui.theme.SoftSheetSurface
 import com.example.ui.theme.neoColorForKey
+import com.example.ui.theme.sdp
+import com.example.ui.theme.ssp
 import kotlinx.coroutines.delay
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -1421,7 +1423,8 @@ fun AntiParalysisFocusScreen(
             .fillMaxSize()
             .padding(horizontal = 16.dp)
     ) {
-        val isWideFocusLayout = maxWidth >= 660.dp
+        // Keep the single-column Focus card layout intact and centered within 680.dp across devices
+        val isWideFocusLayout = false
 
         Column(
             modifier = Modifier
@@ -1432,7 +1435,9 @@ fun AntiParalysisFocusScreen(
         ) {
             // Top Bar: Back to Timeline + Folder/Section Badge
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .widthIn(max = 680.dp)
+                    .fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -1513,10 +1518,10 @@ fun AntiParalysisFocusScreen(
                     }
                 }
             } else {
-                // Single-Column Portrait Focus Workspace
+                // Single-Column Focus Workspace centered within max 680.dp
                 Column(
                     modifier = Modifier
-                        .widthIn(max = 560.dp)
+                        .widthIn(max = 680.dp)
                         .fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
@@ -1583,7 +1588,7 @@ private fun FocusHeroAndTimerCard(
         ) {
             Box(
                 modifier = Modifier
-                    .size(62.dp)
+                    .size(62.sdp)
                     .clip(CircleShape)
                     .background(PureWhiteSurface)
                     .border(1.5.dp, InkBlack, CircleShape),
@@ -1593,7 +1598,7 @@ private fun FocusHeroAndTimerCard(
                     imageVector = iconForKey(task.iconKey),
                     contentDescription = null,
                     tint = InkBlack,
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.size(28.sdp)
                 )
             }
 
@@ -1618,14 +1623,14 @@ private fun FocusHeroAndTimerCard(
                     Text(
                         text = String.format(Locale.US, "%02d:%02d", mins, secs),
                         style = MaterialTheme.typography.displayLarge.copy(
-                            fontSize = 46.sp,
+                            fontSize = 46.ssp,
                             fontWeight = FontWeight.Bold,
                             fontFeatureSettings = "tnum"
                         ),
                         color = InkBlack
                     )
                     Spacer(modifier = Modifier.height(10.dp))
-                    NeoProgressBar(progress = progress, fillColor = InkBlack, height = 10.dp)
+                    NeoProgressBar(progress = progress, fillColor = InkBlack, height = 10.sdp)
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1655,10 +1660,10 @@ private fun FocusHeroAndTimerCard(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(52.dp)
-                    .clip(RoundedCornerShape(16.dp))
+                    .height(52.sdp)
+                    .clip(RoundedCornerShape(16.sdp))
                     .background(NeoMintGreen)
-                    .border(1.5.dp, InkBlack, RoundedCornerShape(16.dp))
+                    .border(1.5.dp, InkBlack, RoundedCornerShape(16.sdp))
                     .clickable(onClick = onCompleteAndAdvance)
                     .testTag("complete_and_advance_button"),
                 contentAlignment = Alignment.Center

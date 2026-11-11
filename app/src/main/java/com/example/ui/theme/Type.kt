@@ -1,14 +1,37 @@
 package com.example.ui.theme
 
 import androidx.compose.material3.Typography
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
+
+/**
+ * Responsive UI scale factor:
+ * - 1.0f on standard phones (shortest width < 600.dp)
+ * - 1.24f on tablets such as the 12.1-inch Redmi Pad Pro 5G (shortest width >= 600.dp)
+ */
+val LocalUiScale = staticCompositionLocalOf { 1.0f }
+
+val Number.sdp: Dp
+    @Composable
+    @ReadOnlyComposable
+    get() = (this.toFloat() * LocalUiScale.current).dp
+
+val Number.ssp: TextUnit
+    @Composable
+    @ReadOnlyComposable
+    get() = (this.toFloat() * LocalUiScale.current).sp
 
 // Geometric Sans-Serif ("Outfit") with explicit variable-font weight axes (400, 500, 600, 700)
 @OptIn(ExperimentalTextApi::class)
@@ -129,14 +152,39 @@ val Typography = Typography(
         fontFamily = OutfitFontFamily,
         fontWeight = FontWeight.Medium,
         fontSize = 11.sp,
-        lineHeight = 14.sp,
+        lineHeight = 15.sp,
         color = InkMuted
     ),
     labelSmall = TextStyle(
         fontFamily = OutfitFontFamily,
         fontWeight = FontWeight.Normal,
-        fontSize = 11.sp,
+        fontSize = 10.sp,
         lineHeight = 14.sp,
         color = InkMuted
     )
 )
+
+private fun TextStyle.scaleBy(factor: Float): TextStyle {
+    if (factor == 1.0f) return this
+    return copy(
+        fontSize = (fontSize.value * factor).sp,
+        lineHeight = (lineHeight.value * factor).sp
+    )
+}
+
+fun scaledTypography(scale: Float): Typography {
+    if (scale == 1.0f) return Typography
+    return Typography(
+        displayLarge = Typography.displayLarge.scaleBy(scale),
+        displayMedium = Typography.displayMedium.scaleBy(scale),
+        displaySmall = Typography.displaySmall.scaleBy(scale),
+        headlineMedium = Typography.headlineMedium.scaleBy(scale),
+        titleLarge = Typography.titleLarge.scaleBy(scale),
+        titleMedium = Typography.titleMedium.scaleBy(scale),
+        bodyLarge = Typography.bodyLarge.scaleBy(scale),
+        bodyMedium = Typography.bodyMedium.scaleBy(scale),
+        labelLarge = Typography.labelLarge.scaleBy(scale),
+        labelMedium = Typography.labelMedium.scaleBy(scale),
+        labelSmall = Typography.labelSmall.scaleBy(scale)
+    )
+}

@@ -80,6 +80,8 @@ import com.example.ui.theme.NeoMintGreen
 import com.example.ui.theme.NeoYellow
 import com.example.ui.theme.PaperCanvas
 import com.example.ui.theme.PureWhiteSurface
+import com.example.ui.theme.sdp
+import com.example.ui.theme.ssp
 
 /**
  * Subtle papery small dot-grid background.
@@ -318,7 +320,7 @@ fun NeoFolderCard(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(8.dp)
+                            .size(8.sdp)
                             .clip(CircleShape)
                             .background(InkBlack)
                     )
@@ -331,10 +333,10 @@ fun NeoFolderCard(
 
                 Row(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(11.dp))
+                        .clip(RoundedCornerShape(11.sdp))
                         .background(NeoCoral)
-                        .border(1.5.dp, InkBlack, RoundedCornerShape(11.dp))
-                        .padding(horizontal = 14.dp, vertical = 7.dp),
+                        .border(1.5.dp, InkBlack, RoundedCornerShape(11.sdp))
+                        .padding(horizontal = 14.sdp, vertical = 7.sdp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
@@ -347,7 +349,7 @@ fun NeoFolderCard(
                         imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                         contentDescription = "Open Folder",
                         tint = PureWhiteSurface,
-                        modifier = Modifier.size(14.dp)
+                        modifier = Modifier.size(14.sdp)
                     )
                 }
             }
@@ -378,12 +380,12 @@ fun NeoPillButton(
     val shape = RoundedCornerShape(50)
     Box(
         modifier = modifier
-            .height(40.dp)
+            .height(40.sdp)
             .smoothPressClickable(role = Role.Button, onClick = onClick)
             .clip(shape)
             .background(bgColor, shape)
             .border(1.5.dp, InkBlack, shape)
-            .padding(horizontal = 14.dp),
+            .padding(horizontal = 14.sdp),
         contentAlignment = Alignment.Center
     ) {
         Row(
@@ -395,7 +397,7 @@ fun NeoPillButton(
                     imageVector = icon,
                     contentDescription = null,
                     tint = InkBlack,
-                    modifier = Modifier.size(16.dp)
+                    modifier = Modifier.size(16.sdp)
                 )
                 if (text.isNotEmpty()) {
                     Spacer(modifier = Modifier.width(6.dp))
@@ -405,7 +407,7 @@ fun NeoPillButton(
                 Text(
                     text = text,
                     style = MaterialTheme.typography.titleMedium.copy(
-                        fontSize = 13.sp,
+                        fontSize = 13.ssp,
                         fontWeight = textFontWeight
                     ),
                     color = InkBlack,
@@ -426,7 +428,7 @@ fun NeoProgressBar(
     modifier: Modifier = Modifier,
     fillColor: Color = InkBlack,
     trackColor: Color = PureWhiteSurface,
-    height: Dp = 8.dp
+    height: Dp = 8.sdp
 ) {
     val clamped = progress.coerceIn(0f, 1f)
     val shape = RoundedCornerShape(50)
@@ -461,10 +463,10 @@ fun NeoSquareCheckbox(
         animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
         label = "square_check_bg"
     )
-    val shape = RoundedCornerShape(8.dp)
+    val shape = RoundedCornerShape(8.sdp)
     Box(
         modifier = modifier
-            .size(24.dp)
+            .size(24.sdp)
             .smoothPressClickable(role = Role.Checkbox, onClick = onCheckedChange)
             .clip(shape)
             .background(bgColor, shape)
@@ -476,7 +478,7 @@ fun NeoSquareCheckbox(
                 imageVector = Icons.Default.Check,
                 contentDescription = "Completed",
                 tint = InkBlack,
-                modifier = Modifier.size(15.dp)
+                modifier = Modifier.size(15.sdp)
             )
         }
     }
@@ -496,7 +498,7 @@ fun NeoCircleCheckbox(
     )
     Box(
         modifier = modifier
-            .size(28.dp)
+            .size(28.sdp)
             .smoothPressClickable(role = Role.Checkbox, onClick = onCheckedChange)
             .clip(CircleShape)
             .background(bgColor, CircleShape)
@@ -508,7 +510,7 @@ fun NeoCircleCheckbox(
                 imageVector = Icons.Default.Check,
                 contentDescription = "Completed",
                 tint = InkBlack,
-                modifier = Modifier.size(16.dp)
+                modifier = Modifier.size(16.sdp)
             )
         }
     }

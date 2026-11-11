@@ -85,6 +85,8 @@ import com.example.ui.theme.PureWhiteSurface
 import com.example.ui.theme.SoftSheetSurface
 import com.example.ui.theme.neoColorForKey
 import com.example.ui.theme.neoSoftColorForKey
+import com.example.ui.theme.sdp
+import com.example.ui.theme.ssp
 import kotlinx.coroutines.flow.distinctUntilChanged
 import java.time.LocalDate
 import java.time.format.TextStyle as JavaTextStyle
@@ -109,10 +111,13 @@ private const val WEEK_PAGER_CENTER = 500
 private const val WEEK_PAGER_COUNT = 1000
 private val SHORT_WEEKDAY_LABELS = arrayOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
-// Shared geometry constants so the timeline spine sits shifted toward the left edge
-private val TIME_COLUMN_WIDTH = 38.dp
-private val TIME_TO_CAPSULE_GAP = 6.dp
-private val CAPSULE_COLUMN_WIDTH = 44.dp
+// Shared geometry constants so the timeline spine sits shifted toward the left edge and scales proportionally on tablet
+private val TIME_COLUMN_WIDTH: Dp
+    @Composable get() = 38.sdp
+private val TIME_TO_CAPSULE_GAP: Dp
+    @Composable get() = 6.sdp
+private val CAPSULE_COLUMN_WIDTH: Dp
+    @Composable get() = 44.sdp
 
 /**
  * Ultra-Clean Header & Swipeable Week Calendar:
@@ -214,7 +219,7 @@ fun DateAndWeekHeader(
                         Spacer(modifier = Modifier.height(4.dp))
                         Box(
                             modifier = Modifier
-                                .size(36.dp)
+                                .size(36.sdp)
                                 .clip(CircleShape)
                                 .background(badgeColor, CircleShape)
                                 .then(
@@ -236,12 +241,12 @@ fun DateAndWeekHeader(
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(3.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.height(6.dp)
+                            modifier = Modifier.height(6.sdp)
                         ) {
                             dotColors.take(4).forEach { colorKey ->
                                 Box(
                                     modifier = Modifier
-                                        .size(5.dp)
+                                        .size(5.sdp)
                                         .clip(CircleShape)
                                         .background(neoColorForKey(colorKey))
                                 )
@@ -290,11 +295,11 @@ fun TopAnytimeBubblesRow(
 
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.width(74.dp)
+                modifier = Modifier.width(74.sdp)
             ) {
                 Box(
                     modifier = Modifier
-                        .size(52.dp)
+                        .size(52.sdp)
                         .smoothCombinedClickable(
                             role = Role.Checkbox,
                             onLongClick = { onInspectBubble(item) },
@@ -310,14 +315,14 @@ fun TopAnytimeBubblesRow(
                         imageVector = if (task.isCompleted) Icons.Default.Check else iconForKey(task.iconKey),
                         contentDescription = task.title,
                         tint = InkBlack,
-                        modifier = Modifier.size(22.dp)
+                        modifier = Modifier.size(22.sdp)
                     )
                 }
                 Spacer(modifier = Modifier.height(5.dp))
                 Text(
                     text = task.title,
                     style = MaterialTheme.typography.bodyMedium.copy(
-                        fontSize = 11.sp,
+                        fontSize = 11.ssp,
                         fontWeight = FontWeight.Medium,
                         textDecoration = if (task.isCompleted) TextDecoration.LineThrough else TextDecoration.None
                     ),
@@ -412,9 +417,10 @@ fun SpineConnectorSegment(
 @Composable
 fun DottedBreakLoopCanvas(
     modifier: Modifier = Modifier,
-    height: Dp = 54.dp,
+    height: Dp = 54.sdp,
     color: Color = InkBlack
 ) {
+    val loopRightOffset = 16.sdp
     Canvas(
         modifier = modifier
             .width(CAPSULE_COLUMN_WIDTH)
@@ -422,7 +428,7 @@ fun DottedBreakLoopCanvas(
     ) {
         val cx = size.width / 2f
         val h = size.height
-        val loopExtentRight = cx + 16.dp.toPx()
+        val loopExtentRight = cx + loopRightOffset.toPx()
 
         val path = Path().apply {
             // 1. Start flush against the top half-oval bottom edge and glide straight down
@@ -494,10 +500,10 @@ fun HybridSpineTaskRow(
         // touches incoming/outgoing spine lines with ZERO vertical gap!
         // =========================================================================
         val ovalHeight = when {
-            task.durationMinutes >= 60 -> 84.dp
-            task.durationMinutes >= 45 -> 76.dp
-            task.durationMinutes >= 30 -> 70.dp
-            else -> 68.dp
+            task.durationMinutes >= 60 -> 84.sdp
+            task.durationMinutes >= 45 -> 76.sdp
+            task.durationMinutes >= 30 -> 70.sdp
+            else -> 68.sdp
         }
         val ovalShape = RoundedCornerShape(percent = 50)
 
@@ -525,7 +531,7 @@ fun HybridSpineTaskRow(
                     Text(
                         text = formatMinutesAsClock(startMin),
                         style = MaterialTheme.typography.labelMedium.copy(
-                            fontSize = 10.5.sp,
+                            fontSize = 10.5.ssp,
                             fontWeight = FontWeight.Normal,
                             color = if (isUpNext) InkBlack else InkMuted
                         )
@@ -533,7 +539,7 @@ fun HybridSpineTaskRow(
                     Text(
                         text = formatMinutesAsClock(endMin),
                         style = MaterialTheme.typography.labelMedium.copy(
-                            fontSize = 10.sp,
+                            fontSize = 10.ssp,
                             fontWeight = FontWeight.Normal
                         ),
                         color = InkMuted
@@ -566,7 +572,7 @@ fun HybridSpineTaskRow(
                     imageVector = iconForKey(task.iconKey),
                     contentDescription = task.title,
                     tint = InkBlack,
-                    modifier = Modifier.size(21.dp)
+                    modifier = Modifier.size(21.sdp)
                 )
             }
 
@@ -591,24 +597,24 @@ fun HybridSpineTaskRow(
         val secondSegStart = task.activeSessionStartMin ?: segments.lastOrNull()?.first ?: (firstSegEnd + 10)
         val secondSegEnd = segments.lastOrNull()?.second ?: endMin
 
-        val topHalfHeight = 52.dp
-        val loopHeight = 54.dp
-        val bottomHalfHeight = 52.dp
+        val topHalfHeight = 52.sdp
+        val loopHeight = 54.sdp
+        val bottomHalfHeight = 52.sdp
         val totalSplitHeight = topHalfHeight + loopHeight + bottomHalfHeight
 
         // Top half of the oval: rounded oval top, abrupt flat cut at bottom
         val topHalfOvalShape = RoundedCornerShape(
-            topStart = 22.dp,
-            topEnd = 22.dp,
-            bottomStart = 4.dp,
-            bottomEnd = 4.dp
+            topStart = 22.sdp,
+            topEnd = 22.sdp,
+            bottomStart = 4.sdp,
+            bottomEnd = 4.sdp
         )
         // Bottom half of the oval: abrupt flat cut at top, rounded oval at bottom
         val bottomHalfOvalShape = RoundedCornerShape(
-            topStart = 4.dp,
-            topEnd = 4.dp,
-            bottomStart = 22.dp,
-            bottomEnd = 22.dp
+            topStart = 4.sdp,
+            topEnd = 4.sdp,
+            bottomStart = 22.sdp,
+            bottomEnd = 22.sdp
         )
 
         Row(
@@ -639,7 +645,7 @@ fun HybridSpineTaskRow(
                     Text(
                         text = formatMinutesAsClock(firstSegStart),
                         style = MaterialTheme.typography.labelMedium.copy(
-                            fontSize = 10.5.sp,
+                            fontSize = 10.5.ssp,
                             fontWeight = FontWeight.Normal,
                             color = if (isUpNext) InkBlack else InkMuted
                         )
@@ -647,7 +653,7 @@ fun HybridSpineTaskRow(
                     Text(
                         text = formatMinutesAsClock(firstSegEnd),
                         style = MaterialTheme.typography.labelMedium.copy(
-                            fontSize = 9.5.sp,
+                            fontSize = 9.5.ssp,
                             fontWeight = FontWeight.Normal
                         ),
                         color = InkMuted
@@ -667,7 +673,7 @@ fun HybridSpineTaskRow(
                     Text(
                         text = formatMinutesAsClock(secondSegStart),
                         style = MaterialTheme.typography.labelMedium.copy(
-                            fontSize = 9.5.sp,
+                            fontSize = 9.5.ssp,
                             fontWeight = FontWeight.Normal
                         ),
                         color = InkMuted
@@ -675,7 +681,7 @@ fun HybridSpineTaskRow(
                     Text(
                         text = formatMinutesAsClock(secondSegEnd),
                         style = MaterialTheme.typography.labelMedium.copy(
-                            fontSize = 10.sp,
+                            fontSize = 10.ssp,
                             fontWeight = FontWeight.Normal
                         ),
                         color = InkMuted
@@ -706,7 +712,7 @@ fun HybridSpineTaskRow(
                         imageVector = iconForKey(task.iconKey),
                         contentDescription = task.title,
                         tint = InkBlack,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(20.sdp)
                     )
                 }
 
@@ -730,7 +736,7 @@ fun HybridSpineTaskRow(
                         imageVector = iconForKey(task.iconKey),
                         contentDescription = "${task.title} Continued",
                         tint = InkBlack,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(20.sdp)
                     )
                 }
             }

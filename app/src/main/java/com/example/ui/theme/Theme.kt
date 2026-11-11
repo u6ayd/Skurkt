@@ -3,6 +3,9 @@ package com.example.ui.theme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalConfiguration
 
 private val StruktColorScheme = lightColorScheme(
     primary = InkBlack,
@@ -28,9 +31,17 @@ private val StruktColorScheme = lightColorScheme(
 fun MyApplicationTheme(
     content: @Composable () -> Unit
 ) {
-    MaterialTheme(
-        colorScheme = StruktColorScheme,
-        typography = Typography,
-        content = content
-    )
+    val configuration = LocalConfiguration.current
+    val shortestWidthDp = minOf(configuration.screenWidthDp, configuration.screenHeightDp)
+    // 1.0x on standard phones (< 600dp), 1.24x proportional boost on tablets like Redmi Pad Pro 5G (~800dp)
+    val uiScale = if (shortestWidthDp >= 600) 1.24f else 1.0f
+    val responsiveTypography = remember(uiScale) { scaledTypography(uiScale) }
+
+    CompositionLocalProvider(LocalUiScale provides uiScale) {
+        MaterialTheme(
+            colorScheme = StruktColorScheme,
+            typography = responsiveTypography,
+            content = content
+        )
+    }
 }

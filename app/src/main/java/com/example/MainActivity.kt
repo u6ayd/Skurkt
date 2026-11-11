@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -77,6 +78,7 @@ import com.example.ui.theme.NeoCoral
 import com.example.ui.theme.NeoMintGreen
 import com.example.ui.theme.NeoYellow
 import com.example.ui.theme.PureWhiteSurface
+import com.example.ui.theme.sdp
 import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
@@ -140,13 +142,16 @@ fun StruktPlannerApp(
         modifier = Modifier.fillMaxSize()
     ) {
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-            // Automatically adapts to Redmi Pad Pro 5G / Tablet width or landscape orientation
-            val isTabletSplitLayout = maxWidth >= 600.dp || maxWidth > maxHeight
+            // Portrait (maxWidth <= maxHeight) ALWAYS shows the 1-screen vertical layout with the bottom bar (on both phone and tablet).
+            // Landscape (maxWidth > maxHeight) shows the 2-column split screen (Left Dark Rail + Persistent Inbox + Main Workspace).
+            val isLandscapeSplitLayout = maxWidth > maxHeight
+            val isTabletDevice = minOf(maxWidth, maxHeight) >= 600.dp
 
-            if (isTabletSplitLayout) {
+            if (isLandscapeSplitLayout) {
                 TabletLandscapeSplitLayout(
                     uiState = uiState,
-                    viewModel = viewModel
+                    viewModel = viewModel,
+                    isTabletDevice = isTabletDevice
                 )
             } else {
                 PortraitHandheldLayout(
@@ -254,13 +259,17 @@ fun StruktPlannerApp(
 @Composable
 private fun TabletLandscapeSplitLayout(
     uiState: PlannerUiState,
-    viewModel: PlannerViewModel
+    viewModel: PlannerViewModel,
+    isTabletDevice: Boolean
 ) {
+    val railWidth = if (isTabletDevice) 88.dp else 72.dp
+    val inboxWidth = if (isTabletDevice) 380.dp else 310.dp
+
     Row(modifier = Modifier.fillMaxSize()) {
         // Learnify-Inspired Permanent Left Navigation Rail (extends edge-to-edge vertically)
         Column(
             modifier = Modifier
-                .width(72.dp)
+                .width(railWidth)
                 .fillMaxHeight()
                 .background(NavRailDark)
                 .statusBarsPadding()
@@ -271,7 +280,7 @@ private fun TabletLandscapeSplitLayout(
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(18.dp)
+                verticalArrangement = Arrangement.spacedBy(18.sdp)
             ) {
                 val railItems = listOf(
                     Triple(StruktDestination.FLOW, "Timeline", Icons.Default.ViewTimeline),
@@ -282,9 +291,9 @@ private fun TabletLandscapeSplitLayout(
                     val selected = uiState.activeDestination == dest
                     Box(
                         modifier = Modifier
-                            .size(48.dp)
+                            .size(48.sdp)
                             .smoothPressClickable(role = Role.Tab) { viewModel.setDestination(dest) }
-                            .clip(RoundedCornerShape(14.dp))
+                            .clip(RoundedCornerShape(14.sdp))
                             .background(if (selected) NeoYellow else NavRailDark)
                             .testTag("tablet_nav_${dest.name.lowercase()}"),
                         contentAlignment = Alignment.Center
@@ -293,7 +302,7 @@ private fun TabletLandscapeSplitLayout(
                             imageVector = icon,
                             contentDescription = desc,
                             tint = if (selected) InkBlack else PureWhiteSurface,
-                            modifier = Modifier.size(26.dp)
+                            modifier = Modifier.size(26.sdp)
                         )
                     }
                 }
@@ -302,16 +311,16 @@ private fun TabletLandscapeSplitLayout(
             // Bottom "+" Add Action inside the Permanent Rail
             Box(
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(48.sdp)
                     .smoothPressClickable(role = Role.Button) {
                         viewModel.openCreateTaskSheet(
                             defaultMode = TaskMode.TIMELESS_STEP,
                             forInbox = false
                         )
                     }
-                    .clip(RoundedCornerShape(14.dp))
+                    .clip(RoundedCornerShape(14.sdp))
                     .background(NeoCoral)
-                    .border(1.5.dp, PureWhiteSurface.copy(alpha = 0.25f), RoundedCornerShape(14.dp))
+                    .border(1.5.dp, PureWhiteSurface.copy(alpha = 0.25f), RoundedCornerShape(14.sdp))
                     .testTag("tablet_new_step_button"),
                 contentAlignment = Alignment.Center
             ) {
@@ -319,15 +328,15 @@ private fun TabletLandscapeSplitLayout(
                     imageVector = Icons.Default.Add,
                     contentDescription = "Add Task",
                     tint = PureWhiteSurface,
-                    modifier = Modifier.size(26.dp)
+                    modifier = Modifier.size(26.sdp)
                 )
             }
         }
 
-        // Left Inbox Column (310.dp)
+        // Left Inbox Column (380.dp on tablet, 310.dp on phone landscape)
         Box(
             modifier = Modifier
-                .width(310.dp)
+                .width(inboxWidth)
                 .fillMaxHeight()
                 .statusBarsPadding()
                 .navigationBarsPadding()
@@ -351,48 +360,55 @@ private fun TabletLandscapeSplitLayout(
                 .background(InkBlack.copy(alpha = 0.12f))
         )
 
-        // Right Main Workspace
+        // Right Main Workspace (centered within max 680.dp so single-column cards never over-stretch)
         Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxHeight()
                 .statusBarsPadding()
                 .navigationBarsPadding()
-                .padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 0.dp)
+                .padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 0.dp),
+            contentAlignment = Alignment.TopCenter
         ) {
-            when (uiState.activeDestination) {
-                StruktDestination.FOLDERS -> {
-                    FoldersAndSectionsScreen(
-                        allTasks = uiState.allTasks,
-                        folders = uiState.folders,
-                        selectedFolderId = uiState.selectedFolderId,
-                        searchQuery = uiState.searchQuery,
-                        onSearchQueryChange = viewModel::setSearchQuery,
-                        onSelectFolder = viewModel::selectFolder,
-                        onCreateFolder = viewModel::createNewFolder,
-                        onAddSectionToFolder = viewModel::addSectionToFolder,
-                        onTaskClick = { item -> viewModel.openInspectTaskModal(item.task.id) },
-                        onToggleTaskDone = viewModel::toggleTaskDone
-                    )
-                }
+            Box(
+                modifier = Modifier
+                    .widthIn(max = 680.dp)
+                    .fillMaxSize()
+            ) {
+                when (uiState.activeDestination) {
+                    StruktDestination.FOLDERS -> {
+                        FoldersAndSectionsScreen(
+                            allTasks = uiState.allTasks,
+                            folders = uiState.folders,
+                            selectedFolderId = uiState.selectedFolderId,
+                            searchQuery = uiState.searchQuery,
+                            onSearchQueryChange = viewModel::setSearchQuery,
+                            onSelectFolder = viewModel::selectFolder,
+                            onCreateFolder = viewModel::createNewFolder,
+                            onAddSectionToFolder = viewModel::addSectionToFolder,
+                            onTaskClick = { item -> viewModel.openInspectTaskModal(item.task.id) },
+                            onToggleTaskDone = viewModel::toggleTaskDone
+                        )
+                    }
 
-                StruktDestination.FOCUS -> {
-                    AntiParalysisFocusScreen(
-                        focusItem = uiState.activeFocusTask,
-                        onBackToFlow = { viewModel.setDestination(StruktDestination.FLOW) },
-                        onStartOrResumeSession = viewModel::startOrResumeFocusTimer,
-                        onPauseSession = viewModel::pauseFocusTimer,
-                        onToggleSubtask = viewModel::toggleSubtaskDone,
-                        onAddQuickSubtask = viewModel::addQuickSubtask,
-                        onCompleteAndAdvance = viewModel::completeFocusedTaskAndAdvance
-                    )
-                }
+                    StruktDestination.FOCUS -> {
+                        AntiParalysisFocusScreen(
+                            focusItem = uiState.activeFocusTask,
+                            onBackToFlow = { viewModel.setDestination(StruktDestination.FLOW) },
+                            onStartOrResumeSession = viewModel::startOrResumeFocusTimer,
+                            onPauseSession = viewModel::pauseFocusTimer,
+                            onToggleSubtask = viewModel::toggleSubtaskDone,
+                            onAddQuickSubtask = viewModel::addQuickSubtask,
+                            onCompleteAndAdvance = viewModel::completeFocusedTaskAndAdvance
+                        )
+                    }
 
-                else -> {
-                    DayFlowSheetContent(
-                        uiState = uiState,
-                        viewModel = viewModel
-                    )
+                    else -> {
+                        DayFlowSheetContent(
+                            uiState = uiState,
+                            viewModel = viewModel
+                        )
+                    }
                 }
             }
         }
@@ -408,64 +424,72 @@ private fun PortraitHandheldLayout(
     viewModel: PlannerViewModel
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
-        // Main Content takes remaining height flush to the permanent bottom bar's top line
+        // Main Content takes remaining height flush to the permanent bottom bar's top line,
+        // centered within max 680.dp so tablet portrait (800.dp) has balanced margins while phone fills 100%.
         Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
                 .statusBarsPadding()
-                .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 0.dp)
+                .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 0.dp),
+            contentAlignment = Alignment.TopCenter
         ) {
-            when (uiState.activeDestination) {
-                StruktDestination.INBOX -> {
-                    NeoInboxPane(
-                        inboxTasks = uiState.inboxTasks,
-                        dayReadinessPercent = uiState.dayReadinessPercent,
-                        completedCount = uiState.completedDayTasksCount,
-                        totalCount = uiState.totalDayTasksCount,
-                        onQuickAddInbox = { title -> viewModel.quickAddInboxTask(title) },
-                        onOpenSchedulePopup = { task -> viewModel.openScheduleInboxPopup(task) },
-                        onEditInboxTask = { item -> viewModel.openEditTaskSheet(item) }
-                    )
-                }
+            Box(
+                modifier = Modifier
+                    .widthIn(max = 680.dp)
+                    .fillMaxSize()
+            ) {
+                when (uiState.activeDestination) {
+                    StruktDestination.INBOX -> {
+                        NeoInboxPane(
+                            inboxTasks = uiState.inboxTasks,
+                            dayReadinessPercent = uiState.dayReadinessPercent,
+                            completedCount = uiState.completedDayTasksCount,
+                            totalCount = uiState.totalDayTasksCount,
+                            onQuickAddInbox = { title -> viewModel.quickAddInboxTask(title) },
+                            onOpenSchedulePopup = { task -> viewModel.openScheduleInboxPopup(task) },
+                            onEditInboxTask = { item -> viewModel.openEditTaskSheet(item) }
+                        )
+                    }
 
-                StruktDestination.FOLDERS -> {
-                    FoldersAndSectionsScreen(
-                        allTasks = uiState.allTasks,
-                        folders = uiState.folders,
-                        selectedFolderId = uiState.selectedFolderId,
-                        searchQuery = uiState.searchQuery,
-                        onSearchQueryChange = viewModel::setSearchQuery,
-                        onSelectFolder = viewModel::selectFolder,
-                        onCreateFolder = viewModel::createNewFolder,
-                        onAddSectionToFolder = viewModel::addSectionToFolder,
-                        onTaskClick = { item -> viewModel.openInspectTaskModal(item.task.id) },
-                        onToggleTaskDone = viewModel::toggleTaskDone
-                    )
-                }
+                    StruktDestination.FOLDERS -> {
+                        FoldersAndSectionsScreen(
+                            allTasks = uiState.allTasks,
+                            folders = uiState.folders,
+                            selectedFolderId = uiState.selectedFolderId,
+                            searchQuery = uiState.searchQuery,
+                            onSearchQueryChange = viewModel::setSearchQuery,
+                            onSelectFolder = viewModel::selectFolder,
+                            onCreateFolder = viewModel::createNewFolder,
+                            onAddSectionToFolder = viewModel::addSectionToFolder,
+                            onTaskClick = { item -> viewModel.openInspectTaskModal(item.task.id) },
+                            onToggleTaskDone = viewModel::toggleTaskDone
+                        )
+                    }
 
-                StruktDestination.FOCUS -> {
-                    AntiParalysisFocusScreen(
-                        focusItem = uiState.activeFocusTask,
-                        onBackToFlow = { viewModel.setDestination(StruktDestination.FLOW) },
-                        onStartOrResumeSession = viewModel::startOrResumeFocusTimer,
-                        onPauseSession = viewModel::pauseFocusTimer,
-                        onToggleSubtask = viewModel::toggleSubtaskDone,
-                        onAddQuickSubtask = viewModel::addQuickSubtask,
-                        onCompleteAndAdvance = viewModel::completeFocusedTaskAndAdvance
-                    )
-                }
+                    StruktDestination.FOCUS -> {
+                        AntiParalysisFocusScreen(
+                            focusItem = uiState.activeFocusTask,
+                            onBackToFlow = { viewModel.setDestination(StruktDestination.FLOW) },
+                            onStartOrResumeSession = viewModel::startOrResumeFocusTimer,
+                            onPauseSession = viewModel::pauseFocusTimer,
+                            onToggleSubtask = viewModel::toggleSubtaskDone,
+                            onAddQuickSubtask = viewModel::addQuickSubtask,
+                            onCompleteAndAdvance = viewModel::completeFocusedTaskAndAdvance
+                        )
+                    }
 
-                StruktDestination.FLOW -> {
-                    DayFlowSheetContent(
-                        uiState = uiState,
-                        viewModel = viewModel
-                    )
+                    StruktDestination.FLOW -> {
+                        DayFlowSheetContent(
+                            uiState = uiState,
+                            viewModel = viewModel
+                        )
+                    }
                 }
             }
         }
 
-        // Permanent Full-Width Straight Docked Bottom Navigation Bar with Larger Icons (26.dp)
+        // Permanent Full-Width Straight Docked Bottom Navigation Bar with Proportional Scaling
         PermanentStraightBottomBar(
             activeDestination = uiState.activeDestination,
             onSelectDestination = viewModel::setDestination,
@@ -481,7 +505,7 @@ private fun PortraitHandheldLayout(
 
 /**
  * Permanent, full-width straight docked bottom bar separated by a clean 1.5.dp line,
- * featuring larger (26.dp) centered icons and a dedicated "+" button.
+ * featuring proportionally scaled icons (26.sdp) and a dedicated "+" button.
  */
 @Composable
 private fun PermanentStraightBottomBar(
@@ -500,7 +524,8 @@ private fun PermanentStraightBottomBar(
         modifier = Modifier
             .fillMaxWidth()
             .background(PureWhiteSurface)
-            .navigationBarsPadding()
+            .navigationBarsPadding(),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // Straight full-width horizontal line separating the permanent bar
         Box(
@@ -512,8 +537,9 @@ private fun PermanentStraightBottomBar(
 
         Row(
             modifier = Modifier
+                .widthIn(max = 680.dp)
                 .fillMaxWidth()
-                .height(66.dp)
+                .height(66.sdp)
                 .padding(horizontal = 16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
@@ -522,12 +548,12 @@ private fun PermanentStraightBottomBar(
                 val selected = activeDestination == dest
                 Box(
                     modifier = Modifier
-                        .size(48.dp)
+                        .size(48.sdp)
                         .smoothPressClickable(role = Role.Tab) { onSelectDestination(dest) }
-                        .clip(RoundedCornerShape(14.dp))
+                        .clip(RoundedCornerShape(14.sdp))
                         .background(if (selected) NeoYellow else PureWhiteSurface)
                         .then(
-                            if (selected) Modifier.border(1.5.dp, InkBlack, RoundedCornerShape(14.dp))
+                            if (selected) Modifier.border(1.5.dp, InkBlack, RoundedCornerShape(14.sdp))
                             else Modifier
                         )
                         .testTag("bottom_nav_${dest.name.lowercase()}"),
@@ -537,19 +563,19 @@ private fun PermanentStraightBottomBar(
                         imageVector = icon,
                         contentDescription = contentDesc,
                         tint = InkBlack,
-                        modifier = Modifier.size(26.dp)
+                        modifier = Modifier.size(26.sdp)
                     )
                 }
             }
 
-            // Symmetrical 48.dp Coral "+" Button inside the permanent bar
+            // Symmetrical 48.sdp Coral "+" Button inside the permanent bar
             Box(
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(48.sdp)
                     .smoothPressClickable(role = Role.Button, onClick = onAddTaskClick)
-                    .clip(RoundedCornerShape(14.dp))
+                    .clip(RoundedCornerShape(14.sdp))
                     .background(NeoCoral)
-                    .border(1.5.dp, InkBlack, RoundedCornerShape(14.dp))
+                    .border(1.5.dp, InkBlack, RoundedCornerShape(14.sdp))
                     .testTag("fab_add_task"),
                 contentAlignment = Alignment.Center
             ) {
@@ -557,7 +583,7 @@ private fun PermanentStraightBottomBar(
                     imageVector = Icons.Default.Add,
                     contentDescription = "Add Task",
                     tint = PureWhiteSurface,
-                    modifier = Modifier.size(26.dp)
+                    modifier = Modifier.size(26.sdp)
                 )
             }
         }

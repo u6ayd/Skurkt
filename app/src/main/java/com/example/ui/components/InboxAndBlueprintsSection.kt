@@ -68,6 +68,8 @@ import com.example.ui.theme.NeoYellow
 import com.example.ui.theme.PureWhiteSurface
 import com.example.ui.theme.SoftSheetSurface
 import com.example.ui.theme.neoColorForKey
+import com.example.ui.theme.sdp
+import com.example.ui.theme.ssp
 
 /**
  * Clean Inbox Panel:
@@ -106,7 +108,7 @@ fun NeoInboxPane(
                 imageVector = Icons.Default.Inbox,
                 contentDescription = null,
                 tint = PureWhiteSurface,
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.size(18.sdp)
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
@@ -187,7 +189,7 @@ fun NeoInboxPane(
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        // Symmetrical "Brain dump" box + "+" button (identical 52.dp height, 18.dp corner radius, 1.5.dp ink border)
+        // Symmetrical "Brain dump" box + "+" button (identical 52.sdp height, 18.dp corner radius, 1.5.dp ink border)
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -196,7 +198,7 @@ fun NeoInboxPane(
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .height(52.dp)
+                    .height(52.sdp)
                     .clip(uniformCorner)
                     .background(PureWhiteSurface, uniformCorner)
                     .border(1.5.dp, InkBlack, uniformCorner)
@@ -230,7 +232,7 @@ fun NeoInboxPane(
 
             Box(
                 modifier = Modifier
-                    .size(52.dp)
+                    .size(52.sdp)
                     .clip(uniformCorner)
                     .background(NeoMintGreen, uniformCorner)
                     .border(1.5.dp, InkBlack, uniformCorner)
@@ -247,7 +249,7 @@ fun NeoInboxPane(
                     imageVector = Icons.Default.Add,
                     contentDescription = "Add",
                     tint = InkBlack,
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(24.sdp)
                 )
             }
         }
@@ -469,7 +471,8 @@ fun FoldersAndSectionsScreen(
             .fillMaxSize()
             .padding(horizontal = 14.dp)
     ) {
-        val useTwoColumnFolderGrid = maxWidth >= 600.dp
+        // Keep the vertical single-column list of folder cards intact across all devices (centered within 680.dp)
+        val useTwoColumnFolderGrid = false
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -489,7 +492,7 @@ fun FoldersAndSectionsScreen(
                             NeoCard(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(94.dp),
+                                    .height(94.sdp),
                                 backgroundColor = NeoYellow,
                                 cornerRadius = 18.dp,
                                 contentPadding = PaddingValues(16.dp)
@@ -501,7 +504,7 @@ fun FoldersAndSectionsScreen(
                                     Text(
                                         text = "OVERALL READINESS",
                                         style = MaterialTheme.typography.labelLarge.copy(
-                                            fontSize = 10.sp,
+                                            fontSize = 10.ssp,
                                             fontWeight = FontWeight.Medium
                                         ),
                                         color = InkBlack
@@ -517,7 +520,7 @@ fun FoldersAndSectionsScreen(
                             NeoCard(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(94.dp),
+                                    .height(94.sdp),
                                 backgroundColor = NeoSkyBlue,
                                 cornerRadius = 18.dp,
                                 contentPadding = PaddingValues(16.dp)
@@ -529,7 +532,7 @@ fun FoldersAndSectionsScreen(
                                     Text(
                                         text = "MILESTONES DONE",
                                         style = MaterialTheme.typography.labelLarge.copy(
-                                            fontSize = 10.sp,
+                                            fontSize = 10.ssp,
                                             fontWeight = FontWeight.Medium
                                         ),
                                         color = InkBlack
@@ -552,7 +555,7 @@ fun FoldersAndSectionsScreen(
                             NeoCard(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(94.dp),
+                                    .height(94.sdp),
                                 backgroundColor = NeoMintGreen,
                                 cornerRadius = 18.dp,
                                 contentPadding = PaddingValues(16.dp)
@@ -564,7 +567,7 @@ fun FoldersAndSectionsScreen(
                                     Text(
                                         text = "TASKS COMPLETED",
                                         style = MaterialTheme.typography.labelLarge.copy(
-                                            fontSize = 10.sp,
+                                            fontSize = 10.ssp,
                                             fontWeight = FontWeight.Medium
                                         ),
                                         color = InkBlack
@@ -580,7 +583,7 @@ fun FoldersAndSectionsScreen(
                             NeoCard(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(94.dp),
+                                    .height(94.sdp),
                                 backgroundColor = NeoRosePink,
                                 cornerRadius = 18.dp,
                                 contentPadding = PaddingValues(16.dp)
@@ -592,7 +595,7 @@ fun FoldersAndSectionsScreen(
                                     Text(
                                         text = "FOLDERS",
                                         style = MaterialTheme.typography.labelLarge.copy(
-                                            fontSize = 10.sp,
+                                            fontSize = 10.ssp,
                                             fontWeight = FontWeight.Medium
                                         ),
                                         color = InkBlack
