@@ -8,12 +8,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.example.R
 
-// 100% Geometric Plus Jakarta Sans + JetBrains Mono (Removed Playfair Serif per user feedback)
-val JakartaFontFamily = FontFamily(
-    Font(R.font.plus_jakarta_sans, FontWeight.Normal),
-    Font(R.font.plus_jakarta_sans, FontWeight.Medium),
-    Font(R.font.plus_jakarta_sans, FontWeight.SemiBold),
-    Font(R.font.plus_jakarta_sans, FontWeight.Bold)
+// Learnify Geometric Font ("Outfit") + JetBrains Mono
+val OutfitFontFamily = FontFamily(
+    Font(R.font.outfit, FontWeight.Normal),
+    Font(R.font.outfit, FontWeight.Medium),
+    Font(R.font.outfit, FontWeight.SemiBold),
+    Font(R.font.outfit, FontWeight.Bold)
 )
 
 val MonoFontFamily = FontFamily(
@@ -24,72 +24,72 @@ val MonoFontFamily = FontFamily(
 
 val Typography = Typography(
     displayLarge = TextStyle(
-        fontFamily = JakartaFontFamily,
+        fontFamily = OutfitFontFamily,
         fontWeight = FontWeight.Bold,
-        fontSize = 34.sp,
-        lineHeight = 40.sp,
-        letterSpacing = (-0.5).sp,
+        fontSize = 32.sp,
+        lineHeight = 38.sp,
+        letterSpacing = (-0.4).sp,
         color = InkBlack
     ),
     displayMedium = TextStyle(
-        fontFamily = JakartaFontFamily,
-        fontWeight = FontWeight.Bold,
+        fontFamily = OutfitFontFamily,
+        fontWeight = FontWeight.SemiBold,
         fontSize = 26.sp,
         lineHeight = 32.sp,
-        letterSpacing = (-0.3).sp,
+        letterSpacing = (-0.2).sp,
         color = InkBlack
     ),
     displaySmall = TextStyle(
-        fontFamily = JakartaFontFamily,
-        fontWeight = FontWeight.Bold,
+        fontFamily = OutfitFontFamily,
+        fontWeight = FontWeight.SemiBold,
         fontSize = 20.sp,
         lineHeight = 26.sp,
         color = InkBlack
     ),
     headlineMedium = TextStyle(
-        fontFamily = JakartaFontFamily,
-        fontWeight = FontWeight.Bold,
+        fontFamily = OutfitFontFamily,
+        fontWeight = FontWeight.SemiBold,
         fontSize = 18.sp,
         lineHeight = 24.sp,
         color = InkBlack
     ),
     titleLarge = TextStyle(
-        fontFamily = JakartaFontFamily,
-        fontWeight = FontWeight.Bold,
+        fontFamily = OutfitFontFamily,
+        fontWeight = FontWeight.SemiBold,
         fontSize = 17.sp,
         lineHeight = 22.sp,
         color = InkBlack
     ),
     titleMedium = TextStyle(
-        fontFamily = JakartaFontFamily,
-        fontWeight = FontWeight.Bold,
-        fontSize = 14.sp,
-        lineHeight = 19.sp,
+        fontFamily = OutfitFontFamily,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 15.sp,
+        lineHeight = 20.sp,
         color = InkBlack
     ),
     bodyLarge = TextStyle(
-        fontFamily = JakartaFontFamily,
-        fontWeight = FontWeight.Medium,
+        fontFamily = OutfitFontFamily,
+        fontWeight = FontWeight.Normal,
         fontSize = 15.sp,
         lineHeight = 21.sp,
         color = InkCharcoal
     ),
     bodyMedium = TextStyle(
-        fontFamily = JakartaFontFamily,
+        fontFamily = OutfitFontFamily,
         fontWeight = FontWeight.Medium,
         fontSize = 13.sp,
         lineHeight = 18.sp,
         color = InkCharcoal
     ),
     labelLarge = TextStyle(
-        fontFamily = MonoFontFamily,
-        fontWeight = FontWeight.Bold,
+        fontFamily = OutfitFontFamily,
+        fontWeight = FontWeight.SemiBold,
         fontSize = 12.sp,
         lineHeight = 16.sp,
         color = InkBlack
     ),
     labelMedium = TextStyle(
-        fontFamily = MonoFontFamily,
+        fontFamily = OutfitFontFamily,
         fontWeight = FontWeight.Medium,
         fontSize = 11.sp,
         lineHeight = 14.sp,

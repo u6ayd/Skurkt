@@ -144,16 +144,19 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
                     it.task.folderName.contains(nav.searchQuery, ignoreCase = true)
             }
 
-        val startOfWeek = selectedDate.minusDays((selectedDate.dayOfWeek.value - 1).toLong())
+        // Compute miniature task color dots across surrounding weeks for smooth HorizontalPager swiping
+        val startOfCurrentWeek = selectedDate.minusDays((selectedDate.dayOfWeek.value - 1).toLong())
         val weekDots = buildMap<Long, List<String>> {
-            for (offset in 0L..6L) {
-                val day = startOfWeek.plusDays(offset)
+            for (dayOffset in -56L..56L) {
+                val day = startOfCurrentWeek.plusDays(dayOffset)
                 val dayEpoch = day.toEpochDay()
                 val colors = allTasks
                     .filter { matchesDate(it.task, day) }
-                    .take(5)
+                    .take(4)
                     .map { it.task.colorKey }
-                put(dayEpoch, colors)
+                if (colors.isNotEmpty()) {
+                    put(dayEpoch, colors)
+                }
             }
         }
 
@@ -329,7 +332,7 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
             dateEpochDay = targetEpoch,
             taskMode = taskMode.name,
             startTimeMinutes = if (taskMode == TaskMode.TIMED_BLOCK) (startTimeMinutes ?: 9 * 60) else prevTask?.startTimeMinutes,
-            durationMinutes = durationMinutes.coerceIn(5, 360),
+            durationMinutes = durationMinutes.coerceIn(1, 720),
             sortOrder = sortOrder,
             colorKey = colorKey,
             iconKey = iconKey,

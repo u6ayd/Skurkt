@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
@@ -85,51 +86,51 @@ fun NeoInboxPane(
     modifier: Modifier = Modifier
 ) {
     var brainDumpText by remember { mutableStateOf("") }
+    val uniformCorner = RoundedCornerShape(18.dp)
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(12.dp)
+            .padding(horizontal = 14.dp, vertical = 12.dp)
     ) {
         Row(
             modifier = Modifier
-                .clip(RoundedCornerShape(50))
+                .clip(RoundedCornerShape(14.dp))
                 .background(NeoCoral)
-                .border(1.8.dp, InkBlack, RoundedCornerShape(50))
-                .padding(horizontal = 16.dp, vertical = 7.dp),
+                .border(1.5.dp, InkBlack, RoundedCornerShape(14.dp))
+                .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 imageVector = Icons.Default.Inbox,
                 contentDescription = null,
-                tint = InkBlack,
-                modifier = Modifier.size(17.dp)
+                tint = PureWhiteSurface,
+                modifier = Modifier.size(18.dp)
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = "Inbox",
                 style = MaterialTheme.typography.titleMedium,
-                color = InkBlack
+                color = PureWhiteSurface
             )
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
-        // Equal-height Day Flow & Steps Done summary cards
+        // Symmetrical 18.dp rounded summary boxes with normal 1.5.dp lines
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(IntrinsicSize.Min),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             NeoCard(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight(),
                 backgroundColor = NeoYellow,
-                cornerRadius = 14.dp,
-                shadowOffset = 2.5.dp,
-                contentPadding = PaddingValues(12.dp)
+                cornerRadius = 18.dp,
+                contentPadding = PaddingValues(14.dp)
             ) {
                 Column(
                     modifier = Modifier.fillMaxSize(),
@@ -137,15 +138,17 @@ fun NeoInboxPane(
                 ) {
                     Text(
                         text = "DAY FLOW",
-                        style = MaterialTheme.typography.labelMedium.copy(color = InkBlack),
-                        fontSize = 10.sp
+                        style = MaterialTheme.typography.labelLarge,
+                        color = InkBlack
                     )
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = "$dayReadinessPercent%",
                         style = MaterialTheme.typography.displaySmall,
                         color = InkBlack
                     )
-                    NeoProgressBar(progress = dayReadinessPercent / 100f, height = 7.dp)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    NeoProgressBar(progress = dayReadinessPercent / 100f, height = 6.dp)
                 }
             }
 
@@ -154,9 +157,8 @@ fun NeoInboxPane(
                     .weight(1f)
                     .fillMaxHeight(),
                 backgroundColor = NeoSkyBlue,
-                cornerRadius = 14.dp,
-                shadowOffset = 2.5.dp,
-                contentPadding = PaddingValues(12.dp)
+                cornerRadius = 18.dp,
+                contentPadding = PaddingValues(14.dp)
             ) {
                 Column(
                     modifier = Modifier.fillMaxSize(),
@@ -164,71 +166,96 @@ fun NeoInboxPane(
                 ) {
                     Text(
                         text = "STEPS DONE",
-                        style = MaterialTheme.typography.labelMedium.copy(color = InkBlack),
-                        fontSize = 10.sp
+                        style = MaterialTheme.typography.labelLarge,
+                        color = InkBlack
                     )
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = "$completedCount / $totalCount",
                         style = MaterialTheme.typography.displaySmall,
                         color = InkBlack
                     )
-                    Spacer(modifier = Modifier.height(7.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
+                    NeoProgressBar(
+                        progress = if (totalCount == 0) 0f else completedCount.toFloat() / totalCount,
+                        height = 6.dp
+                    )
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
-        // Shortened "Brain dump" input per user feedback
+        // Symmetrical "Brain dump" box + "+" button (identical 52.dp height, 18.dp corner radius, 1.5.dp ink border)
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            OutlinedTextField(
-                value = brainDumpText,
-                onValueChange = { brainDumpText = it },
-                placeholder = {
-                    Text(
-                        "Brain dump",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = InkMuted
-                    )
-                },
-                singleLine = true,
-                textStyle = MaterialTheme.typography.bodyMedium,
+            Box(
                 modifier = Modifier
                     .weight(1f)
-                    .background(PureWhiteSurface, RoundedCornerShape(12.dp))
-                    .testTag("inbox_quick_input")
-            )
-            IconButton(
-                onClick = {
-                    if (brainDumpText.isNotBlank()) {
-                        onQuickAddInbox(brainDumpText)
-                        brainDumpText = ""
-                    }
-                },
+                    .height(52.dp)
+                    .clip(uniformCorner)
+                    .background(PureWhiteSurface, uniformCorner)
+                    .border(1.5.dp, InkBlack, uniformCorner)
+                    .padding(horizontal = 4.dp),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                OutlinedTextField(
+                    value = brainDumpText,
+                    onValueChange = { brainDumpText = it },
+                    placeholder = {
+                        Text(
+                            "Brain dump",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = InkMuted
+                        )
+                    },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyLarge,
+                    shape = uniformCorner,
+                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = androidx.compose.ui.graphics.Color.Transparent,
+                        unfocusedBorderColor = androidx.compose.ui.graphics.Color.Transparent,
+                        focusedContainerColor = androidx.compose.ui.graphics.Color.Transparent,
+                        unfocusedContainerColor = androidx.compose.ui.graphics.Color.Transparent
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("inbox_quick_input")
+                )
+            }
+
+            Box(
                 modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(NeoMintGreen)
-                    .border(1.8.dp, InkBlack, RoundedCornerShape(12.dp))
-                    .testTag("inbox_quick_submit_button")
+                    .size(52.dp)
+                    .clip(uniformCorner)
+                    .background(NeoMintGreen, uniformCorner)
+                    .border(1.5.dp, InkBlack, uniformCorner)
+                    .clickable {
+                        if (brainDumpText.isNotBlank()) {
+                            onQuickAddInbox(brainDumpText)
+                            brainDumpText = ""
+                        }
+                    }
+                    .testTag("inbox_quick_submit_button"),
+                contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Default.Add,
                     contentDescription = "Add",
-                    tint = InkBlack
+                    tint = InkBlack,
+                    modifier = Modifier.size(24.dp)
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(10.dp),
-            contentPadding = PaddingValues(bottom = 88.dp)
+            contentPadding = PaddingValues(bottom = 24.dp)
         ) {
             items(inboxTasks, key = { it.task.id }) { item ->
                 val task = item.task
@@ -236,8 +263,7 @@ fun NeoInboxPane(
                 NeoCard(
                     modifier = Modifier.fillMaxWidth(),
                     backgroundColor = PureWhiteSurface,
-                    cornerRadius = 16.dp,
-                    shadowOffset = 2.5.dp,
+                    cornerRadius = 18.dp,
                     onClick = { onEditInboxTask(item) },
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)
                 ) {
@@ -252,10 +278,10 @@ fun NeoInboxPane(
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(38.dp)
-                                    .clip(RoundedCornerShape(10.dp))
+                                    .size(42.dp)
+                                    .clip(RoundedCornerShape(14.dp))
                                     .background(color)
-                                    .border(1.5.dp, InkBlack, RoundedCornerShape(10.dp)),
+                                    .border(1.5.dp, InkBlack, RoundedCornerShape(14.dp)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
@@ -282,20 +308,21 @@ fun NeoInboxPane(
                             }
                         }
 
-                        IconButton(
-                            onClick = { onOpenSchedulePopup(task) },
+                        Box(
                             modifier = Modifier
-                                .size(34.dp)
-                                .clip(CircleShape)
+                                .size(38.dp)
+                                .clip(RoundedCornerShape(12.dp))
                                 .background(SoftSheetSurface)
-                                .border(1.5.dp, InkBlack, CircleShape)
-                                .testTag("schedule_inbox_task_${task.id}")
+                                .border(1.5.dp, InkBlack, RoundedCornerShape(12.dp))
+                                .clickable { onOpenSchedulePopup(task) }
+                                .testTag("schedule_inbox_task_${task.id}"),
+                            contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Add,
                                 contentDescription = "Schedule into Flow",
                                 tint = InkBlack,
-                                modifier = Modifier.size(18.dp)
+                                modifier = Modifier.size(20.dp)
                             )
                         }
                     }
@@ -436,323 +463,407 @@ fun FoldersAndSectionsScreen(
 
     val selectedFolder = folders.firstOrNull { it.id == selectedFolderId }
 
-    LazyColumn(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 14.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-        contentPadding = PaddingValues(top = 10.dp, bottom = 100.dp)
+            .padding(horizontal = 14.dp)
     ) {
-        if (selectedFolder == null) {
-            // 1. Equal-Height 2x2 Minimal Stat Grid (Title + Value only, zero subtitle clutter)
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(IntrinsicSize.Min),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        NeoCard(
+        val useTwoColumnFolderGrid = maxWidth >= 600.dp
+
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(18.dp),
+            contentPadding = PaddingValues(top = 10.dp, bottom = 100.dp)
+        ) {
+            if (selectedFolder == null) {
+                // 1. Equal-Height 2x2 Minimal Stat Grid (Title + Value only, symmetrical 18.dp corners)
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(
                             modifier = Modifier
-                                .weight(1f)
-                                .height(92.dp),
-                            backgroundColor = NeoYellow,
-                            cornerRadius = 16.dp,
-                            shadowOffset = 3.dp,
-                            contentPadding = PaddingValues(14.dp)
+                                .fillMaxWidth()
+                                .height(IntrinsicSize.Min),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Column(
-                                modifier = Modifier.fillMaxSize(),
-                                verticalArrangement = Arrangement.SpaceBetween
+                            NeoCard(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(94.dp),
+                                backgroundColor = NeoYellow,
+                                cornerRadius = 18.dp,
+                                contentPadding = PaddingValues(16.dp)
                             ) {
-                                Text(
-                                    text = "OVERALL READINESS",
-                                    style = MaterialTheme.typography.labelLarge.copy(fontSize = 10.sp),
-                                    color = InkBlack
-                                )
-                                Text(
-                                    text = "$overallReadiness%",
-                                    style = MaterialTheme.typography.displayMedium,
-                                    color = InkBlack
-                                )
+                                Column(
+                                    modifier = Modifier.fillMaxSize(),
+                                    verticalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = "OVERALL READINESS",
+                                        style = MaterialTheme.typography.labelLarge.copy(fontSize = 10.sp),
+                                        color = InkBlack
+                                    )
+                                    Text(
+                                        text = "$overallReadiness%",
+                                        style = MaterialTheme.typography.displayMedium,
+                                        color = InkBlack
+                                    )
+                                }
+                            }
+
+                            NeoCard(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(94.dp),
+                                backgroundColor = NeoSkyBlue,
+                                cornerRadius = 18.dp,
+                                contentPadding = PaddingValues(16.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier.fillMaxSize(),
+                                    verticalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = "MILESTONES DONE",
+                                        style = MaterialTheme.typography.labelLarge.copy(fontSize = 10.sp),
+                                        color = InkBlack
+                                    )
+                                    Text(
+                                        text = "$doneSubtasks / ${allSubtasks.size}",
+                                        style = MaterialTheme.typography.displayMedium,
+                                        color = InkBlack
+                                    )
+                                }
                             }
                         }
 
-                        NeoCard(
+                        Row(
                             modifier = Modifier
-                                .weight(1f)
-                                .height(92.dp),
-                            backgroundColor = NeoSkyBlue,
-                            cornerRadius = 16.dp,
-                            shadowOffset = 3.dp,
-                            contentPadding = PaddingValues(14.dp)
+                                .fillMaxWidth()
+                                .height(IntrinsicSize.Min),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Column(
-                                modifier = Modifier.fillMaxSize(),
-                                verticalArrangement = Arrangement.SpaceBetween
+                            NeoCard(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(94.dp),
+                                backgroundColor = NeoMintGreen,
+                                cornerRadius = 18.dp,
+                                contentPadding = PaddingValues(16.dp)
                             ) {
-                                Text(
-                                    text = "MILESTONES DONE",
-                                    style = MaterialTheme.typography.labelLarge.copy(fontSize = 10.sp),
-                                    color = InkBlack
-                                )
-                                Text(
-                                    text = "$doneSubtasks / ${allSubtasks.size}",
-                                    style = MaterialTheme.typography.displayMedium,
-                                    color = InkBlack
-                                )
+                                Column(
+                                    modifier = Modifier.fillMaxSize(),
+                                    verticalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = "TASKS COMPLETED",
+                                        style = MaterialTheme.typography.labelLarge.copy(fontSize = 10.sp),
+                                        color = InkBlack
+                                    )
+                                    Text(
+                                        text = "$completedTasks / ${allTasks.size}",
+                                        style = MaterialTheme.typography.displayMedium,
+                                        color = InkBlack
+                                    )
+                                }
                             }
-                        }
-                    }
 
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(IntrinsicSize.Min),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        NeoCard(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(92.dp),
-                            backgroundColor = NeoMintGreen,
-                            cornerRadius = 16.dp,
-                            shadowOffset = 3.dp,
-                            contentPadding = PaddingValues(14.dp)
-                        ) {
-                            Column(
-                                modifier = Modifier.fillMaxSize(),
-                                verticalArrangement = Arrangement.SpaceBetween
+                            NeoCard(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(94.dp),
+                                backgroundColor = NeoRosePink,
+                                cornerRadius = 18.dp,
+                                contentPadding = PaddingValues(16.dp)
                             ) {
-                                Text(
-                                    text = "TASKS COMPLETED",
-                                    style = MaterialTheme.typography.labelLarge.copy(fontSize = 10.sp),
-                                    color = InkBlack
-                                )
-                                Text(
-                                    text = "$completedTasks / ${allTasks.size}",
-                                    style = MaterialTheme.typography.displayMedium,
-                                    color = InkBlack
-                                )
-                            }
-                        }
-
-                        NeoCard(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(92.dp),
-                            backgroundColor = NeoRosePink,
-                            cornerRadius = 16.dp,
-                            shadowOffset = 3.dp,
-                            contentPadding = PaddingValues(14.dp)
-                        ) {
-                            Column(
-                                modifier = Modifier.fillMaxSize(),
-                                verticalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(
-                                    text = "FOLDERS",
-                                    style = MaterialTheme.typography.labelLarge.copy(fontSize = 10.sp),
-                                    color = InkBlack
-                                )
-                                Text(
-                                    text = "${folders.size}",
-                                    style = MaterialTheme.typography.displayMedium,
-                                    color = InkBlack
-                                )
+                                Column(
+                                    modifier = Modifier.fillMaxSize(),
+                                    verticalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = "FOLDERS",
+                                        style = MaterialTheme.typography.labelLarge.copy(fontSize = 10.sp),
+                                        color = InkBlack
+                                    )
+                                    Text(
+                                        text = "${folders.size}",
+                                        style = MaterialTheme.typography.displayMedium,
+                                        color = InkBlack
+                                    )
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            // 2. Clean Search Bar + "+ Folder" Button
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = onSearchQueryChange,
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Search,
-                                contentDescription = null,
-                                tint = InkBlack
-                            )
-                        },
-                        placeholder = {
-                            Text(
-                                "Search...",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = InkMuted
-                            )
-                        },
-                        singleLine = true,
-                        shape = RoundedCornerShape(50),
-                        modifier = Modifier
-                            .weight(1f)
-                            .background(PureWhiteSurface, RoundedCornerShape(50))
-                    )
+                // 2. Clean Search Bar + "+ Folder" Button
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = onSearchQueryChange,
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Search,
+                                    contentDescription = null,
+                                    tint = InkBlack
+                                )
+                            },
+                            placeholder = {
+                                Text(
+                                    "Search...",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = InkMuted
+                                )
+                            },
+                            singleLine = true,
+                            shape = RoundedCornerShape(18.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .background(PureWhiteSurface, RoundedCornerShape(18.dp))
+                        )
 
-                    NeoPillButton(
-                        text = "+ Folder",
-                        icon = Icons.Default.CreateNewFolder,
-                        selected = true,
-                        activeColor = NeoYellow,
-                        onClick = { showCreateFolderPopup = true },
-                        modifier = Modifier.testTag("create_folder_button")
-                    )
+                        NeoPillButton(
+                            text = "+ Folder",
+                            icon = Icons.Default.CreateNewFolder,
+                            selected = true,
+                            activeColor = NeoYellow,
+                            onClick = { showCreateFolderPopup = true },
+                            modifier = Modifier.testTag("create_folder_button")
+                        )
+                    }
                 }
-            }
 
-            // 3. Folders List
-            val filteredFolders = folders.filter {
-                searchQuery.isBlank() ||
-                    it.name.contains(searchQuery, ignoreCase = true) ||
-                    it.codeTag.contains(searchQuery, ignoreCase = true)
-            }
+                // 3. Symmetrical Learnify-Style Folders Grid / List with generous 18.dp spacing
+                val filteredFolders = folders.filter {
+                    searchQuery.isBlank() ||
+                        it.name.contains(searchQuery, ignoreCase = true) ||
+                        it.codeTag.contains(searchQuery, ignoreCase = true)
+                }
 
-            items(filteredFolders, key = { it.id }) { folder ->
+                if (useTwoColumnFolderGrid) {
+                    val folderRows = filteredFolders.chunked(2)
+                    items(folderRows, key = { row -> row.first().id }) { rowFolders ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            rowFolders.forEach { folder ->
+                                val folderTasks = allTasks.filter {
+                                    it.task.folderName.equals(folder.name, ignoreCase = true)
+                                }
+                                val folderDone = folderTasks.count { it.task.isCompleted }
+                                val folderPct = if (folderTasks.isEmpty()) 0 else ((folderDone * 100f) / folderTasks.size).toInt()
+
+                                NeoFolderCard(
+                                    tabCode = folder.codeTag,
+                                    title = folder.name,
+                                    subtitle = "${folder.sections.size} Sections • ${folderTasks.size} Tasks",
+                                    progressPercent = folderPct,
+                                    fillColor = neoColorForKey(folder.colorKey),
+                                    onCardClick = { onSelectFolder(folder.id) },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag("folder_card_${folder.id}")
+                                )
+                            }
+                            if (rowFolders.size == 1) {
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
+                        }
+                    }
+                } else {
+                    items(filteredFolders, key = { it.id }) { folder ->
+                        val folderTasks = allTasks.filter {
+                            it.task.folderName.equals(folder.name, ignoreCase = true)
+                        }
+                        val folderDone = folderTasks.count { it.task.isCompleted }
+                        val folderPct = if (folderTasks.isEmpty()) 0 else ((folderDone * 100f) / folderTasks.size).toInt()
+
+                        NeoFolderCard(
+                            tabCode = folder.codeTag,
+                            title = folder.name,
+                            subtitle = "${folder.sections.size} Sections • ${folderTasks.size} Tasks",
+                            progressPercent = folderPct,
+                            fillColor = neoColorForKey(folder.colorKey),
+                            onCardClick = { onSelectFolder(folder.id) },
+                            modifier = Modifier.testTag("folder_card_${folder.id}")
+                        )
+                    }
+                }
+            } else {
+                // Inside a Selected Folder: Symmetrical Learnify Folder Header + Spaced Section Cards
                 val folderTasks = allTasks.filter {
-                    it.task.folderName.equals(folder.name, ignoreCase = true)
+                    it.task.folderName.equals(selectedFolder.name, ignoreCase = true)
                 }
                 val folderDone = folderTasks.count { it.task.isCompleted }
                 val folderPct = if (folderTasks.isEmpty()) 0 else ((folderDone * 100f) / folderTasks.size).toInt()
-
-                NeoFolderCard(
-                    tabCode = folder.codeTag,
-                    title = folder.name,
-                    subtitle = "${folder.sections.size} Sections • ${folderTasks.size} Tasks",
-                    progressPercent = folderPct,
-                    tagLabel = folder.name,
-                    fillColor = neoColorForKey(folder.colorKey),
-                    onCardClick = { onSelectFolder(folder.id) },
-                    modifier = Modifier.testTag("folder_card_${folder.id}")
-                )
-            }
-        } else {
-            // Inside a Selected Folder: Show its Sections & Tasks organized by Section
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    NeoPillButton(
-                        text = "Folders",
-                        icon = Icons.AutoMirrored.Filled.ArrowBack,
-                        onClick = { onSelectFolder(null) }
-                    )
-                    Text(
-                        text = selectedFolder.name,
-                        style = MaterialTheme.typography.displaySmall,
-                        color = InkBlack
-                    )
-                    NeoPillButton(
-                        text = "+ Section",
-                        selected = true,
-                        activeColor = NeoYellow,
-                        onClick = { showAddSectionPopup = true }
-                    )
-                }
-            }
-
-            val folderTasks = allTasks.filter {
-                it.task.folderName.equals(selectedFolder.name, ignoreCase = true)
-            }
-            val sectionsList = (selectedFolder.sections + folderTasks.map { it.task.sectionName })
-                .map { it.trim() }
-                .filter { it.isNotEmpty() }
-                .distinct()
-
-            items(sectionsList, key = { it }) { sectionName ->
-                val sectionTasks = folderTasks.filter {
-                    it.task.sectionName.equals(sectionName, ignoreCase = true)
-                }
                 val accent = neoColorForKey(selectedFolder.colorKey)
 
-                NeoCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    backgroundColor = PureWhiteSurface,
-                    cornerRadius = 18.dp,
-                    shadowOffset = 3.dp,
-                    contentPadding = PaddingValues(16.dp)
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                item {
+                    NeoCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        backgroundColor = accent,
+                        cornerRadius = 22.dp,
+                        contentPadding = PaddingValues(18.dp)
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
+                                NeoPillButton(
+                                    text = "Folders",
+                                    icon = Icons.AutoMirrored.Filled.ArrowBack,
+                                    onClick = { onSelectFolder(null) }
+                                )
+
                                 Box(
                                     modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(accent)
-                                        .border(1.5.dp, InkBlack, RoundedCornerShape(8.dp))
+                                        .clip(RoundedCornerShape(9.dp))
+                                        .background(InkBlack)
+                                        .padding(horizontal = 11.dp, vertical = 5.dp)
+                                ) {
+                                    Text(
+                                        text = selectedFolder.codeTag.uppercase(),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = PureWhiteSurface
+                                    )
+                                }
+
+                                NeoPillButton(
+                                    text = "+ Section",
+                                    selected = true,
+                                    activeColor = NeoYellow,
+                                    onClick = { showAddSectionPopup = true }
+                                )
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(
+                                        text = selectedFolder.name,
+                                        style = MaterialTheme.typography.headlineMedium,
+                                        color = InkBlack
+                                    )
+                                    Text(
+                                        text = "$folderDone / ${folderTasks.size} tasks completed",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = InkCharcoal
+                                    )
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(50))
+                                        .background(PureWhiteSurface)
+                                        .border(1.5.dp, InkBlack, RoundedCornerShape(50))
                                         .padding(horizontal = 10.dp, vertical = 4.dp)
                                 ) {
                                     Text(
-                                        text = sectionName.uppercase(),
+                                        text = "$folderPct%",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = InkBlack
+                                    )
+                                }
+                            }
+
+                            NeoProgressBar(progress = folderPct / 100f)
+                        }
+                    }
+                }
+
+                val sectionsList = (selectedFolder.sections + folderTasks.map { it.task.sectionName })
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() }
+                    .distinct()
+
+                items(sectionsList, key = { it }) { sectionName ->
+                    val sectionTasks = folderTasks.filter {
+                        it.task.sectionName.equals(sectionName, ignoreCase = true)
+                    }
+
+                    NeoCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        backgroundColor = PureWhiteSurface,
+                        cornerRadius = 20.dp,
+                        contentPadding = PaddingValues(18.dp)
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(9.dp))
+                                        .background(accent)
+                                        .border(1.5.dp, InkBlack, RoundedCornerShape(9.dp))
+                                        .padding(horizontal = 12.dp, vertical = 5.dp)
+                                ) {
+                                    Text(
+                                        text = sectionName,
                                         style = MaterialTheme.typography.labelLarge,
                                         color = InkBlack
                                     )
                                 }
                                 Text(
-                                    text = "${sectionTasks.size} tasks",
+                                    text = "${sectionTasks.count { it.task.isCompleted }}/${sectionTasks.size} done",
                                     style = MaterialTheme.typography.labelMedium,
                                     color = InkMuted
                                 )
                             }
-                        }
 
-                        if (sectionTasks.isEmpty()) {
-                            Text(
-                                text = "No tasks in this section yet.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = InkMuted
-                            )
-                        } else {
-                            sectionTasks.forEach { item ->
-                                val t = item.task
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(SoftSheetSurface)
-                                        .clickable { onTaskClick(item) }
-                                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = t.title,
-                                            style = MaterialTheme.typography.titleMedium.copy(
-                                                textDecoration = if (t.isCompleted) TextDecoration.LineThrough else TextDecoration.None
-                                            ),
-                                            color = if (t.isCompleted) InkMuted else InkBlack
-                                        )
-                                        if (item.subtasks.isNotEmpty()) {
+                            if (sectionTasks.isEmpty()) {
+                                Text(
+                                    text = "No tasks in this section yet.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = InkMuted
+                                )
+                            } else {
+                                sectionTasks.forEach { item ->
+                                    val t = item.task
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(14.dp))
+                                            .background(SoftSheetSurface)
+                                            .border(1.dp, InkBlack.copy(alpha = 0.12f), RoundedCornerShape(14.dp))
+                                            .clickable { onTaskClick(item) }
+                                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
                                             Text(
-                                                text = "${item.subtasks.count { it.isCompleted }}/${item.subtasks.size} subtasks",
-                                                style = MaterialTheme.typography.labelMedium,
-                                                color = InkMuted
+                                                text = t.title,
+                                                style = MaterialTheme.typography.titleMedium.copy(
+                                                    textDecoration = if (t.isCompleted) TextDecoration.LineThrough else TextDecoration.None
+                                                ),
+                                                color = if (t.isCompleted) InkMuted else InkBlack
                                             )
+                                            if (item.subtasks.isNotEmpty()) {
+                                                Text(
+                                                    text = "${item.subtasks.count { it.isCompleted }}/${item.subtasks.size} subtasks",
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    color = InkMuted
+                                                )
+                                            }
                                         }
+                                        NeoCircleCheckbox(
+                                            checked = t.isCompleted,
+                                            accentColor = accent,
+                                            onCheckedChange = { onToggleTaskDone(t) }
+                                        )
                                     }
-                                    NeoCircleCheckbox(
-                                        checked = t.isCompleted,
-                                        accentColor = accent,
-                                        onCheckedChange = { onToggleTaskDone(t) }
-                                    )
                                 }
                             }
                         }

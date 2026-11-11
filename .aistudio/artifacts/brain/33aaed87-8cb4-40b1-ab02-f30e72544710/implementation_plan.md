@@ -1,80 +1,79 @@
-# Strukt — Clean Structured-First Visual Planner, Folders & Live Session Tracker
+# Strukt — Learnify × Structured Refinement Plan (Section-by-Section Execution)
 
-A streamlined, geometric revision of **Strukt** that removes visual clutter and text overload, pivots strongly toward **Structured's** clean visual timeline, replaces static templates with **Folders & Sections**, supports **Daily / Weekly / Monthly recurring tasks** (e.g. *"1st of every month"*), and logs **live Focus timer sessions with pause/resume dotted "Continued" lines** directly onto the timeline.
+A focused visual and ergonomic refinement combining **Learnify's** crisp, shadow-free `1.5.dp` bordered cards, high-contrast warm pastels, and geometric rounded typography with **Structured's** visual timeline.
 
 ---
 
-## User Review & Critical Decisions
+## User Review & Section-by-Section Execution Rule
 
 > [!IMPORTANT]
-> **Summary of All Fixes & New Capabilities**: Every point from your feedback has been incorporated into the 4 execution phases below. Click **Proceed** (or attach any additional reference screenshots) to apply these changes in order.
+> **Zero Code Modified Yet — Strict Section-by-Section Execution**:
+> Per your instruction, **we will NOT build all phases in one turn**. When you click **Proceed**, I will execute **ONLY Section 1** (Visual Foundation, Font, Normal Lines Without Drop Shadows, Permanent Docked Navigation Bar & Symmetrical Inbox) and stop so you can inspect it in the preview before we touch Section 2.
 
-1. **Rotation & Tablet Ergonomics**:
-   - Uses `fullSensor` + `resizeableActivity="true"` for physical rotation on your **Redmi Pad Pro 5G**, plus adds a **1-Tap Orientation / Split-View Toggle** icon in the top bar so you can also switch between Horizontal Tablet Split-Screen and Vertical Handheld mode directly inside the browser preview when the emulator's rotation sensor is locked.
-2. **Typography & De-Cramping**:
-   - **Removed Playfair Display Italic Serif**: Standardized 100% on clean geometric **Plus Jakarta Sans** + **JetBrains Mono**.
-   - **Shadow Discipline**: Kept crisp Neo-Brutalist offset shadows **only** on main cards and the timeline capsule icons; removed shadows from small buttons, pills, and text labels.
-   - **Icon-Only Geometric Bottom Bar**: Centered, equal-spaced icon-only navigation bar (`Inbox`, `Timeline`, `Folders`, `Focus`).
-3. **Inbox & Progressive Sub-Popup Editor**:
-   - Input placeholder shortened to **`"Brain dump"`**; removed the redundant `+ Detailed` button.
-   - Tapping `+` on an Inbox task opens a **compact Schedule Mini-Popup** (pick *Timeless* or *Timed* and tap *Schedule*).
-   - **Task Editor Sub-Popups**: Title placeholder is simply **`"Task"`**. Duration, Color & Icon, Folder & Section, Repeat (including **Monthly on Day X** & **Daily**), and Subtasks each open in their own clean **sub-popup** when tapped instead of cramming everything onto one screen.
-4. **Timeline Header & Spine Cleanup**:
-   - Header displays **only the Month** (e.g. **`November`**) with clean navigation arrows; removed `"FLOW OS"`, removed the Reset button, and fixed text wrapping when `"Today"` is visible.
-   - **Removed the separate upper "Do This Next" window** and removed the `+ Add Bubble` button so the timeline sheet never jumps up/down when switching days.
-   - **Minimal Task Rows**: The timeline spine shows only the Time/Step, the Colored Capsule Icon (with its shadow), the Task Title, and the Completion Circle. Tapping a task opens a **dedicated Task & Subtasks Popup** to view/check off subtasks or launch Focus.
-5. **Folders & Sections (Replacing Blueprints)**:
-   - **Completely removed Day Templates/Blueprints**.
-   - Replaced with **Folders & Sections** (e.g. *Physics*, *Mathematics*, *Reading*, *Sports* -> organized into custom *Sections* like *Chapters*, *Practice*, *Labs*), plus an equal-sized 2×2 grid of minimal stat cards (title + number only, zero subtitle clutter) and a **`"Search..."`** bar.
-6. **Focus Mode & Live Pause/Resume Timeline Logging**:
-   - Starting the timer in Focus Mode records the **real device clock time** (e.g. `14:00`) onto the task in the timeline.
-   - Pausing at `14:37` and resuming at `14:47` records the work segments without creating a separate "Break" task—displaying a **dotted vertical line (`⋮ Continued 14:47`)** inside the task's timeline entry.
+### Why the PC Preview Looks Different from Your Redmi Pad Pro 5G
+- The browser preview frame simulates a **compact phone screen (~360–411dp wide)**. On your **Redmi Pad Pro 5G (12.1" display)**, Android automatically scales the layout to use the tablet's wide screen real estate, and hardware `fullSensor` auto-rotation will rotate the app naturally whenever you turn your tablet horizontally or vertically.
 
 ---
 
-## 1. Phased Implementation Plan
+## Section 1 — Visual Foundation, Learnify Font, Symmetrical Inbox & Permanent Bottom Bar *(Executed First on "Proceed")*
 
-### Phase 1 — Theme Cleanup, Rotation Fix & Inbox Refinement
-- Replace `Playfair Display` with geometric `Plus Jakarta Sans` across all typography levels; remove offset shadows from small controls.
-- Add an in-app **Landscape / Portrait Split-View Toggle** alongside native sensor rotation so tablet mode can be tested seamlessly in the preview.
-- Clean up the **Inbox** panel: placeholder `"Brain dump"`, remove `+ Detailed`, and add the compact **Schedule to Flow Mini-Popup** when tapping `+` on an inbox item.
-
-### Phase 2 — Progressive Sub-Popup Task Editor & Recurrence Engine
-- Rebuild the Task Editor so tapping **Duration**, **Color & Icon**, **Folder & Section**, **Repeat** (*One-Time*, *Daily*, *Weekdays*, *Monthly on day 1..31*), or **Subtasks** opens a dedicated, uncluttered popup modal.
-- Update the date matching engine so **Monthly** tasks (e.g. *"File Taxes"* on the 1st of every month) and **Daily** tasks (e.g. *"Pray"*, *"Read"*) automatically appear on matching calendar dates.
-
-### Phase 3 — Clean Structured Timeline & Task Detail Modal
-- Simplify the top header to **`November`** + week strip (no `FLOW OS`, no Reset icon, no vertical year wrapping).
-- Remove the upper `"Do This Next"` window and `+ Add Bubble` button; highlight the current active task inline on the spine.
-- Keep timeline rows minimal (Time/Step + Shadowed Capsule Icon + Title + Checkbox + Dotted `"Continued"` session log if paused/resumed). Tapping a row opens the **Task & Subtasks Detail Modal**.
-
-### Phase 4 — Folders & Sections Workspace + Live Focus Session Logger
-- Replace Blueprints with the **Folders & Sections** organizer (create/edit folders like *Physics*, *Sports*, *Reading*, add sections inside each folder, and view tasks grouped by section) + equal-height 2×2 minimal metric cards.
-- De-cramp **Focus Mode** and wire the **Live Session Tracker** (`startClockMin`, `pauseResumeSegments`) so starting, pausing, and resuming a task timer feeds real start/resume times and a dotted **`Continued`** indicator directly into the timeline.
+1. **Normal Crisp Lines & Subtle Paper Dot Background (No Drop Shadows)**:
+   - Remove the black offset drop shadows from all cards, buttons, and icons. Use clean, uniform **`1.5.dp` solid dark-ink borders (`#18181B`)** with smooth, symmetrical rounded corners (`20.dp`), matching your **Learnify** reference image.
+   - Make the background dot-grid smaller, lighter, and more subtle (`1.dp` soft dots) for a gentle paper feel without visual noise.
+2. **Learnify Geometric Font (`Outfit`)**:
+   - Install and apply **`Outfit`** (matching the clean, modern geometric headings and numbers in the *Learnify* screenshot) across the entire app, replacing the current font.
+3. **Inbox Symmetry**:
+   - Give the **`"Brain dump"`** input box and the **`+`** submit button identical height (`50.dp`), matching symmetrical corner curves (`18.dp` radius), and clean `1.5.dp` borders.
+4. **Permanent Full-Width Straight Bottom Bar with Larger Icons**:
+   - Replace the floating pill bar with a **permanent, full-width docked bottom bar** separated by a clean straight horizontal line (`1.5.dp`), with **larger (`26.dp`–`28.dp`) centered icons** (`Inbox`, `Timeline`, `Folders`, `Focus`) and a solid rounded highlight on the active tab so it never floats over tasks.
+5. **Hardware Auto-Rotation (`fullSensor`)**:
+   - Switch `AndroidManifest.xml` to pure `fullSensor` so rotating your Redmi Pad Pro 5G (or clicking the emulator's rotate button) rotates the app automatically without needing any on-screen rotate button.
 
 ---
 
-## 2. Technical Architecture & Data Model Updates
+## Section 2 — Swipeable Week Calendar, Clean Timeline Spine & Custom Time/Duration *(Executed After Section 1 Review)*
+
+1. **Ultra-Clean Month Header & Swipeable Week Strip**:
+   - Top header displays **only the Month name** (e.g., **`November`**) in the new `Outfit` font.
+   - **Remove** the `<` `>` arrows, **remove** the `Today` button (so the header never shifts down), and **remove** the rotate button.
+   - Make the **7-Day Week Strip horizontally swipeable (`HorizontalPager`)** so you simply **slide left or right** to browse past and future weeks; Today's date is indicated purely by color.
+2. **De-Duplicated Timeline Task Rows & Continuous Spine Lines**:
+   - **Remove duplicate time text** on the right side of the timeline icon: since `08:00` and `08:15` are already shown on the left of the capsule, the right side will show **only the Task Title** (plus a tiny `↻` icon if recurring).
+   - **Continuous & Break Connector Lines**: Always draw the vertical connector line between tasks on the spine—a **solid line** when tasks are back-to-back, and a **clean dotted line** (with no noisy text) when there is unscheduled time or a break between tasks.
+3. **Pause/Resume Details Only on Tap**:
+   - When you pause and resume a task in Focus Mode, show a clean **dotted break line** on the spine itself, and move the `"Started 14:00 • Paused 14:37 • Continued 14:47"` text **inside the popup window when you tap the task**.
+4. **Custom Time & Custom Duration Picker**:
+   - Inside the **Time & Duration** popup, add a **Custom Time (`HH : MM`)** selector (any hour and minute) and a **Custom Duration** control (any minute/hour value, not limited to 15m steps or 2 hours).
+
+---
+
+## Section 3 — Learnify-Style Symmetrical Folders & Sections *(Executed After Section 2 Review)*
+
+1. **Symmetrical Folder Cards (No Protruding Left Tab & No Duplicate Labels)**:
+   - Restyle Folder cards to match the **Learnify "My courses" cards**: a single symmetrical rounded rectangle (`22.dp` radius, `1.5.dp` border), with the code pill (`PHY 12`) neatly **inside** the top-left of the card, the Folder Title (`Physics`) once, the progress bar (`1/3 tasks`), and a clean action button—removing the overarching top-left folder tab and the duplicate `PHYSICS` / `CHEMISTRY` label at the bottom.
+   - Increase vertical and grid spacing (`18.dp`) between folder cards so they breathe cleanly on both phone and tablet screens.
+
+---
+
+## Section 4 — Final Focus Polish & Tablet Density Tuning *(Executed After Section 3 Review)*
+
+1. **Focus Screen & Tablet Multi-Pane Polish**:
+   - Apply the Learnify card styling, larger icon hierarchy, and responsive tablet spacing across Focus Mode and the Landscape Split-View for the **Redmi Pad Pro 5G**.
+
+---
+
+## Visual & Structural Overview
 
 ```
-┌────────────────────────────────────────────────────────────────────────────┐
-│             Clean Geometric UI (Jakarta Sans + Icon-Only Nav)              │
-│  ┌──────────────────┬───────────────────────┬───────────────────────────┐  │
-│  │   Inbox Panel    │  Clean Timeline Spine │    Folders & Sections     │  │
-│  │ • "Brain dump"   │ • Month-only Header   │ • Equal 2x2 Minimal Stats │  │
-│  │ • Compact "+"    │ • Capsule + Title     │ • Folder -> Section Tree  │  │
-│  │   Schedule Popup │ • Dotted "Continued"  │ • Task Detail & Subtasks  │  │
-│  └────────┬─────────┴───────────┬───────────┴─────────────┬─────────────┘  │
-└───────────┼─────────────────────┼─────────────────────────┼────────────────┘
-            │                     ▼                         │
-┌───────────┴───────────────────────────────────────────────┴────────────────┐
-│           Sub-Popup Modals (Duration / Color & Icon / Folder / Repeat)     │
-└─────────────────────────────────────┬──────────────────────────────────────┘
-                                      ▼
-┌────────────────────────────────────────────────────────────────────────────┐
-│                   Room Database (Tasks, Subtasks, Folders)                 │
-│  • TaskEntity: + folderName, sectionName, dayOfMonthRecurrence,            │
-│                + sessionLog ("14:00-14:37||14:47-15:15")                   │
-│  • FolderEntity: id, name, colorKey, iconKey, sectionsCsv                  │
-└────────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│  SECTION 1: Outfit Font + 1.5dp Clean Lines (No Drop Shadows)            │
+│  • Subtle Paper Dots • Symmetrical "Brain dump" • Permanent Bottom Bar   │
+├──────────────────────────────────────────────────────────────────────────┤
+│  SECTION 2: Swipeable Week Strip + Clean Spine + Custom Time/Duration    │
+│  • "November" Only • Slide Weeks • Left-Only Times • Dotted Break Lines  │
+├──────────────────────────────────────────────────────────────────────────┤
+│  SECTION 3: Learnify Symmetrical Folder Cards (Single Label + Spaced)    │
+├──────────────────────────────────────────────────────────────────────────┤
+│  SECTION 4: Focus Popup Details & Redmi Pad Pro 5G Tablet Polish         │
+└──────────────────────────────────────────────────────────────────────────┘
 ```

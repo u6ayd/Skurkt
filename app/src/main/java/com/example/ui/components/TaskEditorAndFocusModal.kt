@@ -585,17 +585,26 @@ private fun TimeAndDurationSubPopup(
     onDurationChange: (Int) -> Unit,
     onDismiss: () -> Unit
 ) {
+    var customHourText by remember(startTimeMinutes) {
+        mutableStateOf(String.format(Locale.US, "%02d", (startTimeMinutes / 60).coerceIn(0, 23)))
+    }
+    var customMinText by remember(startTimeMinutes) {
+        mutableStateOf(String.format(Locale.US, "%02d", (startTimeMinutes % 60).coerceIn(0, 59)))
+    }
+    var customDurationText by remember(durationMinutes) {
+        mutableStateOf(durationMinutes.toString())
+    }
+
     Dialog(onDismissRequest = onDismiss) {
         NeoCard(
             modifier = Modifier
-                .widthIn(max = 380.dp)
+                .widthIn(max = 400.dp)
                 .fillMaxWidth(),
             backgroundColor = PureWhiteSurface,
             cornerRadius = 24.dp,
-            shadowOffset = 4.dp,
             contentPadding = PaddingValues(20.dp)
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Text(
                     text = "Time & Duration",
                     style = MaterialTheme.typography.titleLarge,
@@ -637,49 +646,89 @@ private fun TimeAndDurationSubPopup(
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(18.dp))
                             .background(SoftSheetSurface)
+                            .border(1.5.dp, InkBlack, RoundedCornerShape(18.dp))
                             .padding(14.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Text(
-                            text = formatMinutesAsClock((startTimeMinutes - 15).coerceAtLeast(0)),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = InkMuted
-                        )
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(NeoCoral)
+                                .border(1.5.dp, InkBlack, RoundedCornerShape(50))
+                                .padding(horizontal = 20.dp, vertical = 8.dp)
+                        ) {
+                            Text(
+                                text = "${formatMinutesAsClock(startTimeMinutes)} – ${formatMinutesAsClock((startTimeMinutes + durationMinutes).coerceAtMost(23 * 60 + 59))}",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = PureWhiteSurface
+                            )
+                        }
+
+                        // Custom Hour : Minute direct inputs + fine steppers
                         Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutlinedTextField(
+                                value = customHourText,
+                                onValueChange = { txt ->
+                                    val filtered = txt.filter { it.isDigit() }.take(2)
+                                    customHourText = filtered
+                                    val h = filtered.toIntOrNull()?.coerceIn(0, 23) ?: 0
+                                    val m = (startTimeMinutes % 60).coerceIn(0, 59)
+                                    onStartTimeChange(h * 60 + m)
+                                },
+                                label = { Text("Hour (0-23)") },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(
+                                text = ":",
+                                style = MaterialTheme.typography.displaySmall,
+                                color = InkBlack
+                            )
+                            OutlinedTextField(
+                                value = customMinText,
+                                onValueChange = { txt ->
+                                    val filtered = txt.filter { it.isDigit() }.take(2)
+                                    customMinText = filtered
+                                    val h = (startTimeMinutes / 60).coerceIn(0, 23)
+                                    val m = filtered.toIntOrNull()?.coerceIn(0, 59) ?: 0
+                                    onStartTimeChange(h * 60 + m)
+                                },
+                                label = { Text("Min (0-59)") },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly
                         ) {
                             NeoPillButton(
                                 text = "-15m",
                                 onClick = { onStartTimeChange((startTimeMinutes - 15).coerceAtLeast(0)) }
                             )
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(50))
-                                    .background(NeoCoral)
-                                    .padding(horizontal = 20.dp, vertical = 10.dp)
-                            ) {
-                                Text(
-                                    text = "${formatMinutesAsClock(startTimeMinutes)}–${formatMinutesAsClock((startTimeMinutes + durationMinutes).coerceAtMost(23 * 60 + 59))}",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = PureWhiteSurface
-                                )
-                            }
+                            NeoPillButton(
+                                text = "-1m",
+                                onClick = { onStartTimeChange((startTimeMinutes - 1).coerceAtLeast(0)) }
+                            )
+                            NeoPillButton(
+                                text = "+1m",
+                                onClick = { onStartTimeChange((startTimeMinutes + 1).coerceAtMost(23 * 60 + 59)) }
+                            )
                             NeoPillButton(
                                 text = "+15m",
-                                onClick = { onStartTimeChange((startTimeMinutes + 15).coerceAtMost(23 * 60 + 30)) }
+                                onClick = { onStartTimeChange((startTimeMinutes + 15).coerceAtMost(23 * 60 + 59)) }
                             )
                         }
-                        Text(
-                            text = formatMinutesAsClock((startTimeMinutes + 15).coerceAtMost(23 * 60 + 45)),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = InkMuted
-                        )
                     }
                 }
 
-                // Duration Pill Strip (Matches Screenshot 7: 15, 30, 45m, 1h, 1.5h)
+                // Duration Presets + Custom Minutes Input (any duration from 1m to 720m / 12h)
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         text = "Duration",
@@ -691,6 +740,7 @@ private fun TimeAndDurationSubPopup(
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(50))
                             .background(SoftSheetSurface)
+                            .border(1.5.dp, InkBlack, RoundedCornerShape(50))
                             .padding(6.dp)
                             .horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -701,14 +751,19 @@ private fun TimeAndDurationSubPopup(
                             45 to "45m",
                             60 to "1h",
                             90 to "1.5h",
-                            120 to "2h"
+                            120 to "2h",
+                            180 to "3h",
+                            240 to "4h"
                         ).forEach { (mins, label) ->
                             val selected = durationMinutes == mins
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(50))
                                     .background(if (selected) NeoCoral else PureWhiteSurface)
-                                    .clickable { onDurationChange(mins) }
+                                    .clickable {
+                                        onDurationChange(mins)
+                                        customDurationText = mins.toString()
+                                    }
                                     .padding(horizontal = 14.dp, vertical = 8.dp),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -719,6 +774,44 @@ private fun TimeAndDurationSubPopup(
                                 )
                             }
                         }
+                    }
+
+                    // Custom Duration Field (Minutes + Quick -5m / +5m / +30m)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = customDurationText,
+                            onValueChange = { txt ->
+                                val filtered = txt.filter { it.isDigit() }.take(3)
+                                customDurationText = filtered
+                                val parsed = filtered.toIntOrNull()
+                                if (parsed != null && parsed >= 1) {
+                                    onDurationChange(parsed.coerceIn(1, 720))
+                                }
+                            },
+                            label = { Text("Custom minutes (e.g. 25, 150)") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                        NeoPillButton(
+                            text = "-5m",
+                            onClick = {
+                                val next = (durationMinutes - 5).coerceAtLeast(1)
+                                onDurationChange(next)
+                                customDurationText = next.toString()
+                            }
+                        )
+                        NeoPillButton(
+                            text = "+5m",
+                            onClick = {
+                                val next = (durationMinutes + 5).coerceAtMost(720)
+                                onDurationChange(next)
+                                customDurationText = next.toString()
+                            }
+                        )
                     }
                 }
 

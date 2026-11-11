@@ -54,9 +54,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -68,11 +66,15 @@ import androidx.compose.ui.unit.sp
 import com.example.ui.theme.DotGridColor
 import com.example.ui.theme.InkBlack
 import com.example.ui.theme.InkCharcoal
+import com.example.ui.theme.NeoCoral
 import com.example.ui.theme.NeoMintGreen
 import com.example.ui.theme.NeoYellow
 import com.example.ui.theme.PaperCanvas
 import com.example.ui.theme.PureWhiteSurface
 
+/**
+ * Subtle papery small dot-grid background.
+ */
 @Composable
 fun DotGridBackground(
     modifier: Modifier = Modifier,
@@ -85,8 +87,8 @@ fun DotGridBackground(
             .fillMaxSize()
             .background(backgroundColor)
             .drawBehind {
-                val stepPx = 24.dp.toPx()
-                val radiusPx = 1.25.dp.toPx()
+                val stepPx = 18.dp.toPx()
+                val radiusPx = 0.95.dp.toPx()
                 var x = stepPx / 2f
                 while (x < size.width) {
                     var y = stepPx / 2f
@@ -105,14 +107,17 @@ fun DotGridBackground(
     )
 }
 
+/**
+ * Clean Learnify-style Card: Crisp 1.5.dp normal border lines, symmetrical 20.dp curves, ZERO drop shadow.
+ */
 @Composable
 fun NeoCard(
     modifier: Modifier = Modifier,
     backgroundColor: Color = PureWhiteSurface,
     borderColor: Color = InkBlack,
     cornerRadius: Dp = 20.dp,
-    shadowOffset: Dp = 3.dp,
-    borderWidth: Dp = 1.8.dp,
+    shadowOffset: Dp = 0.dp,
+    borderWidth: Dp = 1.5.dp,
     onClick: (() -> Unit)? = null,
     contentPadding: PaddingValues = PaddingValues(16.dp),
     content: @Composable BoxScope.() -> Unit
@@ -120,18 +125,6 @@ fun NeoCard(
     val shape = RoundedCornerShape(cornerRadius)
     Box(
         modifier = modifier
-            .drawBehind {
-                if (shadowOffset > 0.dp) {
-                    val offsetPx = shadowOffset.toPx()
-                    val radiusPx = cornerRadius.toPx()
-                    drawRoundRect(
-                        color = borderColor,
-                        topLeft = Offset(offsetPx, offsetPx),
-                        size = Size(size.width, size.height),
-                        cornerRadius = CornerRadius(radiusPx, radiusPx)
-                    )
-                }
-            }
             .clip(shape)
             .background(backgroundColor, shape)
             .border(BorderStroke(borderWidth, borderColor), shape)
@@ -147,137 +140,139 @@ fun NeoCard(
     )
 }
 
-/**
- * Clean Folder Card for organizing tasks by Folder & Sections (Physics, Reading, Sports, etc.).
- */
 @Composable
 fun NeoFolderCard(
     tabCode: String,
     title: String,
     subtitle: String,
     progressPercent: Int,
-    tagLabel: String,
+    tagLabel: String = "",
     fillColor: Color,
     onCardClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(modifier = modifier.fillMaxWidth()) {
-        Box(
-            modifier = Modifier
-                .width(124.dp)
-                .height(28.dp)
-                .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
-                .background(fillColor)
-                .border(
-                    BorderStroke(1.8.dp, InkBlack),
-                    RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)
-                )
-                .padding(horizontal = 12.dp),
-            contentAlignment = Alignment.CenterStart
-        ) {
+    NeoCard(
+        modifier = modifier.fillMaxWidth(),
+        backgroundColor = fillColor,
+        cornerRadius = 22.dp,
+        borderWidth = 1.5.dp,
+        onClick = onCardClick,
+        contentPadding = PaddingValues(20.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            // Top Row: Learnify-style internal pill badge (e.g. PHY 12) + Percentage badge
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(9.dp))
+                        .background(InkBlack)
+                        .padding(horizontal = 11.dp, vertical = 5.dp)
+                ) {
+                    Text(
+                        text = tabCode.uppercase(),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = PureWhiteSurface,
+                        maxLines = 1
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(PureWhiteSurface)
+                        .border(1.5.dp, InkBlack, RoundedCornerShape(50))
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = "$progressPercent%",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = InkBlack
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Single Folder Title (no duplicate folder tag at the bottom)
+            Text(
+                text = title,
+                style = MaterialTheme.typography.headlineMedium,
+                color = InkBlack,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Learnify-style Progress Header Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = tabCode.uppercase(),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = InkBlack,
-                    maxLines = 1
+                    text = "Progress",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = InkCharcoal
                 )
-                Box(
-                    modifier = Modifier
-                        .size(6.dp)
-                        .clip(CircleShape)
-                        .background(InkBlack)
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = InkBlack
                 )
             }
-        }
 
-        NeoCard(
-            modifier = Modifier
-                .fillMaxWidth()
-                .offset(y = (-1.8).dp),
-            backgroundColor = fillColor,
-            cornerRadius = 18.dp,
-            shadowOffset = 3.dp,
-            onClick = onCardClick,
-            contentPadding = PaddingValues(18.dp)
-        ) {
-            Column(modifier = Modifier.fillMaxWidth()) {
+            Spacer(modifier = Modifier.height(6.dp))
+            NeoProgressBar(progress = progressPercent / 100f)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Bottom Action Row: Clean status on left + "Continue" pill on right
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = title,
-                            style = MaterialTheme.typography.displaySmall,
-                            color = InkBlack,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = subtitle,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = InkCharcoal
-                        )
-                    }
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(50))
-                            .background(PureWhiteSurface)
-                            .border(1.8.dp, InkBlack, RoundedCornerShape(50))
-                            .padding(horizontal = 10.dp, vertical = 4.dp)
-                    ) {
-                        Text(
-                            text = "$progressPercent%",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = InkBlack
-                        )
-                    }
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(InkBlack)
+                    )
+                    Text(
+                        text = if (progressPercent >= 100) "Completed" else "Active Folder",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = InkCharcoal
+                    )
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
-                NeoProgressBar(progress = progressPercent / 100f)
-                Spacer(modifier = Modifier.height(14.dp))
-
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(11.dp))
+                        .background(NeoCoral)
+                        .border(1.5.dp, InkBlack, RoundedCornerShape(11.dp))
+                        .padding(horizontal = 14.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(PureWhiteSurface)
-                            .border(1.8.dp, InkBlack, RoundedCornerShape(10.dp))
-                            .padding(horizontal = 12.dp, vertical = 6.dp)
-                    ) {
-                        Text(
-                            text = tagLabel.uppercase(),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = InkBlack
-                        )
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .size(34.dp)
-                            .clip(CircleShape)
-                            .background(InkBlack),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = "Open Folder",
-                            tint = PureWhiteSurface,
-                            modifier = Modifier.size(17.dp)
-                        )
-                    }
+                    Text(
+                        text = "Continue",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = PureWhiteSurface
+                    )
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = "Open Folder",
+                        tint = PureWhiteSurface,
+                        modifier = Modifier.size(14.dp)
+                    )
                 }
             }
         }
@@ -285,7 +280,7 @@ fun NeoFolderCard(
 }
 
 /**
- * Clean Pill Button — No heavy offset shadow on small buttons per user feedback.
+ * Clean Pill Button with normal 1.5.dp border and zero drop shadow.
  */
 @Composable
 fun NeoPillButton(
@@ -309,7 +304,7 @@ fun NeoPillButton(
             .height(40.dp)
             .clip(shape)
             .background(bgColor, shape)
-            .border(1.8.dp, InkBlack, shape)
+            .border(1.5.dp, InkBlack, shape)
             .clickable(role = Role.Button, onClick = onClick)
             .padding(horizontal = 14.dp),
         contentAlignment = Alignment.Center
@@ -341,13 +336,16 @@ fun NeoPillButton(
     }
 }
 
+/**
+ * Learnify-style Progress Bar: solid dark fill over a subtle track.
+ */
 @Composable
 fun NeoProgressBar(
     progress: Float,
     modifier: Modifier = Modifier,
     fillColor: Color = InkBlack,
-    trackColor: Color = PureWhiteSurface,
-    height: Dp = 9.dp
+    trackColor: Color = InkBlack.copy(alpha = 0.14f),
+    height: Dp = 7.dp
 ) {
     val clamped = progress.coerceIn(0f, 1f)
     val shape = RoundedCornerShape(50)
@@ -357,7 +355,6 @@ fun NeoProgressBar(
             .height(height)
             .clip(shape)
             .background(trackColor, shape)
-            .border(1.5.dp, InkBlack, shape)
     ) {
         if (clamped > 0f) {
             Box(
@@ -377,13 +374,13 @@ fun NeoSquareCheckbox(
     modifier: Modifier = Modifier,
     accentColor: Color = NeoMintGreen
 ) {
-    val shape = RoundedCornerShape(7.dp)
+    val shape = RoundedCornerShape(8.dp)
     Box(
         modifier = modifier
             .size(24.dp)
             .clip(shape)
             .background(if (checked) accentColor else PureWhiteSurface, shape)
-            .border(1.8.dp, InkBlack, shape)
+            .border(1.5.dp, InkBlack, shape)
             .clickable(role = Role.Checkbox, onClick = onCheckedChange),
         contentAlignment = Alignment.Center
     ) {
@@ -398,9 +395,6 @@ fun NeoSquareCheckbox(
     }
 }
 
-/**
- * Clean Structured-style Circular Checkbox (Matches Screenshots 5 & 6).
- */
 @Composable
 fun NeoCircleCheckbox(
     checked: Boolean,
@@ -413,7 +407,7 @@ fun NeoCircleCheckbox(
             .size(28.dp)
             .clip(CircleShape)
             .background(if (checked) accentColor else PureWhiteSurface, CircleShape)
-            .border(2.dp, accentColor, CircleShape)
+            .border(1.8.dp, if (checked) InkBlack else accentColor, CircleShape)
             .clickable(role = Role.Checkbox, onClick = onCheckedChange),
         contentAlignment = Alignment.Center
     ) {
@@ -421,7 +415,7 @@ fun NeoCircleCheckbox(
             Icon(
                 imageVector = Icons.Default.Check,
                 contentDescription = "Completed",
-                tint = PureWhiteSurface,
+                tint = InkBlack,
                 modifier = Modifier.size(16.dp)
             )
         }
