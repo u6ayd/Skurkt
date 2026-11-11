@@ -381,84 +381,6 @@ fun StructuredTaskEditorDialog(
                             onClick = { activeSubPopup = EditorSubPopup.DURATION_TIME }
                         )
 
-                        // Row 1b: Sequence Step (#) Adjuster when task is a Timeless Spine task
-                        if (!toInbox && taskMode == TaskMode.TIMELESS_STEP) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .background(PureWhiteSurface)
-                                    .border(1.5.dp, InkBlack, RoundedCornerShape(16.dp))
-                                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "Sequence Step (#)",
-                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                                        color = InkBlack
-                                    )
-                                    Text(
-                                        text = "Order in spine (#1, #4, #6...)",
-                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Normal),
-                                        color = InkMuted
-                                    )
-                                }
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(34.dp)
-                                            .clip(CircleShape)
-                                            .background(SoftSheetSurface)
-                                            .border(1.5.dp, InkBlack, CircleShape)
-                                            .clickable { stepOrder = (stepOrder - 1).coerceAtLeast(1) },
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Remove,
-                                            contentDescription = "Decrease Step #",
-                                            tint = InkBlack,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    }
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(10.dp))
-                                            .background(NeoYellow)
-                                            .border(1.5.dp, InkBlack, RoundedCornerShape(10.dp))
-                                            .padding(horizontal = 12.dp, vertical = 6.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text = "#$stepOrder",
-                                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                                            color = InkBlack
-                                        )
-                                    }
-                                    Box(
-                                        modifier = Modifier
-                                            .size(34.dp)
-                                            .clip(CircleShape)
-                                            .background(SoftSheetSurface)
-                                            .border(1.5.dp, InkBlack, CircleShape)
-                                            .clickable { stepOrder = (stepOrder + 1).coerceAtMost(99) },
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Add,
-                                            contentDescription = "Increase Step #",
-                                            tint = InkBlack,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
                         // Row 2: Color & Category Icon Popup Trigger
                         EditorSummaryRow(
                             icon = Icons.Default.Palette,
@@ -546,9 +468,11 @@ fun StructuredTaskEditorDialog(
             TimeAndDurationSubPopup(
                 toInbox = toInbox,
                 taskMode = taskMode,
+                stepOrder = stepOrder,
                 startTimeMinutes = startTimeMinutes,
                 durationMinutes = durationMinutes,
                 onModeChange = { taskMode = it },
+                onStepOrderChange = { stepOrder = it },
                 onStartTimeChange = { startTimeMinutes = it },
                 onDurationChange = { durationMinutes = it },
                 onDismiss = { activeSubPopup = EditorSubPopup.NONE }
@@ -662,9 +586,11 @@ private fun EditorSummaryRow(
 private fun TimeAndDurationSubPopup(
     toInbox: Boolean,
     taskMode: TaskMode,
+    stepOrder: Int,
     startTimeMinutes: Int,
     durationMinutes: Int,
     onModeChange: (TaskMode) -> Unit,
+    onStepOrderChange: (Int) -> Unit,
     onStartTimeChange: (Int) -> Unit,
     onDurationChange: (Int) -> Unit,
     onDismiss: () -> Unit
@@ -721,6 +647,76 @@ private fun TimeAndDurationSubPopup(
                             onClick = { onModeChange(TaskMode.TOP_BUBBLE) },
                             modifier = Modifier.weight(1f)
                         )
+                    }
+                }
+
+                if (!toInbox && taskMode == TaskMode.TIMELESS_STEP) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(SoftSheetSurface)
+                            .border(1.5.dp, InkBlack, RoundedCornerShape(16.dp))
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Sequence Step (#)",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = InkBlack
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(CircleShape)
+                                    .background(PureWhiteSurface)
+                                    .border(1.5.dp, InkBlack, CircleShape)
+                                    .clickable { onStepOrderChange((stepOrder - 1).coerceAtLeast(1)) },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Remove,
+                                    contentDescription = "Decrease Step #",
+                                    tint = InkBlack,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(NeoYellow)
+                                    .border(1.5.dp, InkBlack, RoundedCornerShape(10.dp))
+                                    .padding(horizontal = 12.dp, vertical = 5.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "#$stepOrder",
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                                    color = InkBlack
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(CircleShape)
+                                    .background(PureWhiteSurface)
+                                    .border(1.5.dp, InkBlack, CircleShape)
+                                    .clickable { onStepOrderChange((stepOrder + 1).coerceAtMost(99)) },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Add,
+                                    contentDescription = "Increase Step #",
+                                    tint = InkBlack,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
                     }
                 }
 
@@ -1423,14 +1419,15 @@ fun AntiParalysisFocusScreen(
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .padding(horizontal = 16.dp)
     ) {
         val isWideFocusLayout = maxWidth >= 660.dp
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(rememberScrollState())
+                .padding(top = 12.dp, bottom = 28.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Top Bar: Back to Timeline + Folder/Section Badge

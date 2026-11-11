@@ -92,7 +92,7 @@ fun NeoInboxPane(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 14.dp, vertical = 12.dp)
+            .padding(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 0.dp)
     ) {
         Row(
             modifier = Modifier

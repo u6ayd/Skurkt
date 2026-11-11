@@ -92,7 +92,7 @@ fun DotGridBackground(
     content: @Composable BoxScope.() -> Unit
 ) {
     Box(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxSize()
             .background(backgroundColor)
             .drawBehind {
@@ -111,7 +111,8 @@ fun DotGridBackground(
                     }
                     x += stepPx
                 }
-            },
+            }
+            .then(modifier),
         content = content
     )
 }

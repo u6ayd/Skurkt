@@ -264,12 +264,12 @@ fun DateAndWeekHeader(
 fun TopAnytimeBubblesRow(
     bubbles: List<TaskWithSubtasks>,
     onToggleBubbleDone: (TaskWithSubtasks) -> Unit,
-    onEditBubble: (TaskWithSubtasks) -> Unit,
-    onDeleteBubble: (Long) -> Unit,
+    onInspectBubble: (TaskWithSubtasks) -> Unit,
+    onEditBubble: (TaskWithSubtasks) -> Unit = {},
+    onDeleteBubble: (Long) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     if (bubbles.isEmpty()) return
-    var actionBubble by remember { mutableStateOf<TaskWithSubtasks?>(null) }
 
     Row(
         modifier = modifier
@@ -297,7 +297,7 @@ fun TopAnytimeBubblesRow(
                         .size(52.dp)
                         .smoothCombinedClickable(
                             role = Role.Checkbox,
-                            onLongClick = { actionBubble = item },
+                            onLongClick = { onInspectBubble(item) },
                             onClick = { onToggleBubbleDone(item) }
                         )
                         .clip(CircleShape)
@@ -326,129 +326,9 @@ fun TopAnytimeBubblesRow(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.smoothPressClickable(role = Role.Button) {
-                        actionBubble = item
+                        onInspectBubble(item)
                     }
                 )
-            }
-        }
-    }
-
-    actionBubble?.let { selectedItem ->
-        val bubbleTask = selectedItem.task
-        val bubbleColor = neoColorForKey(bubbleTask.colorKey)
-        Dialog(onDismissRequest = { actionBubble = null }) {
-            NeoCard(
-                modifier = Modifier
-                    .widthIn(max = 330.dp)
-                    .fillMaxWidth(),
-                backgroundColor = PureWhiteSurface,
-                cornerRadius = 22.dp,
-                contentPadding = PaddingValues(18.dp)
-            ) {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                                    .background(bubbleColor, CircleShape)
-                                    .border(1.5.dp, InkBlack, CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = iconForKey(bubbleTask.iconKey),
-                                    contentDescription = null,
-                                    tint = InkBlack,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                            Column {
-                                Text(
-                                    text = "All-Day Bubble",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = InkMuted
-                                )
-                                Text(
-                                    text = bubbleTask.title,
-                                    style = MaterialTheme.typography.titleLarge,
-                                    color = InkBlack,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-                        IconButton(
-                            onClick = { actionBubble = null },
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clip(CircleShape)
-                                .background(SoftSheetSurface)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Close",
-                                tint = InkBlack,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    }
-
-                    NeoPillButton(
-                        text = if (bubbleTask.isCompleted) "Mark Undone" else "Mark Done",
-                        icon = Icons.Default.Check,
-                        selected = true,
-                        activeColor = NeoMintGreen,
-                        onClick = {
-                            onToggleBubbleDone(selectedItem)
-                            actionBubble = null
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        NeoPillButton(
-                            text = "Edit",
-                            icon = Icons.Default.Edit,
-                            selected = true,
-                            activeColor = NeoYellow,
-                            onClick = {
-                                val target = selectedItem
-                                actionBubble = null
-                                onEditBubble(target)
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-                        NeoPillButton(
-                            text = "Delete",
-                            icon = Icons.Default.Delete,
-                            selected = true,
-                            activeColor = NeoCoral,
-                            onClick = {
-                                val targetId = bubbleTask.id
-                                actionBubble = null
-                                onDeleteBubble(targetId)
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("delete_bubble_button")
-                        )
-                    }
-                }
             }
         }
     }
@@ -625,7 +505,11 @@ fun HybridSpineTaskRow(
             modifier = modifier
                 .fillMaxWidth()
                 .height(ovalHeight)
-                .smoothPressClickable(role = Role.Button, onClick = onOpenTaskDetail),
+                .smoothCombinedClickable(
+                    role = Role.Button,
+                    onLongClick = onOpenTaskDetail,
+                    onClick = onOpenTaskDetail
+                ),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // 1. Left-shifted Time Column
@@ -731,7 +615,11 @@ fun HybridSpineTaskRow(
             modifier = modifier
                 .fillMaxWidth()
                 .height(totalSplitHeight)
-                .smoothPressClickable(role = Role.Button, onClick = onOpenTaskDetail),
+                .smoothCombinedClickable(
+                    role = Role.Button,
+                    onLongClick = onOpenTaskDetail,
+                    onClick = onOpenTaskDetail
+                ),
             verticalAlignment = Alignment.Top
         ) {
             // 1. Left Time Column aligned with Top Half-Oval and Bottom Half-Oval
@@ -954,8 +842,12 @@ private fun TaskRightTitleAndCheckRow(
 }
 
 /**
- * Dedicated Task & Subtasks Detail Window when a task is clicked on the timeline.
- * Includes a 1-tap "Split with Break Loop" / "Merge Capsule" button alongside Focus & Subtasks.
+ * Unified, Cohesive Task Action & Detail Modal:
+ * - Used for BOTH Top Bubbles (on long-click / label tap) and Spine Tasks (on click / long-click).
+ * - Decluttered layout:
+ *   1. Compact 1-Row Sequence (#) & Break Loop Strip for Spine Tasks.
+ *   2. Subtasks Checklist (collapses the input field into a neat '+ Add Subtask' chip when 0 subtasks exist).
+ *   3. Cohesive Action Buttons: Focus Timer, Mark Done, Edit (Pencil), and a dedicated Delete Popup!
  */
 @Composable
 fun TaskDetailPopupModal(
@@ -968,30 +860,114 @@ fun TaskDetailPopupModal(
     onToggleSubtask: (SubtaskEntity) -> Unit,
     onAddSubtask: (String) -> Unit,
     onStartFocus: () -> Unit,
-    onEditTask: () -> Unit
+    onEditTask: () -> Unit,
+    onDeleteTask: () -> Unit = {}
 ) {
     val task = item.task
     val accent = neoColorForKey(task.colorKey)
     var newSubtask by remember { mutableStateOf("") }
+    var showAddSubtaskField by remember(task.id) { mutableStateOf(item.subtasks.isNotEmpty()) }
+    var showDeleteConfirmPopup by remember(task.id) { mutableStateOf(false) }
     var stepVal by remember(task.id, task.sortOrder, currentStepNumber) {
         mutableStateOf(maxOf(currentStepNumber, effectiveTaskStepNumber(task)))
     }
     val hasBreakLoop = task.parsedSessionSegments.size > 1 ||
         (task.parsedSessionSegments.size == 1 && task.activeSessionStartMin != null)
 
+    if (showDeleteConfirmPopup) {
+        // Dedicated Delete Confirmation Popup so deleting is immediate and separate from Edit!
+        Dialog(onDismissRequest = { showDeleteConfirmPopup = false }) {
+            NeoCard(
+                modifier = Modifier
+                    .widthIn(max = 340.dp)
+                    .fillMaxWidth(),
+                backgroundColor = PureWhiteSurface,
+                cornerRadius = 22.dp,
+                contentPadding = PaddingValues(20.dp)
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(CircleShape)
+                                .background(NeoCoral)
+                                .border(1.5.dp, InkBlack, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = null,
+                                tint = PureWhiteSurface,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Delete Task?",
+                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                                color = InkBlack
+                            )
+                            Text(
+                                text = task.title,
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                                color = InkMuted,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        NeoPillButton(
+                            text = "Cancel",
+                            selected = false,
+                            onClick = { showDeleteConfirmPopup = false },
+                            modifier = Modifier.weight(1f)
+                        )
+                        NeoPillButton(
+                            text = "Delete",
+                            icon = Icons.Default.Delete,
+                            selected = true,
+                            activeColor = NeoCoral,
+                            onClick = {
+                                showDeleteConfirmPopup = false
+                                onDeleteTask()
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("confirm_delete_task_button")
+                        )
+                    }
+                }
+            }
+        }
+        return
+    }
+
     Dialog(onDismissRequest = onDismiss) {
         NeoCard(
             modifier = Modifier
-                .widthIn(max = 440.dp)
+                .widthIn(max = 430.dp)
                 .fillMaxWidth(),
             backgroundColor = PureWhiteSurface,
             cornerRadius = 22.dp,
-            contentPadding = PaddingValues(20.dp)
+            contentPadding = PaddingValues(18.dp)
         ) {
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                // 1. Clean Header Row: Icon + Metadata + Title on Left, Close (X) on Right
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -1017,7 +993,7 @@ fun TaskDetailPopupModal(
                                 modifier = Modifier.size(22.dp)
                             )
                         }
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = buildString {
                                     append("${task.folderName} • ${task.sectionName} • ${formatDurationBadge(task.durationMinutes)}")
@@ -1026,45 +1002,37 @@ fun TaskDetailPopupModal(
                                     }
                                 },
                                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Normal),
-                                color = InkMuted
+                                color = InkMuted,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                             Text(
                                 text = task.title,
                                 style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
-                                color = InkBlack
+                                color = InkBlack,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
 
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        IconButton(
-                            onClick = onEditTask,
-                            modifier = Modifier
-                                .size(34.dp)
-                                .clip(CircleShape)
-                                .background(SoftSheetSurface)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Edit,
-                                contentDescription = "Edit Task",
-                                tint = InkBlack,
-                                modifier = Modifier.size(17.dp)
-                            )
-                        }
-                        IconButton(
-                            onClick = onDismiss,
-                            modifier = Modifier
-                                .size(34.dp)
-                                .clip(CircleShape)
-                                .background(SoftSheetSurface)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Close",
-                                tint = InkBlack,
-                                modifier = Modifier.size(17.dp)
-                            )
-                        }
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .size(34.dp)
+                            .smoothPressClickable(role = Role.Button, onClick = onDismiss)
+                            .clip(CircleShape)
+                            .background(SoftSheetSurface)
+                            .border(1.5.dp, InkBlack, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = InkBlack,
+                            modifier = Modifier.size(16.dp)
+                        )
                     }
                 }
 
@@ -1076,41 +1044,27 @@ fun TaskDetailPopupModal(
                     )
                 }
 
+                // 2. Sleek 1-Row Structure Bar for Spine Tasks (Sequence Step # + Break Loop side-by-side!)
                 if (task.modeEnum != TaskMode.TOP_BUBBLE) {
-                    // Sequence Position (#) Step Selector for Timeless / Spine tasks (e.g. change #4 -> #6)
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(SoftSheetSurface)
-                            .border(1.5.dp, InkBlack, RoundedCornerShape(14.dp))
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Sequence Step (#)",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                                color = InkBlack
-                            )
-                            Text(
-                                text = if (task.modeEnum == TaskMode.TIMELESS_STEP) {
-                                    "Adjust timeline position (#1, #4, #6...)"
-                                } else {
-                                    "Timed tasks sort by clock (${formatMinutesAsClock(task.startTimeMinutes ?: 480)})"
-                                },
-                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Normal),
-                                color = InkMuted
-                            )
-                        }
+                        // Left: Compact Step # Stepper
                         Row(
+                            modifier = Modifier
+                                .height(40.dp)
+                                .clip(RoundedCornerShape(50))
+                                .background(SoftSheetSurface)
+                                .border(1.5.dp, InkBlack, RoundedCornerShape(50))
+                                .padding(horizontal = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(34.dp)
+                                    .size(28.dp)
                                     .smoothPressClickable(role = Role.Button) {
                                         val next = (stepVal - 1).coerceAtLeast(1)
                                         stepVal = next
@@ -1118,7 +1072,7 @@ fun TaskDetailPopupModal(
                                     }
                                     .clip(CircleShape)
                                     .background(PureWhiteSurface)
-                                    .border(1.5.dp, InkBlack, CircleShape)
+                                    .border(1.2.dp, InkBlack, CircleShape)
                                     .testTag("step_number_minus"),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -1126,28 +1080,31 @@ fun TaskDetailPopupModal(
                                     imageVector = Icons.Default.Remove,
                                     contentDescription = "Decrease Step #",
                                     tint = InkBlack,
-                                    modifier = Modifier.size(16.dp)
+                                    modifier = Modifier.size(14.dp)
                                 )
                             }
 
                             Box(
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(10.dp))
+                                    .clip(RoundedCornerShape(50))
                                     .background(NeoYellow)
-                                    .border(1.5.dp, InkBlack, RoundedCornerShape(10.dp))
-                                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                                    .border(1.2.dp, InkBlack, RoundedCornerShape(50))
+                                    .padding(horizontal = 10.dp, vertical = 3.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
                                     text = "#$stepVal",
-                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    ),
                                     color = InkBlack
                                 )
                             }
 
                             Box(
                                 modifier = Modifier
-                                    .size(34.dp)
+                                    .size(28.dp)
                                     .smoothPressClickable(role = Role.Button) {
                                         val next = (stepVal + 1).coerceAtMost(99)
                                         stepVal = next
@@ -1155,7 +1112,7 @@ fun TaskDetailPopupModal(
                                     }
                                     .clip(CircleShape)
                                     .background(PureWhiteSurface)
-                                    .border(1.5.dp, InkBlack, CircleShape)
+                                    .border(1.2.dp, InkBlack, CircleShape)
                                     .testTag("step_number_plus"),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -1163,89 +1120,68 @@ fun TaskDetailPopupModal(
                                     imageVector = Icons.Default.Add,
                                     contentDescription = "Increase Step #",
                                     tint = InkBlack,
-                                    modifier = Modifier.size(16.dp)
+                                    modifier = Modifier.size(14.dp)
                                 )
                             }
                         }
+
+                        // Right: 1-Tap Break Loop Split / Merge Pill
+                        NeoPillButton(
+                            text = if (hasBreakLoop) "Merge Loop" else "Split Break Loop",
+                            icon = Icons.Default.Pause,
+                            selected = hasBreakLoop,
+                            activeColor = NeoSkyBlue,
+                            onClick = onToggleBreakLoop,
+                            modifier = Modifier.weight(1f)
+                        )
                     }
                 }
 
-                // 1-Tap Break Loop Split Toggle + Recorded Session Log
-                NeoPillButton(
-                    text = if (hasBreakLoop) "Merge Halved Capsule (Clear Break)" else "Split Capsule with Dotted Break Loop",
-                    icon = Icons.Default.Pause,
-                    selected = hasBreakLoop,
-                    activeColor = NeoSkyBlue,
-                    onClick = onToggleBreakLoop,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                if (task.parsedSessionSegments.isNotEmpty() || task.activeSessionStartMin != null) {
+                // 3. Subtasks Section (Smart: full checklist when subtasks exist, compact '+ Subtask' pill when 0 subtasks)
+                if (item.subtasks.isNotEmpty() || showAddSubtaskField) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(14.dp))
+                            .clip(RoundedCornerShape(16.dp))
                             .background(SoftSheetSurface)
-                            .border(1.5.dp, InkBlack.copy(alpha = 0.15f), RoundedCornerShape(14.dp))
+                            .border(1.5.dp, InkBlack, RoundedCornerShape(16.dp))
                             .padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text(
-                            text = "Timeline Session Log",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = InkBlack
-                        )
-                        val segments = task.parsedSessionSegments
-                        segments.forEachIndexed { idx, (s, e) ->
-                            if (idx == 0) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Subtasks (${item.subtasks.count { it.isCompleted }}/${item.subtasks.size})",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = InkBlack
+                            )
+                            if ( !showAddSubtaskField ) {
                                 Text(
-                                    text = "Started ${formatMinutesAsClock(s)} • Break at ${formatMinutesAsClock(e)}",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = InkCharcoal
-                                )
-                            } else {
-                                Text(
-                                    text = "Continued ${formatMinutesAsClock(s)} – ${formatMinutesAsClock(e)}",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = InkCharcoal
+                                    text = "+ Add",
+                                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                                    color = InkBlack,
+                                    modifier = Modifier.smoothPressClickable { showAddSubtaskField = true }
                                 )
                             }
                         }
-                        task.activeSessionStartMin?.let { activeStart ->
-                            val label = if (segments.isEmpty()) "Started at" else "Continued at"
-                            Text(
-                                text = "$label ${formatMinutesAsClock(activeStart)} (Running)",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = NeoCoral
-                            )
-                        }
-                    }
-                }
 
-                // Subtasks List inside Popup
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "Subtasks (${item.subtasks.count { it.isCompleted }}/${item.subtasks.size})",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                        color = InkBlack
-                    )
-                    item.sortedSubtasks.forEach { sub ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .smoothPressClickable { onToggleSubtask(sub) }
-                                .padding(vertical = 2.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
+                        item.sortedSubtasks.forEach { sub ->
                             Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(PureWhiteSurface)
+                                    .smoothPressClickable { onToggleSubtask(sub) }
+                                    .padding(horizontal = 10.dp, vertical = 7.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
                                 NeoSquareCheckbox(
                                     checked = sub.isCompleted,
                                     onCheckedChange = { onToggleSubtask(sub) },
-                                    accentColor = accent
+                                    accentColor = NeoMintGreen
                                 )
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Text(
@@ -1258,40 +1194,55 @@ fun TaskDetailPopupModal(
                                 )
                             }
                         }
-                    }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OutlinedTextField(
-                            value = newSubtask,
-                            onValueChange = { newSubtask = it },
-                            placeholder = {
-                                Text(
-                                    "Add subtask...",
-                                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Normal),
-                                    color = InkMuted
+                        if (showAddSubtaskField) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                OutlinedTextField(
+                                    value = newSubtask,
+                                    onValueChange = { newSubtask = it },
+                                    placeholder = {
+                                        Text(
+                                            "Add subtask...",
+                                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Normal),
+                                            color = InkMuted
+                                        )
+                                    },
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .background(PureWhiteSurface, RoundedCornerShape(12.dp))
                                 )
-                            },
-                            singleLine = true,
-                            modifier = Modifier.weight(1f)
-                        )
-                        NeoPillButton(
-                            text = "Add",
-                            selected = true,
-                            activeColor = NeoSkyBlue,
-                            onClick = {
-                                if (newSubtask.isNotBlank()) {
-                                    onAddSubtask(newSubtask)
-                                    newSubtask = ""
-                                }
+                                NeoPillButton(
+                                    text = "Add",
+                                    selected = true,
+                                    activeColor = NeoSkyBlue,
+                                    onClick = {
+                                        if (newSubtask.isNotBlank()) {
+                                            onAddSubtask(newSubtask)
+                                            newSubtask = ""
+                                        }
+                                    }
+                                )
                             }
-                        )
+                        }
                     }
+                } else {
+                    // When 0 subtasks exist, show a clean single-tap '+ Add Subtask' chip instead of an empty text box
+                    NeoPillButton(
+                        text = "+ Add Subtask",
+                        icon = Icons.Default.Checklist,
+                        selected = false,
+                        onClick = { showAddSubtaskField = true },
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
 
+                // 4. Primary Workflow Row: Focus Timer + Mark Done
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -1314,6 +1265,33 @@ fun TaskDetailPopupModal(
                             onDismiss()
                         },
                         modifier = Modifier.weight(1f)
+                    )
+                }
+
+                // 5. Cohesive Edit (Pencil) & Dedicated Delete (Trash) Row (Same architecture across all bubbles & tasks!)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    NeoPillButton(
+                        text = "Edit",
+                        icon = Icons.Default.Edit,
+                        selected = true,
+                        activeColor = NeoYellow,
+                        onClick = onEditTask,
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("popup_edit_task_button")
+                    )
+                    NeoPillButton(
+                        text = "Delete",
+                        icon = Icons.Default.Delete,
+                        selected = true,
+                        activeColor = NeoCoral,
+                        onClick = { showDeleteConfirmPopup = true },
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("popup_delete_task_button")
                     )
                 }
             }

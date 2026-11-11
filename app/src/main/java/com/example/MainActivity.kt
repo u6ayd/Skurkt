@@ -1,7 +1,9 @@
 package com.example
 
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -16,17 +18,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -82,7 +82,19 @@ import kotlinx.coroutines.delay
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.light(
+                android.graphics.Color.TRANSPARENT,
+                android.graphics.Color.TRANSPARENT
+            ),
+            navigationBarStyle = SystemBarStyle.light(
+                android.graphics.Color.TRANSPARENT,
+                android.graphics.Color.TRANSPARENT
+            )
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isNavigationBarContrastEnforced = false
+        }
         setContent {
             MyApplicationTheme {
                 val plannerViewModel: PlannerViewModel = viewModel()
@@ -125,13 +137,11 @@ fun StruktPlannerApp(
     }
 
     DotGridBackground(
-        modifier = Modifier
-            .fillMaxSize()
-            .windowInsetsPadding(WindowInsets.safeDrawing)
+        modifier = Modifier.fillMaxSize()
     ) {
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             // Automatically adapts to Redmi Pad Pro 5G / Tablet width or landscape orientation
-            val isTabletSplitLayout = maxWidth >= 680.dp
+            val isTabletSplitLayout = maxWidth >= 600.dp || maxWidth > maxHeight
 
             if (isTabletSplitLayout) {
                 TabletLandscapeSplitLayout(
@@ -192,7 +202,11 @@ fun StruktPlannerApp(
                     onToggleSubtask = viewModel::toggleSubtaskDone,
                     onAddSubtask = { title -> viewModel.addQuickSubtask(inspected.task.id, title) },
                     onStartFocus = { viewModel.enterFocusForTask(inspected.task.id) },
-                    onEditTask = { viewModel.openEditTaskSheet(inspected) }
+                    onEditTask = { viewModel.openEditTaskSheet(inspected) },
+                    onDeleteTask = {
+                        viewModel.deleteTask(inspected.task.id)
+                        viewModel.closeInspectTaskModal()
+                    }
                 )
             }
 
@@ -243,12 +257,14 @@ private fun TabletLandscapeSplitLayout(
     viewModel: PlannerViewModel
 ) {
     Row(modifier = Modifier.fillMaxSize()) {
-        // Learnify-Inspired Permanent Left Navigation Rail
+        // Learnify-Inspired Permanent Left Navigation Rail (extends edge-to-edge vertically)
         Column(
             modifier = Modifier
                 .width(72.dp)
                 .fillMaxHeight()
                 .background(NavRailDark)
+                .statusBarsPadding()
+                .navigationBarsPadding()
                 .padding(vertical = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
@@ -313,6 +329,8 @@ private fun TabletLandscapeSplitLayout(
             modifier = Modifier
                 .width(310.dp)
                 .fillMaxHeight()
+                .statusBarsPadding()
+                .navigationBarsPadding()
         ) {
             NeoInboxPane(
                 inboxTasks = uiState.inboxTasks,
@@ -338,6 +356,8 @@ private fun TabletLandscapeSplitLayout(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxHeight()
+                .statusBarsPadding()
+                .navigationBarsPadding()
                 .padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 0.dp)
         ) {
             when (uiState.activeDestination) {
@@ -393,6 +413,7 @@ private fun PortraitHandheldLayout(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
+                .statusBarsPadding()
                 .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 0.dp)
         ) {
             when (uiState.activeDestination) {
@@ -597,6 +618,9 @@ private fun DayFlowSheetContent(
                             bubbles = uiState.topBubbles,
                             onToggleBubbleDone = { item ->
                                 viewModel.toggleTaskDone(item.task)
+                            },
+                            onInspectBubble = { item ->
+                                viewModel.openInspectTaskModal(item.task.id)
                             },
                             onEditBubble = { item ->
                                 viewModel.openEditTaskSheet(item)
