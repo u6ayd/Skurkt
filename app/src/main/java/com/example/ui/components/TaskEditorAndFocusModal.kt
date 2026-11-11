@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -1282,8 +1283,7 @@ fun AntiParalysisFocusScreen(
             NeoCard(
                 modifier = Modifier.widthIn(max = 420.dp),
                 backgroundColor = NeoMintGreen,
-                cornerRadius = 24.dp,
-                shadowOffset = 4.dp,
+                cornerRadius = 22.dp,
                 contentPadding = PaddingValues(24.dp)
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1324,242 +1324,391 @@ fun AntiParalysisFocusScreen(
     val secs = remainingSeconds % 60
     val progress = (elapsedSeconds.toFloat() / targetSeconds.toFloat()).coerceIn(0f, 1f)
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 18.dp, vertical = 12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Row(
-            modifier = Modifier
-                .widthIn(max = 560.dp)
-                .fillMaxWidth(),
-            horizontalArrangement = Arrangement.Start
-        ) {
-            IconButton(
-                onClick = onBackToFlow,
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(PureWhiteSurface)
-                    .border(1.8.dp, InkBlack, CircleShape)
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
-                    tint = InkBlack
-                )
+    val recordedIntervals = remember(task.parsedSessionSegments, task.activeSessionStartMin) {
+        buildList {
+            task.parsedSessionSegments.forEachIndexed { idx, (s, e) ->
+                val label = if (idx == 0) "Started" else "Resumed"
+                add("$label  ${formatMinutesAsClock(s)} – ${formatMinutesAsClock(e)}")
+            }
+            task.activeSessionStartMin?.let { activeStart ->
+                val label = if (task.parsedSessionSegments.isEmpty()) "Started" else "Resumed"
+                add("$label  ${formatMinutesAsClock(activeStart)} – Active")
             }
         }
+    }
 
-        Spacer(modifier = Modifier.height(12.dp))
+    BoxWithConstraints(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+    ) {
+        val isWideFocusLayout = maxWidth >= 660.dp
 
-        NeoCard(
+        Column(
             modifier = Modifier
-                .widthIn(max = 560.dp)
-                .fillMaxWidth(),
-            backgroundColor = accent,
-            cornerRadius = 26.dp,
-            shadowOffset = 5.dp,
-            contentPadding = PaddingValues(22.dp)
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Column(
+            // Top Bar: Back to Timeline + Folder/Section Badge
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(64.dp)
-                        .clip(CircleShape)
-                        .background(PureWhiteSurface)
-                        .border(2.dp, InkBlack, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = iconForKey(task.iconKey),
-                        contentDescription = null,
-                        tint = InkBlack,
-                        modifier = Modifier.size(30.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Text(
-                    text = "${task.folderName} • ${task.sectionName}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = InkCharcoal
+                NeoPillButton(
+                    text = "Timeline",
+                    icon = Icons.AutoMirrored.Filled.ArrowBack,
+                    onClick = onBackToFlow
                 )
 
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(InkBlack)
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = "${task.folderName.uppercase()} • ${task.sectionName.uppercase()}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = PureWhiteSurface
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            if (isWideFocusLayout) {
+                // Redmi Pad Pro 5G Two-Column Focus Workspace
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(18.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    // Left Column: Task Hero + Timer + Complete CTA
+                    Column(
+                        modifier = Modifier.weight(1.05f),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        FocusHeroAndTimerCard(
+                            task = task,
+                            accent = accent,
+                            mins = mins,
+                            secs = secs,
+                            progress = progress,
+                            isRunning = isRunning,
+                            onTogglePlayPause = {
+                                if (isRunning) {
+                                    isRunning = false
+                                    onPauseSession(task)
+                                } else {
+                                    isRunning = true
+                                    onStartOrResumeSession(task)
+                                }
+                            },
+                            onResetTimer = { elapsedSeconds = 0L },
+                            onCompleteAndAdvance = onCompleteAndAdvance
+                        )
+                    }
+
+                    // Right Column: Subtasks Checklist + Live Session Break Log
+                    Column(
+                        modifier = Modifier.weight(0.95f),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        FocusSubtasksAndSessionCard(
+                            focusItem = focusItem,
+                            recordedIntervals = recordedIntervals,
+                            newStepTitle = newStepTitle,
+                            onNewStepTitleChange = { newStepTitle = it },
+                            onToggleSubtask = onToggleSubtask,
+                            onAddQuickSubtask = {
+                                if (newStepTitle.isNotBlank()) {
+                                    onAddQuickSubtask(task.id, newStepTitle)
+                                    newStepTitle = ""
+                                }
+                            }
+                        )
+                    }
+                }
+            } else {
+                // Single-Column Portrait Focus Workspace
+                Column(
+                    modifier = Modifier
+                        .widthIn(max = 560.dp)
+                        .fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    FocusHeroAndTimerCard(
+                        task = task,
+                        accent = accent,
+                        mins = mins,
+                        secs = secs,
+                        progress = progress,
+                        isRunning = isRunning,
+                        onTogglePlayPause = {
+                            if (isRunning) {
+                                isRunning = false
+                                onPauseSession(task)
+                            } else {
+                                isRunning = true
+                                onStartOrResumeSession(task)
+                            }
+                        },
+                        onResetTimer = { elapsedSeconds = 0L },
+                        onCompleteAndAdvance = onCompleteAndAdvance
+                    )
+
+                    FocusSubtasksAndSessionCard(
+                        focusItem = focusItem,
+                        recordedIntervals = recordedIntervals,
+                        newStepTitle = newStepTitle,
+                        onNewStepTitleChange = { newStepTitle = it },
+                        onToggleSubtask = onToggleSubtask,
+                        onAddQuickSubtask = {
+                            if (newStepTitle.isNotBlank()) {
+                                onAddQuickSubtask(task.id, newStepTitle)
+                                newStepTitle = ""
+                            }
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FocusHeroAndTimerCard(
+    task: TaskEntity,
+    accent: androidx.compose.ui.graphics.Color,
+    mins: Long,
+    secs: Long,
+    progress: Float,
+    isRunning: Boolean,
+    onTogglePlayPause: () -> Unit,
+    onResetTimer: () -> Unit,
+    onCompleteAndAdvance: () -> Unit
+) {
+    NeoCard(
+        modifier = Modifier.fillMaxWidth(),
+        backgroundColor = accent,
+        cornerRadius = 22.dp,
+        contentPadding = PaddingValues(22.dp)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(62.dp)
+                    .clip(CircleShape)
+                    .background(PureWhiteSurface)
+                    .border(1.5.dp, InkBlack, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = iconForKey(task.iconKey),
+                    contentDescription = null,
+                    tint = InkBlack,
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Text(
+                text = task.title,
+                style = MaterialTheme.typography.displayMedium,
+                color = InkBlack
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Symmetrical Timer Card
+            NeoCard(
+                modifier = Modifier.fillMaxWidth(),
+                backgroundColor = PureWhiteSurface,
+                cornerRadius = 20.dp,
+                contentPadding = PaddingValues(18.dp)
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = String.format(Locale.US, "%02d:%02d", mins, secs),
+                        style = MaterialTheme.typography.displayLarge.copy(fontSize = 46.sp),
+                        color = InkBlack
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    NeoProgressBar(progress = progress, fillColor = accent, height = 10.dp)
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        NeoPillButton(
+                            text = when {
+                                isRunning -> "Pause (Break)"
+                                task.parsedSessionSegments.isNotEmpty() -> "Resume"
+                                else -> "Play Timer"
+                            },
+                            icon = if (isRunning) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            selected = true,
+                            activeColor = if (isRunning) NeoYellow else NeoMintGreen,
+                            onClick = onTogglePlayPause,
+                            modifier = Modifier.testTag("focus_play_pause_button")
+                        )
+                        NeoPillButton(
+                            text = "Reset",
+                            icon = Icons.Default.Refresh,
+                            onClick = onResetTimer
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(NeoMintGreen)
+                    .border(1.5.dp, InkBlack, RoundedCornerShape(16.dp))
+                    .clickable(onClick = onCompleteAndAdvance)
+                    .testTag("complete_and_advance_button"),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        tint = InkBlack
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Done • Next Task",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = InkBlack
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FocusSubtasksAndSessionCard(
+    focusItem: TaskWithSubtasks,
+    recordedIntervals: List<String>,
+    newStepTitle: String,
+    onNewStepTitleChange: (String) -> Unit,
+    onToggleSubtask: (SubtaskEntity) -> Unit,
+    onAddQuickSubtask: () -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        // Subtasks Card
+        NeoCard(
+            modifier = Modifier.fillMaxWidth(),
+            backgroundColor = PureWhiteSurface,
+            cornerRadius = 22.dp,
+            contentPadding = PaddingValues(18.dp)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    text = task.title,
-                    style = MaterialTheme.typography.displayMedium,
+                    text = "Subtasks (${focusItem.subtasks.count { it.isCompleted }}/${focusItem.subtasks.size})",
+                    style = MaterialTheme.typography.titleLarge,
                     color = InkBlack
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Timer Card with Play / Pause (Break) / Resume
-                NeoCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    backgroundColor = PureWhiteSurface,
-                    cornerRadius = 20.dp,
-                    shadowOffset = 2.5.dp,
-                    contentPadding = PaddingValues(18.dp)
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = String.format(Locale.US, "%02d:%02d", mins, secs),
-                            style = MaterialTheme.typography.displayLarge.copy(fontSize = 44.sp),
-                            color = InkBlack
+                focusItem.sortedSubtasks.forEach { sub ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(SoftSheetSurface)
+                            .clickable { onToggleSubtask(sub) }
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        NeoSquareCheckbox(
+                            checked = sub.isCompleted,
+                            onCheckedChange = { onToggleSubtask(sub) },
+                            accentColor = NeoMintGreen
                         )
-                        Spacer(modifier = Modifier.height(10.dp))
-                        NeoProgressBar(progress = progress, fillColor = accent, height = 10.dp)
-
-                        // Show recorded session segments if paused/resumed
-                        if (task.parsedSessionSegments.isNotEmpty() || task.activeSessionStartMin != null) {
-                            Spacer(modifier = Modifier.height(10.dp))
-                            val segLabels = buildList {
-                                task.parsedSessionSegments.forEachIndexed { idx, (s, e) ->
-                                    val prefix = if (idx == 0) "Started" else "Continued"
-                                    add("$prefix ${formatMinutesAsClock(s)}–${formatMinutesAsClock(e)}")
-                                }
-                                task.activeSessionStartMin?.let { activeMin ->
-                                    val prefix = if (task.parsedSessionSegments.isEmpty()) "Started" else "Continued"
-                                    add("$prefix ${formatMinutesAsClock(activeMin)}")
-                                }
-                            }
-                            Text(
-                                text = segLabels.joinToString("  ⋮  "),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = InkCharcoal
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            NeoPillButton(
-                                text = when {
-                                    isRunning -> "Pause (Break)"
-                                    task.parsedSessionSegments.isNotEmpty() -> "Resume (Continue)"
-                                    else -> "Play Timer"
-                                },
-                                icon = if (isRunning) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                selected = true,
-                                activeColor = if (isRunning) NeoYellow else NeoMintGreen,
-                                onClick = {
-                                    if (isRunning) {
-                                        isRunning = false
-                                        onPauseSession(task)
-                                    } else {
-                                        isRunning = true
-                                        onStartOrResumeSession(task)
-                                    }
-                                },
-                                modifier = Modifier.testTag("focus_play_pause_button")
-                            )
-                            NeoPillButton(
-                                text = "",
-                                icon = Icons.Default.Refresh,
-                                onClick = { elapsedSeconds = 0L }
-                            )
-                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = sub.title,
+                            style = MaterialTheme.typography.bodyLarge.copy(
+                                textDecoration = if (sub.isCompleted) TextDecoration.LineThrough else TextDecoration.None
+                            ),
+                            color = if (sub.isCompleted) InkMuted else InkBlack
+                        )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // Subtasks Card
-                NeoCard(
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    backgroundColor = PureWhiteSurface,
-                    cornerRadius = 20.dp,
-                    shadowOffset = 2.5.dp,
-                    contentPadding = PaddingValues(16.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text(
-                            text = "Subtasks (${focusItem.subtasks.count { it.isCompleted }}/${focusItem.subtasks.size})",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = InkBlack
-                        )
-                        focusItem.sortedSubtasks.forEach { sub ->
+                    OutlinedTextField(
+                        value = newStepTitle,
+                        onValueChange = onNewStepTitleChange,
+                        placeholder = { Text("Add subtask") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.weight(1f)
+                    )
+                    NeoPillButton(
+                        text = "Add",
+                        selected = true,
+                        activeColor = NeoSkyBlue,
+                        onClick = onAddQuickSubtask
+                    )
+                }
+            }
+        }
+
+        // Live Session Activity Log Card (with visual dotted break line when paused/resumed)
+        if (recordedIntervals.isNotEmpty()) {
+            NeoCard(
+                modifier = Modifier.fillMaxWidth(),
+                backgroundColor = PureWhiteSurface,
+                cornerRadius = 22.dp,
+                contentPadding = PaddingValues(18.dp)
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = "Session Timeline",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = InkBlack
+                    )
+                    recordedIntervals.forEachIndexed { idx, intervalText ->
+                        if (idx > 0) {
                             Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { onToggleSubtask(sub) },
-                                verticalAlignment = Alignment.CenterVertically
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(start = 10.dp)
                             ) {
-                                NeoSquareCheckbox(
-                                    checked = sub.isCompleted,
-                                    onCheckedChange = { onToggleSubtask(sub) },
-                                    accentColor = NeoMintGreen
-                                )
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Text(
-                                    text = sub.title,
-                                    style = MaterialTheme.typography.bodyLarge.copy(
-                                        textDecoration = if (sub.isCompleted) TextDecoration.LineThrough else TextDecoration.None
-                                    ),
-                                    color = if (sub.isCompleted) InkMuted else InkBlack
+                                SpineConnectorSegment(
+                                    isDottedBreak = true,
+                                    height = 18.dp
                                 )
                             }
                         }
-
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(SoftSheetSurface)
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            OutlinedTextField(
-                                value = newStepTitle,
-                                onValueChange = { newStepTitle = it },
-                                placeholder = { Text("Subtask") },
-                                singleLine = true,
-                                modifier = Modifier.weight(1f)
-                            )
-                            NeoPillButton(
-                                text = "Add",
-                                selected = true,
-                                activeColor = NeoSkyBlue,
-                                onClick = {
-                                    if (newStepTitle.isNotBlank()) {
-                                        onAddQuickSubtask(task.id, newStepTitle)
-                                        newStepTitle = ""
-                                    }
-                                }
+                            Text(
+                                text = intervalText,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = InkBlack
                             )
                         }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp)
-                        .clip(RoundedCornerShape(50))
-                        .background(NeoMintGreen)
-                        .border(2.dp, InkBlack, RoundedCornerShape(50))
-                        .clickable(onClick = onCompleteAndAdvance)
-                        .testTag("complete_and_advance_button"),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = null,
-                            tint = InkBlack
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Done • Next Task",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = InkBlack
-                        )
                     }
                 }
             }
