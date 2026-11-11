@@ -7,21 +7,21 @@ val PaperCanvas = Color(0xFFFAF8F5)
 val PureWhiteSurface = Color(0xFFFFFFFF)
 val SoftSheetSurface = Color(0xFFF3F1EC)
 val DotGridColor = Color(0xFFDDD8D0)
-val InkBlack = Color(0xFF18181B)
+val InkBlack = Color(0xFF1A1A1A)
 val InkCharcoal = Color(0xFF27272A)
 val InkMuted = Color(0xFF71717A)
 val DividerStroke = Color(0xFFE4E2DD)
-val NavRailDark = Color(0xFF222225)
+val NavRailDark = Color(0xFF1A1A1A)
 
-// High-Contrast Learnify Pastel & Accent Palette
-val NeoCoral = Color(0xFFF26444)
-val NeoSkyBlue = Color(0xFFC5EAFF)
-val NeoMintGreen = Color(0xFFA7F3D0)
-val NeoYellow = Color(0xFFFCE073)
-val NeoRosePink = Color(0xFFFBCFE8)
-val NeoTangerine = Color(0xFFFED7AA)
-val NeoLavender = Color(0xFFDEC7FF)
-val NeoSage = Color(0xFFBBF7D0)
+// Vibrant Soft Neo-Brutalist Pastel & Accent Palette
+val NeoYellow = Color(0xFFFFE156)       // 1. Sunny Yellow (#FFE156)
+val NeoSkyBlue = Color(0xFF99D6FF)      // 2. Vibrant Sky Blue (#99D6FF)
+val NeoMintGreen = Color(0xFF7BF1A8)    // 3. Fresh Mint Green (#7BF1A8)
+val NeoSage = Color(0xFF7BF1A8)         // 3. Fresh Mint Green (#7BF1A8)
+val NeoCoral = Color(0xFFFF5E45)        // 4. Energetic Coral / Orange (#FF5E45)
+val NeoTangerine = Color(0xFFFFC48C)    // 5. Warm Peach (#FFC48C)
+val NeoRosePink = Color(0xFFFFADD6)     // 6. Bright Pastel Pink (#FFADD6)
+val NeoLavender = Color(0xFFD6B8FF)     // Vibrant Pastel Lavender
 
 data class NeoColorOption(
     val key: String,
@@ -31,14 +31,14 @@ data class NeoColorOption(
 )
 
 val NeoPalette = listOf(
-    NeoColorOption("YELLOW", "Sunny Gold", NeoYellow, Color(0xFFFEF9E7)),
+    NeoColorOption("YELLOW", "Sunny Gold", NeoYellow, Color(0xFFFFFBEB)),
     NeoColorOption("LAVENDER", "Lavender", NeoLavender, Color(0xFFF6F0FF)),
-    NeoColorOption("SKY", "Sky Blue", NeoSkyBlue, Color(0xFFEFF8FF)),
-    NeoColorOption("CORAL", "Coral Orange", NeoCoral, Color(0xFFFFF1EE)),
-    NeoColorOption("MINT", "Mint Green", NeoMintGreen, Color(0xFFECFDF5)),
-    NeoColorOption("SAGE", "Soft Green", NeoSage, Color(0xFFF0FDF4)),
-    NeoColorOption("PINK", "Soft Rose", NeoRosePink, Color(0xFFFDF2F8)),
-    NeoColorOption("ORANGE", "Warm Peach", NeoTangerine, Color(0xFFFFF7ED))
+    NeoColorOption("SKY", "Sky Blue", NeoSkyBlue, Color(0xFFEBF6FF)),
+    NeoColorOption("CORAL", "Coral Orange", NeoCoral, Color(0xFFFFEFEA)),
+    NeoColorOption("MINT", "Mint Green", NeoMintGreen, Color(0xFFE8FCF0)),
+    NeoColorOption("SAGE", "Soft Green", NeoSage, Color(0xFFE8FCF0)),
+    NeoColorOption("PINK", "Soft Rose", NeoRosePink, Color(0xFFFFEBF5)),
+    NeoColorOption("ORANGE", "Warm Peach", NeoTangerine, Color(0xFFFFF4E6))
 )
 
 fun neoColorForKey(key: String): Color {
@@ -46,5 +46,5 @@ fun neoColorForKey(key: String): Color {
 }
 
 fun neoSoftColorForKey(key: String): Color {
-    return NeoPalette.firstOrNull { it.key.equals(key, ignoreCase = true) }?.softFill ?: Color(0xFFFEF9E7)
+    return NeoPalette.firstOrNull { it.key.equals(key, ignoreCase = true) }?.softFill ?: Color(0xFFFFFBEB)
 }

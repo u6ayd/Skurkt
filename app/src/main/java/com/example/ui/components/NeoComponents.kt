@@ -67,6 +67,7 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -248,7 +249,7 @@ fun NeoFolderCard(
                 ) {
                     Text(
                         text = tabCode.uppercase(),
-                        style = MaterialTheme.typography.labelMedium,
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium),
                         color = PureWhiteSurface,
                         maxLines = 1
                     )
@@ -263,7 +264,7 @@ fun NeoFolderCard(
                 ) {
                     Text(
                         text = "$progressPercent%",
-                        style = MaterialTheme.typography.labelLarge,
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Medium),
                         color = InkBlack
                     )
                 }
@@ -271,10 +272,10 @@ fun NeoFolderCard(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Single Folder Title (no duplicate folder tag at the bottom)
+            // Single Folder Title (SemiBold 600)
             Text(
                 text = title,
-                style = MaterialTheme.typography.headlineMedium,
+                style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold),
                 color = InkBlack,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -282,7 +283,7 @@ fun NeoFolderCard(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Learnify-style Progress Header Row
+            // Learnify-style Progress Header Row (Regular 400 metadata)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -290,12 +291,12 @@ fun NeoFolderCard(
             ) {
                 Text(
                     text = "Progress",
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Normal),
                     color = InkCharcoal
                 )
                 Text(
                     text = subtitle,
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Normal),
                     color = InkBlack
                 )
             }
@@ -304,7 +305,7 @@ fun NeoFolderCard(
             NeoProgressBar(progress = progressPercent / 100f)
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Bottom Action Row: Clean status on left + "Continue" pill on right
+            // Bottom Action Row: Clean status on left (Medium 500) + "Continue" pill on right (SemiBold 600)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -322,7 +323,7 @@ fun NeoFolderCard(
                     )
                     Text(
                         text = if (progressPercent >= 100) "Completed" else "Active Folder",
-                        style = MaterialTheme.typography.labelMedium,
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium),
                         color = InkCharcoal
                     )
                 }
@@ -338,7 +339,7 @@ fun NeoFolderCard(
                 ) {
                     Text(
                         text = "Continue",
-                        style = MaterialTheme.typography.labelLarge,
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
                         color = PureWhiteSurface
                     )
                     Icon(
@@ -365,7 +366,8 @@ fun NeoPillButton(
     selected: Boolean = false,
     activeColor: Color = NeoYellow,
     inactiveColor: Color = PureWhiteSurface,
-    shadowOffset: Dp = 0.dp
+    shadowOffset: Dp = 0.dp,
+    textFontWeight: FontWeight = FontWeight.SemiBold
 ) {
     val bgColor by animateColorAsState(
         targetValue = if (selected) activeColor else inactiveColor,
@@ -401,7 +403,10 @@ fun NeoPillButton(
             if (text.isNotEmpty()) {
                 Text(
                     text = text,
-                    style = MaterialTheme.typography.titleMedium.copy(fontSize = 13.sp),
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontSize = 13.sp,
+                        fontWeight = textFontWeight
+                    ),
                     color = InkBlack,
                     maxLines = 1
                 )
@@ -411,15 +416,16 @@ fun NeoPillButton(
 }
 
 /**
- * Learnify-style Progress Bar: solid dark fill over a subtle track.
+ * High-Contrast Progress Bar: crisp Pure White (#FFFFFF) unfilled track with a 1.2.dp solid dark border (#1A1A1A),
+ * and solid dark (#1A1A1A) or vibrant coral (#FF5E45) filled progress indicator.
  */
 @Composable
 fun NeoProgressBar(
     progress: Float,
     modifier: Modifier = Modifier,
     fillColor: Color = InkBlack,
-    trackColor: Color = InkBlack.copy(alpha = 0.14f),
-    height: Dp = 7.dp
+    trackColor: Color = PureWhiteSurface,
+    height: Dp = 8.dp
 ) {
     val clamped = progress.coerceIn(0f, 1f)
     val shape = RoundedCornerShape(50)
@@ -429,6 +435,7 @@ fun NeoProgressBar(
             .height(height)
             .clip(shape)
             .background(trackColor, shape)
+            .border(1.2.dp, InkBlack, shape)
     ) {
         if (clamped > 0f) {
             Box(

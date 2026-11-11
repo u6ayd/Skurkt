@@ -159,7 +159,7 @@ fun DateAndWeekHeader(
     Column(modifier = modifier.fillMaxWidth()) {
         Text(
             text = monthName,
-            style = MaterialTheme.typography.displayMedium,
+            style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.Bold),
             color = InkBlack,
             maxLines = 1,
             modifier = Modifier.padding(horizontal = 4.dp)
@@ -228,7 +228,7 @@ fun DateAndWeekHeader(
                         ) {
                             Text(
                                 text = day.dayOfMonth.toString(),
-                                style = MaterialTheme.typography.titleMedium,
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium),
                                 color = if (isSelected) PureWhiteSurface else InkBlack
                             )
                         }
@@ -318,7 +318,7 @@ fun TopAnytimeBubblesRow(
                     text = task.title,
                     style = MaterialTheme.typography.bodyMedium.copy(
                         fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
+                        fontWeight = FontWeight.Medium,
                         textDecoration = if (task.isCompleted) TextDecoration.LineThrough else TextDecoration.None
                     ),
                     color = if (task.isCompleted) InkMuted else InkBlack,
@@ -642,13 +642,16 @@ fun HybridSpineTaskRow(
                         text = formatMinutesAsClock(startMin),
                         style = MaterialTheme.typography.labelMedium.copy(
                             fontSize = 10.5.sp,
-                            fontWeight = if (isUpNext) FontWeight.SemiBold else FontWeight.Medium,
+                            fontWeight = FontWeight.Normal,
                             color = if (isUpNext) InkBlack else InkMuted
                         )
                     )
                     Text(
                         text = formatMinutesAsClock(endMin),
-                        style = MaterialTheme.typography.labelMedium.copy(fontSize = 10.sp),
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Normal
+                        ),
                         color = InkMuted
                     )
                 } else {
@@ -656,7 +659,7 @@ fun HybridSpineTaskRow(
                     Spacer(modifier = Modifier.weight(1f))
                     Text(
                         text = "#$displayStep",
-                        style = MaterialTheme.typography.labelLarge,
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Normal),
                         color = if (isUpNext) InkBlack else InkMuted
                     )
                     Spacer(modifier = Modifier.weight(1f))
@@ -749,13 +752,16 @@ fun HybridSpineTaskRow(
                         text = formatMinutesAsClock(firstSegStart),
                         style = MaterialTheme.typography.labelMedium.copy(
                             fontSize = 10.5.sp,
-                            fontWeight = if (isUpNext) FontWeight.SemiBold else FontWeight.Medium,
+                            fontWeight = FontWeight.Normal,
                             color = if (isUpNext) InkBlack else InkMuted
                         )
                     )
                     Text(
                         text = formatMinutesAsClock(firstSegEnd),
-                        style = MaterialTheme.typography.labelMedium.copy(fontSize = 9.5.sp),
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Normal
+                        ),
                         color = InkMuted
                     )
                 }
@@ -772,12 +778,18 @@ fun HybridSpineTaskRow(
                 ) {
                     Text(
                         text = formatMinutesAsClock(secondSegStart),
-                        style = MaterialTheme.typography.labelMedium.copy(fontSize = 9.5.sp),
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Normal
+                        ),
                         color = InkMuted
                     )
                     Text(
                         text = formatMinutesAsClock(secondSegEnd),
-                        style = MaterialTheme.typography.labelMedium.copy(fontSize = 10.sp),
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Normal
+                        ),
                         color = InkMuted
                     )
                 }
@@ -889,6 +901,7 @@ private fun TaskRightTitleAndCheckRow(
                 Text(
                     text = task.title,
                     style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.SemiBold,
                         textDecoration = if (task.isCompleted) TextDecoration.LineThrough else TextDecoration.None
                     ),
                     color = if (task.isCompleted) InkMuted else InkBlack,
@@ -922,7 +935,7 @@ private fun TaskRightTitleAndCheckRow(
                     )
                     Text(
                         text = "$done/${item.subtasks.size}",
-                        style = MaterialTheme.typography.labelMedium,
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Normal),
                         color = InkMuted
                     )
                 }
@@ -1012,12 +1025,12 @@ fun TaskDetailPopupModal(
                                         append(" • ${formatMinutesAsClock(it)}")
                                     }
                                 },
-                                style = MaterialTheme.typography.labelMedium,
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Normal),
                                 color = InkMuted
                             )
                             Text(
                                 text = task.title,
-                                style = MaterialTheme.typography.titleLarge,
+                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
                                 color = InkBlack
                             )
                         }
@@ -1078,7 +1091,7 @@ fun TaskDetailPopupModal(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = "Sequence Step (#)",
-                                style = MaterialTheme.typography.titleMedium,
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                                 color = InkBlack
                             )
                             Text(
@@ -1087,7 +1100,7 @@ fun TaskDetailPopupModal(
                                 } else {
                                     "Timed tasks sort by clock (${formatMinutesAsClock(task.startTimeMinutes ?: 480)})"
                                 },
-                                style = MaterialTheme.typography.labelMedium,
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Normal),
                                 color = InkMuted
                             )
                         }
@@ -1127,7 +1140,7 @@ fun TaskDetailPopupModal(
                             ) {
                                 Text(
                                     text = "#$stepVal",
-                                    style = MaterialTheme.typography.titleMedium,
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                                     color = InkBlack
                                 )
                             }
@@ -1213,7 +1226,7 @@ fun TaskDetailPopupModal(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         text = "Subtasks (${item.subtasks.count { it.isCompleted }}/${item.subtasks.size})",
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                         color = InkBlack
                     )
                     item.sortedSubtasks.forEach { sub ->
@@ -1238,6 +1251,7 @@ fun TaskDetailPopupModal(
                                 Text(
                                     text = sub.title,
                                     style = MaterialTheme.typography.bodyLarge.copy(
+                                        fontWeight = FontWeight.Medium,
                                         textDecoration = if (sub.isCompleted) TextDecoration.LineThrough else TextDecoration.None
                                     ),
                                     color = if (sub.isCompleted) InkMuted else InkBlack
@@ -1254,14 +1268,20 @@ fun TaskDetailPopupModal(
                         OutlinedTextField(
                             value = newSubtask,
                             onValueChange = { newSubtask = it },
-                            placeholder = { Text("Add subtask...") },
+                            placeholder = {
+                                Text(
+                                    "Add subtask...",
+                                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Normal),
+                                    color = InkMuted
+                                )
+                            },
                             singleLine = true,
                             modifier = Modifier.weight(1f)
                         )
                         NeoPillButton(
                             text = "Add",
                             selected = true,
-                            activeColor = accent,
+                            activeColor = NeoSkyBlue,
                             onClick = {
                                 if (newSubtask.isNotBlank()) {
                                     onAddSubtask(newSubtask)

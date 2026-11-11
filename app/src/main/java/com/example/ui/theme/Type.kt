@@ -1,25 +1,62 @@
 package com.example.ui.theme
 
 import androidx.compose.material3.Typography
+import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.example.R
 
-// Learnify Geometric Font ("Outfit") + JetBrains Mono
+// Geometric Sans-Serif ("Outfit") with explicit variable-font weight axes (400, 500, 600, 700)
+@OptIn(ExperimentalTextApi::class)
 val OutfitFontFamily = FontFamily(
-    Font(R.font.outfit, FontWeight.Normal),
-    Font(R.font.outfit, FontWeight.Medium),
-    Font(R.font.outfit, FontWeight.SemiBold),
-    Font(R.font.outfit, FontWeight.Bold)
+    Font(
+        resId = R.font.outfit,
+        weight = FontWeight.Normal,
+        variationSettings = FontVariation.Settings(FontVariation.weight(FontWeight.Normal.weight))
+    ),
+    Font(
+        resId = R.font.outfit,
+        weight = FontWeight.Medium,
+        variationSettings = FontVariation.Settings(FontVariation.weight(FontWeight.Medium.weight))
+    ),
+    Font(
+        resId = R.font.outfit,
+        weight = FontWeight.SemiBold,
+        variationSettings = FontVariation.Settings(FontVariation.weight(FontWeight.SemiBold.weight))
+    ),
+    Font(
+        resId = R.font.outfit,
+        weight = FontWeight.Bold,
+        variationSettings = FontVariation.Settings(FontVariation.weight(FontWeight.Bold.weight))
+    )
 )
 
+@OptIn(ExperimentalTextApi::class)
 val MonoFontFamily = FontFamily(
-    Font(R.font.jetbrains_mono, FontWeight.Normal),
-    Font(R.font.jetbrains_mono, FontWeight.Medium),
-    Font(R.font.jetbrains_mono, FontWeight.Bold)
+    Font(
+        resId = R.font.jetbrains_mono,
+        weight = FontWeight.Normal,
+        variationSettings = FontVariation.Settings(FontVariation.weight(FontWeight.Normal.weight))
+    ),
+    Font(
+        resId = R.font.jetbrains_mono,
+        weight = FontWeight.Medium,
+        variationSettings = FontVariation.Settings(FontVariation.weight(FontWeight.Medium.weight))
+    ),
+    Font(
+        resId = R.font.jetbrains_mono,
+        weight = FontWeight.SemiBold,
+        variationSettings = FontVariation.Settings(FontVariation.weight(FontWeight.SemiBold.weight))
+    ),
+    Font(
+        resId = R.font.jetbrains_mono,
+        weight = FontWeight.Bold,
+        variationSettings = FontVariation.Settings(FontVariation.weight(FontWeight.Bold.weight))
+    )
 )
 
 val Typography = Typography(
@@ -33,7 +70,7 @@ val Typography = Typography(
     ),
     displayMedium = TextStyle(
         fontFamily = OutfitFontFamily,
-        fontWeight = FontWeight.SemiBold,
+        fontWeight = FontWeight.Bold,
         fontSize = 26.sp,
         lineHeight = 32.sp,
         letterSpacing = (-0.2).sp,
@@ -41,7 +78,7 @@ val Typography = Typography(
     ),
     displaySmall = TextStyle(
         fontFamily = OutfitFontFamily,
-        fontWeight = FontWeight.SemiBold,
+        fontWeight = FontWeight.Bold,
         fontSize = 20.sp,
         lineHeight = 26.sp,
         color = InkBlack
@@ -91,6 +128,13 @@ val Typography = Typography(
     labelMedium = TextStyle(
         fontFamily = OutfitFontFamily,
         fontWeight = FontWeight.Medium,
+        fontSize = 11.sp,
+        lineHeight = 14.sp,
+        color = InkMuted
+    ),
+    labelSmall = TextStyle(
+        fontFamily = OutfitFontFamily,
+        fontWeight = FontWeight.Normal,
         fontSize = 11.sp,
         lineHeight = 14.sp,
         color = InkMuted

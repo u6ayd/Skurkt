@@ -300,7 +300,7 @@ fun StructuredTaskEditorDialog(
                                             "${formatMinutesAsClock(startTimeMinutes)}–${formatMinutesAsClock(startTimeMinutes + durationMinutes)} (${formatDurationBadge(durationMinutes)})"
                                         else -> formatDurationBadge(durationMinutes)
                                     },
-                                    style = MaterialTheme.typography.labelMedium,
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Normal),
                                     color = InkCharcoal
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
@@ -310,12 +310,12 @@ fun StructuredTaskEditorDialog(
                                     placeholder = {
                                         Text(
                                             "Task",
-                                            style = MaterialTheme.typography.titleLarge,
+                                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Normal),
                                             color = InkMuted
                                         )
                                     },
                                     singleLine = true,
-                                    textStyle = MaterialTheme.typography.titleLarge,
+                                    textStyle = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
                                     shape = RoundedCornerShape(14.dp),
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -346,7 +346,7 @@ fun StructuredTaskEditorDialog(
                         ) {
                             Text(
                                 text = if (toInbox) "Inbox" else selectedDate.format(dateFormatter),
-                                style = MaterialTheme.typography.titleMedium,
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                                 color = InkBlack
                             )
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -396,12 +396,12 @@ fun StructuredTaskEditorDialog(
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         text = "Sequence Step (#)",
-                                        style = MaterialTheme.typography.titleMedium,
+                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                                         color = InkBlack
                                     )
                                     Text(
                                         text = "Order in spine (#1, #4, #6...)",
-                                        style = MaterialTheme.typography.labelMedium,
+                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Normal),
                                         color = InkMuted
                                     )
                                 }
@@ -435,7 +435,7 @@ fun StructuredTaskEditorDialog(
                                     ) {
                                         Text(
                                             text = "#$stepOrder",
-                                            style = MaterialTheme.typography.titleMedium,
+                                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                                             color = InkBlack
                                         )
                                     }
@@ -530,7 +530,7 @@ fun StructuredTaskEditorDialog(
                         ) {
                             Text(
                                 text = "Continue",
-                                style = MaterialTheme.typography.titleLarge,
+                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
                                 color = PureWhiteSurface
                             )
                         }
@@ -631,7 +631,7 @@ private fun EditorSummaryRow(
             )
             Text(
                 text = label,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                 color = InkBlack
             )
         }
@@ -642,7 +642,7 @@ private fun EditorSummaryRow(
         ) {
             Text(
                 text = valueText,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
                 color = InkMuted
             )
             Icon(
@@ -1442,6 +1442,7 @@ fun AntiParalysisFocusScreen(
                 NeoPillButton(
                     text = "Timeline",
                     icon = Icons.AutoMirrored.Filled.ArrowBack,
+                    textFontWeight = FontWeight.Medium,
                     onClick = onBackToFlow
                 )
 
@@ -1453,7 +1454,7 @@ fun AntiParalysisFocusScreen(
                 ) {
                     Text(
                         text = "${task.folderName.uppercase()} • ${task.sectionName.uppercase()}",
-                        style = MaterialTheme.typography.labelMedium,
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium),
                         color = PureWhiteSurface
                     )
                 }
@@ -1603,7 +1604,7 @@ private fun FocusHeroAndTimerCard(
 
             Text(
                 text = task.title,
-                style = MaterialTheme.typography.displayMedium,
+                style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.Bold),
                 color = InkBlack
             )
 
@@ -1619,11 +1620,15 @@ private fun FocusHeroAndTimerCard(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
                         text = String.format(Locale.US, "%02d:%02d", mins, secs),
-                        style = MaterialTheme.typography.displayLarge.copy(fontSize = 46.sp),
+                        style = MaterialTheme.typography.displayLarge.copy(
+                            fontSize = 46.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFeatureSettings = "tnum"
+                        ),
                         color = InkBlack
                     )
                     Spacer(modifier = Modifier.height(10.dp))
-                    NeoProgressBar(progress = progress, fillColor = accent, height = 10.dp)
+                    NeoProgressBar(progress = progress, fillColor = InkBlack, height = 10.dp)
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1670,7 +1675,7 @@ private fun FocusHeroAndTimerCard(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "Done • Next Task",
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
                         color = InkBlack
                     )
                 }
@@ -1699,7 +1704,7 @@ private fun FocusSubtasksAndSessionCard(
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
                     text = "Subtasks (${focusItem.subtasks.count { it.isCompleted }}/${focusItem.subtasks.size})",
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
                     color = InkBlack
                 )
 
@@ -1722,6 +1727,7 @@ private fun FocusSubtasksAndSessionCard(
                         Text(
                             text = sub.title,
                             style = MaterialTheme.typography.bodyLarge.copy(
+                                fontWeight = FontWeight.Medium,
                                 textDecoration = if (sub.isCompleted) TextDecoration.LineThrough else TextDecoration.None
                             ),
                             color = if (sub.isCompleted) InkMuted else InkBlack
@@ -1737,7 +1743,13 @@ private fun FocusSubtasksAndSessionCard(
                     OutlinedTextField(
                         value = newStepTitle,
                         onValueChange = onNewStepTitleChange,
-                        placeholder = { Text("Add subtask") },
+                        placeholder = {
+                            Text(
+                                "Add subtask",
+                                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Normal),
+                                color = InkMuted
+                            )
+                        },
                         singleLine = true,
                         shape = RoundedCornerShape(14.dp),
                         modifier = Modifier.weight(1f)
