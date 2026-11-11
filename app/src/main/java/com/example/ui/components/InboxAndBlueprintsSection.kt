@@ -303,9 +303,12 @@ fun NeoInboxPane(
                                 )
                                 Text(
                                     text = task.title,
-                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontWeight = FontWeight.SemiBold,
+                                        lineHeight = 19.ssp
+                                    ),
                                     color = InkBlack,
-                                    maxLines = 1,
+                                    maxLines = 2,
                                     overflow = TextOverflow.Ellipsis
                                 )
                             }
@@ -504,14 +507,18 @@ fun FoldersAndSectionsScreen(
                                     Text(
                                         text = "OVERALL READINESS",
                                         style = MaterialTheme.typography.labelLarge.copy(
-                                            fontSize = 10.ssp,
+                                            fontSize = 10.3.ssp,
                                             fontWeight = FontWeight.Medium
                                         ),
                                         color = InkBlack
                                     )
                                     Text(
                                         text = "$overallReadiness%",
-                                        style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.Bold),
+                                        style = MaterialTheme.typography.displayMedium.copy(
+                                            fontSize = 26.6.ssp,
+                                            lineHeight = 32.5.ssp,
+                                            fontWeight = FontWeight.Bold
+                                        ),
                                         color = InkBlack
                                     )
                                 }
@@ -532,14 +539,18 @@ fun FoldersAndSectionsScreen(
                                     Text(
                                         text = "MILESTONES DONE",
                                         style = MaterialTheme.typography.labelLarge.copy(
-                                            fontSize = 10.ssp,
+                                            fontSize = 10.3.ssp,
                                             fontWeight = FontWeight.Medium
                                         ),
                                         color = InkBlack
                                     )
                                     Text(
                                         text = "$doneSubtasks / ${allSubtasks.size}",
-                                        style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.Bold),
+                                        style = MaterialTheme.typography.displayMedium.copy(
+                                            fontSize = 26.6.ssp,
+                                            lineHeight = 32.5.ssp,
+                                            fontWeight = FontWeight.Bold
+                                        ),
                                         color = InkBlack
                                     )
                                 }
@@ -567,14 +578,18 @@ fun FoldersAndSectionsScreen(
                                     Text(
                                         text = "TASKS COMPLETED",
                                         style = MaterialTheme.typography.labelLarge.copy(
-                                            fontSize = 10.ssp,
+                                            fontSize = 10.3.ssp,
                                             fontWeight = FontWeight.Medium
                                         ),
                                         color = InkBlack
                                     )
                                     Text(
                                         text = "$completedTasks / ${allTasks.size}",
-                                        style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.Bold),
+                                        style = MaterialTheme.typography.displayMedium.copy(
+                                            fontSize = 26.6.ssp,
+                                            lineHeight = 32.5.ssp,
+                                            fontWeight = FontWeight.Bold
+                                        ),
                                         color = InkBlack
                                     )
                                 }
@@ -595,14 +610,18 @@ fun FoldersAndSectionsScreen(
                                     Text(
                                         text = "FOLDERS",
                                         style = MaterialTheme.typography.labelLarge.copy(
-                                            fontSize = 10.ssp,
+                                            fontSize = 10.3.ssp,
                                             fontWeight = FontWeight.Medium
                                         ),
                                         color = InkBlack
                                     )
                                     Text(
                                         text = "${folders.size}",
-                                        style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.Bold),
+                                        style = MaterialTheme.typography.displayMedium.copy(
+                                            fontSize = 26.6.ssp,
+                                            lineHeight = 32.5.ssp,
+                                            fontWeight = FontWeight.Bold
+                                        ),
                                         color = InkBlack
                                     )
                                 }
@@ -631,10 +650,14 @@ fun FoldersAndSectionsScreen(
                             placeholder = {
                                 Text(
                                     "Search...",
-                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Normal),
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontSize = 13.4.ssp,
+                                        fontWeight = FontWeight.Normal
+                                    ),
                                     color = InkMuted
                                 )
                             },
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.4.ssp),
                             singleLine = true,
                             shape = RoundedCornerShape(18.dp),
                             modifier = Modifier
@@ -767,12 +790,20 @@ fun FoldersAndSectionsScreen(
                                 Column {
                                     Text(
                                         text = selectedFolder.name,
-                                        style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold),
+                                        style = MaterialTheme.typography.headlineMedium.copy(
+                                            fontSize = 18.5.ssp,
+                                            lineHeight = 24.ssp,
+                                            fontWeight = FontWeight.SemiBold
+                                        ),
                                         color = InkBlack
                                     )
                                     Text(
                                         text = "$folderDone / ${folderTasks.size} tasks completed",
-                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Normal),
+                                        style = MaterialTheme.typography.labelMedium.copy(
+                                            fontSize = 11.4.ssp,
+                                            lineHeight = 15.5.ssp,
+                                            fontWeight = FontWeight.Normal
+                                        ),
                                         color = InkCharcoal
                                     )
                                 }
@@ -785,7 +816,10 @@ fun FoldersAndSectionsScreen(
                                 ) {
                                     Text(
                                         text = "$folderPct%",
-                                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Medium),
+                                        style = MaterialTheme.typography.labelLarge.copy(
+                                            fontSize = 12.4.ssp,
+                                            fontWeight = FontWeight.Medium
+                                        ),
                                         color = InkBlack
                                     )
                                 }
@@ -827,13 +861,13 @@ fun FoldersAndSectionsScreen(
                                 ) {
                                     Text(
                                         text = sectionName,
-                                        style = MaterialTheme.typography.labelLarge,
+                                        style = MaterialTheme.typography.labelLarge.copy(fontSize = 12.4.ssp),
                                         color = InkBlack
                                     )
                                 }
                                 Text(
                                     text = "${sectionTasks.count { it.task.isCompleted }}/${sectionTasks.size} done",
-                                    style = MaterialTheme.typography.labelMedium,
+                                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.4.ssp),
                                     color = InkMuted
                                 )
                             }
@@ -841,7 +875,7 @@ fun FoldersAndSectionsScreen(
                             if (sectionTasks.isEmpty()) {
                                 Text(
                                     text = "No tasks in this section yet.",
-                                    style = MaterialTheme.typography.bodyMedium,
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.4.ssp),
                                     color = InkMuted
                                 )
                             } else {
@@ -862,18 +896,23 @@ fun FoldersAndSectionsScreen(
                                             Text(
                                                 text = t.title,
                                                 style = MaterialTheme.typography.titleMedium.copy(
+                                                    fontSize = 15.4.ssp,
+                                                    lineHeight = 20.ssp,
                                                     textDecoration = if (t.isCompleted) TextDecoration.LineThrough else TextDecoration.None
                                                 ),
-                                                color = if (t.isCompleted) InkMuted else InkBlack
+                                                color = if (t.isCompleted) InkMuted else InkBlack,
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis
                                             )
                                             if (item.subtasks.isNotEmpty()) {
                                                 Text(
                                                     text = "${item.subtasks.count { it.isCompleted }}/${item.subtasks.size} subtasks",
-                                                    style = MaterialTheme.typography.labelMedium,
+                                                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.4.ssp),
                                                     color = InkMuted
                                                 )
                                             }
                                         }
+                                        Spacer(modifier = Modifier.width(10.dp))
                                         NeoCircleCheckbox(
                                             checked = t.isCompleted,
                                             accentColor = accent,

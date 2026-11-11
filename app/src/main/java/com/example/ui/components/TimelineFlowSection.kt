@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -743,11 +744,11 @@ fun HybridSpineTaskRow(
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            // 3. Right Content Column aligned with Top Half-Oval (no redundant '(Continued)' text at bottom)
+            // 3. Right Content Column aligned with Top Half-Oval (allows 2-line task titles cleanly)
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .height(topHalfHeight + 8.dp),
+                    .heightIn(min = topHalfHeight + 8.dp),
                 contentAlignment = Alignment.CenterStart
             ) {
                 TaskRightTitleAndCheckRow(
@@ -796,10 +797,11 @@ private fun TaskRightTitleAndCheckRow(
                     text = task.title,
                     style = MaterialTheme.typography.titleLarge.copy(
                         fontWeight = FontWeight.SemiBold,
+                        lineHeight = 20.ssp,
                         textDecoration = if (task.isCompleted) TextDecoration.LineThrough else TextDecoration.None
                     ),
                     color = if (task.isCompleted) InkMuted else InkBlack,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false)
                 )
@@ -922,9 +924,12 @@ fun TaskDetailPopupModal(
                             )
                             Text(
                                 text = task.title,
-                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontWeight = FontWeight.Medium,
+                                    lineHeight = 18.ssp
+                                ),
                                 color = InkMuted,
-                                maxLines = 1,
+                                maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
                             )
                         }
@@ -1014,9 +1019,12 @@ fun TaskDetailPopupModal(
                             )
                             Text(
                                 text = task.title,
-                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+                                style = MaterialTheme.typography.titleLarge.copy(
+                                    fontWeight = FontWeight.SemiBold,
+                                    lineHeight = 20.ssp
+                                ),
                                 color = InkBlack,
-                                maxLines = 1,
+                                maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
                             )
                         }

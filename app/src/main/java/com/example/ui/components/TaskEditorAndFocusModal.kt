@@ -1606,8 +1606,12 @@ private fun FocusHeroAndTimerCard(
 
             Text(
                 text = task.title,
-                style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.Bold),
-                color = InkBlack
+                style = MaterialTheme.typography.displayMedium.copy(
+                    fontWeight = FontWeight.Bold,
+                    lineHeight = 31.ssp
+                ),
+                color = InkBlack,
+                modifier = Modifier.fillMaxWidth()
             )
 
             Spacer(modifier = Modifier.height(16.dp))

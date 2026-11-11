@@ -252,7 +252,11 @@ fun NeoFolderCard(
                 ) {
                     Text(
                         text = tabCode.uppercase(),
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium),
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontSize = 11.4.ssp,
+                            lineHeight = 15.5.ssp,
+                            fontWeight = FontWeight.Medium
+                        ),
                         color = PureWhiteSurface,
                         maxLines = 1
                     )
@@ -267,7 +271,11 @@ fun NeoFolderCard(
                 ) {
                     Text(
                         text = "$progressPercent%",
-                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Medium),
+                        style = MaterialTheme.typography.labelLarge.copy(
+                            fontSize = 12.4.ssp,
+                            lineHeight = 16.5.ssp,
+                            fontWeight = FontWeight.Medium
+                        ),
                         color = InkBlack
                     )
                 }
@@ -275,18 +283,22 @@ fun NeoFolderCard(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Single Folder Title (SemiBold 600)
+            // Folder Title (SemiBold 600, bumped ~2% in size, max 2 lines)
             Text(
                 text = title,
-                style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold),
+                style = MaterialTheme.typography.headlineMedium.copy(
+                    fontSize = 18.5.ssp,
+                    lineHeight = 24.ssp,
+                    fontWeight = FontWeight.SemiBold
+                ),
                 color = InkBlack,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Learnify-style Progress Header Row (Regular 400 metadata)
+            // Learnify-style Progress Header Row (Regular 400 metadata, bumped ~2% in size)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -294,12 +306,20 @@ fun NeoFolderCard(
             ) {
                 Text(
                     text = "Progress",
-                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Normal),
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontSize = 11.4.ssp,
+                        lineHeight = 15.5.ssp,
+                        fontWeight = FontWeight.Normal
+                    ),
                     color = InkCharcoal
                 )
                 Text(
                     text = subtitle,
-                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Normal),
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontSize = 11.4.ssp,
+                        lineHeight = 15.5.ssp,
+                        fontWeight = FontWeight.Normal
+                    ),
                     color = InkBlack
                 )
             }
@@ -326,7 +346,11 @@ fun NeoFolderCard(
                     )
                     Text(
                         text = if (progressPercent >= 100) "Completed" else "Active Folder",
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium),
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontSize = 11.4.ssp,
+                            lineHeight = 15.5.ssp,
+                            fontWeight = FontWeight.Medium
+                        ),
                         color = InkCharcoal
                     )
                 }
@@ -342,7 +366,11 @@ fun NeoFolderCard(
                 ) {
                     Text(
                         text = "Continue",
-                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                        style = MaterialTheme.typography.labelLarge.copy(
+                            fontSize = 12.4.ssp,
+                            lineHeight = 16.5.ssp,
+                            fontWeight = FontWeight.SemiBold
+                        ),
                         color = PureWhiteSurface
                     )
                     Icon(
