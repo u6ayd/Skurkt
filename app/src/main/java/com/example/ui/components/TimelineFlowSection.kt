@@ -1,9 +1,11 @@
 package com.example.ui.components
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,11 +26,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -47,7 +53,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -63,11 +73,13 @@ import com.example.data.SubtaskEntity
 import com.example.data.TaskMode
 import com.example.data.TaskWithSubtasks
 import com.example.ui.FlowFilterMode
+import com.example.ui.effectiveTaskStepNumber
 import com.example.ui.theme.InkBlack
 import com.example.ui.theme.InkCharcoal
 import com.example.ui.theme.InkMuted
 import com.example.ui.theme.NeoCoral
 import com.example.ui.theme.NeoMintGreen
+import com.example.ui.theme.NeoSkyBlue
 import com.example.ui.theme.NeoYellow
 import com.example.ui.theme.PureWhiteSurface
 import com.example.ui.theme.SoftSheetSurface
@@ -95,13 +107,17 @@ fun formatDurationBadge(minutes: Int): String {
 
 private const val WEEK_PAGER_CENTER = 500
 private const val WEEK_PAGER_COUNT = 1000
+private val SHORT_WEEKDAY_LABELS = arrayOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+
+// Shared geometry constants so the timeline spine sits shifted toward the left edge
+private val TIME_COLUMN_WIDTH = 38.dp
+private val TIME_TO_CAPSULE_GAP = 6.dp
+private val CAPSULE_COLUMN_WIDTH = 44.dp
 
 /**
- * Section 2 Ultra-Clean Header & Swipeable Week Calendar:
+ * Ultra-Clean Header & Swipeable Week Calendar:
  * - Shows ONLY the Month name ("November") in the Outfit font.
- * - Removed < > arrows, Today button, and Rotate button so the header never overlaps or shifts down.
- * - Horizontally swipeable 7-day week strip (slide left/right to view any past or future week).
- * - Today is highlighted with NeoYellow; the selected day is highlighted with NeoCoral.
+ * - Horizontally swipeable 7-day week strip with cached weekday labels and smooth press dimming.
  */
 @Composable
 fun DateAndWeekHeader(
@@ -123,7 +139,6 @@ fun DateAndWeekHeader(
         pageCount = { WEEK_PAGER_COUNT }
     )
 
-    // When user swipes to a new week page, move selectedDate to the same weekday in that week
     LaunchedEffect(pagerState) {
         snapshotFlow { pagerState.settledPage }
             .distinctUntilChanged()
@@ -137,10 +152,11 @@ fun DateAndWeekHeader(
             }
     }
 
-    val monthName = selectedDate.month.getDisplayName(JavaTextStyle.FULL, Locale.ENGLISH)
+    val monthName = remember(selectedDate.month) {
+        selectedDate.month.getDisplayName(JavaTextStyle.FULL, Locale.ENGLISH)
+    }
 
     Column(modifier = modifier.fillMaxWidth()) {
-        // Month-only title in clean Outfit font
         Text(
             text = monthName,
             style = MaterialTheme.typography.displayMedium,
@@ -151,7 +167,6 @@ fun DateAndWeekHeader(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Horizontally Swipeable 7-Day Week Strip
         HorizontalPager(
             state = pagerState,
             modifier = Modifier
@@ -170,14 +185,23 @@ fun DateAndWeekHeader(
                     val epoch = day.toEpochDay()
                     val isSelected = day == selectedDate
                     val isCurrentToday = day == today
-                    val dayLabel = day.dayOfWeek.getDisplayName(JavaTextStyle.SHORT, Locale.ENGLISH)
+                    val dayLabel = SHORT_WEEKDAY_LABELS[offset.toInt()]
                     val dotColors = weekDotColorsByEpochDay[epoch].orEmpty()
+
+                    val badgeColor by animateColorAsState(
+                        targetValue = when {
+                            isSelected -> NeoCoral
+                            isCurrentToday -> NeoYellow
+                            else -> Color.Transparent
+                        },
+                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                        label = "day_badge_color"
+                    )
 
                     Column(
                         modifier = Modifier
                             .weight(1f)
-                            .clip(RoundedCornerShape(14.dp))
-                            .clickable(role = Role.Tab) { onSelectDate(epoch) }
+                            .smoothPressClickable(role = Role.Tab) { onSelectDate(epoch) }
                             .padding(vertical = 4.dp)
                             .testTag("week_day_${day.dayOfWeek.name.lowercase()}"),
                         horizontalAlignment = Alignment.CenterHorizontally
@@ -192,13 +216,7 @@ fun DateAndWeekHeader(
                             modifier = Modifier
                                 .size(36.dp)
                                 .clip(CircleShape)
-                                .background(
-                                    when {
-                                        isSelected -> NeoCoral
-                                        isCurrentToday -> NeoYellow
-                                        else -> Color.Transparent
-                                    }
-                                )
+                                .background(badgeColor, CircleShape)
                                 .then(
                                     if (isSelected || isCurrentToday) {
                                         Modifier.border(1.5.dp, InkBlack, CircleShape)
@@ -237,38 +255,55 @@ fun DateAndWeekHeader(
 }
 
 /**
- * Clean Top Circular Routine Bubbles.
+ * Top Anytime Daily Quick-Bubbles (e.g., "Structure Tomorrow", "Water Plants", "Call Mum"):
+ * - Single tap on the circular icon smoothly dims/animates the circle color and toggles Done/Undone.
+ * - Long-press on the circular icon (or tap on its text label below) opens a clean quick-action popup
+ *   with Delete, Edit, and Toggle Done options!
  */
 @Composable
 fun TopAnytimeBubblesRow(
     bubbles: List<TaskWithSubtasks>,
-    onBubbleClick: (TaskWithSubtasks) -> Unit,
+    onToggleBubbleDone: (TaskWithSubtasks) -> Unit,
+    onEditBubble: (TaskWithSubtasks) -> Unit,
+    onDeleteBubble: (Long) -> Unit,
     modifier: Modifier = Modifier
 ) {
     if (bubbles.isEmpty()) return
+    var actionBubble by remember { mutableStateOf<TaskWithSubtasks?>(null) }
+
     Row(
         modifier = modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState())
-            .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(20.dp),
+            .padding(vertical = 4.dp, horizontal = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(18.dp),
         verticalAlignment = Alignment.Top
     ) {
         bubbles.forEach { item ->
             val task = item.task
-            val color = neoColorForKey(task.colorKey)
+            val baseColor = neoColorForKey(task.colorKey)
+            val animatedBubbleFill by animateColorAsState(
+                targetValue = if (task.isCompleted) SoftSheetSurface else baseColor,
+                animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                label = "top_bubble_fill_${task.id}"
+            )
+
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier
-                    .width(74.dp)
-                    .clickable(role = Role.Button) { onBubbleClick(item) }
+                modifier = Modifier.width(74.dp)
             ) {
                 Box(
                     modifier = Modifier
                         .size(52.dp)
+                        .smoothCombinedClickable(
+                            role = Role.Checkbox,
+                            onLongClick = { actionBubble = item },
+                            onClick = { onToggleBubbleDone(item) }
+                        )
                         .clip(CircleShape)
-                        .background(if (task.isCompleted) SoftSheetSurface else color)
-                        .border(1.5.dp, InkBlack, CircleShape),
+                        .background(animatedBubbleFill, CircleShape)
+                        .border(1.5.dp, InkBlack, CircleShape)
+                        .testTag("top_bubble_${task.id}"),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -289,8 +324,131 @@ fun TopAnytimeBubblesRow(
                     color = if (task.isCompleted) InkMuted else InkBlack,
                     textAlign = TextAlign.Center,
                     maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.smoothPressClickable(role = Role.Button) {
+                        actionBubble = item
+                    }
                 )
+            }
+        }
+    }
+
+    actionBubble?.let { selectedItem ->
+        val bubbleTask = selectedItem.task
+        val bubbleColor = neoColorForKey(bubbleTask.colorKey)
+        Dialog(onDismissRequest = { actionBubble = null }) {
+            NeoCard(
+                modifier = Modifier
+                    .widthIn(max = 330.dp)
+                    .fillMaxWidth(),
+                backgroundColor = PureWhiteSurface,
+                cornerRadius = 22.dp,
+                contentPadding = PaddingValues(18.dp)
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(bubbleColor, CircleShape)
+                                    .border(1.5.dp, InkBlack, CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = iconForKey(bubbleTask.iconKey),
+                                    contentDescription = null,
+                                    tint = InkBlack,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Column {
+                                Text(
+                                    text = "All-Day Bubble",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = InkMuted
+                                )
+                                Text(
+                                    text = bubbleTask.title,
+                                    style = MaterialTheme.typography.titleLarge,
+                                    color = InkBlack,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                        IconButton(
+                            onClick = { actionBubble = null },
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(SoftSheetSurface)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Close",
+                                tint = InkBlack,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+
+                    NeoPillButton(
+                        text = if (bubbleTask.isCompleted) "Mark Undone" else "Mark Done",
+                        icon = Icons.Default.Check,
+                        selected = true,
+                        activeColor = NeoMintGreen,
+                        onClick = {
+                            onToggleBubbleDone(selectedItem)
+                            actionBubble = null
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        NeoPillButton(
+                            text = "Edit",
+                            icon = Icons.Default.Edit,
+                            selected = true,
+                            activeColor = NeoYellow,
+                            onClick = {
+                                val target = selectedItem
+                                actionBubble = null
+                                onEditBubble(target)
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                        NeoPillButton(
+                            text = "Delete",
+                            icon = Icons.Default.Delete,
+                            selected = true,
+                            activeColor = NeoCoral,
+                            onClick = {
+                                val targetId = bubbleTask.id
+                                actionBubble = null
+                                onDeleteBubble(targetId)
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("delete_bubble_button")
+                        )
+                    }
+                }
             }
         }
     }
@@ -323,8 +481,9 @@ fun FlowStructureFilterBar(
 
 /**
  * Spine Connector Line between consecutive tasks:
+ * - Aligned with the left-shifted capsule column (TIME_COLUMN_WIDTH + TIME_TO_CAPSULE_GAP).
  * - Solid vertical line when tasks flow continuously back-to-back.
- * - Dotted vertical break line when there is an unscheduled gap or break between tasks (no noisy text!).
+ * - Dotted vertical break line when there is a time gap between tasks.
  */
 @Composable
 fun SpineConnectorSegment(
@@ -336,10 +495,10 @@ fun SpineConnectorSegment(
         modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Spacer(modifier = Modifier.width(56.dp))
+        Spacer(modifier = Modifier.width(TIME_COLUMN_WIDTH + TIME_TO_CAPSULE_GAP))
         Box(
             modifier = Modifier
-                .width(50.dp)
+                .width(CAPSULE_COLUMN_WIDTH)
                 .height(height),
             contentAlignment = Alignment.Center
         ) {
@@ -365,12 +524,65 @@ fun SpineConnectorSegment(
 }
 
 /**
- * Section 2 De-Duplicated Timeline Task Row:
- * - Left of capsule: Start/End time (08:00 / 08:15) or #1, #2.
- * - Center: Capsule icon with clean 1.5.dp normal line (no heavy offset drop shadow).
- * - Right of capsule: ONLY the Task Title (+ small recurring icon and subtask count if present) — NO duplicate time text!
- * - If the task was paused and resumed in Focus Mode, renders a clean visual split capsule with a dotted break line in between,
- *   while keeping the detailed start/pause/resume timestamps inside the popup when tapped!
+ * Smooth Aesthetic Roller-Coaster Dotted Loop Canvas:
+ * - Starts directly at (cx, 0f) touching the bottom of the top half-oval (zero gap!).
+ * - Flows straight down briefly, sweeps smoothly out to the right, loops gracefully over the top,
+ *   and flows straight down into (cx, height) touching the top of the bottom half-oval!
+ */
+@Composable
+fun DottedBreakLoopCanvas(
+    modifier: Modifier = Modifier,
+    height: Dp = 54.dp,
+    color: Color = InkBlack
+) {
+    Canvas(
+        modifier = modifier
+            .width(CAPSULE_COLUMN_WIDTH)
+            .height(height)
+    ) {
+        val cx = size.width / 2f
+        val h = size.height
+        val loopExtentRight = cx + 16.dp.toPx()
+
+        val path = Path().apply {
+            // 1. Start flush against the top half-oval bottom edge and glide straight down
+            moveTo(cx, 0f)
+            lineTo(cx, h * 0.14f)
+
+            // 2. Smoothly sweep down and out to the right into the bottom of the loop
+            cubicTo(
+                cx, h * 0.56f,
+                loopExtentRight, h * 0.78f,
+                loopExtentRight, h * 0.46f
+            )
+
+            // 3. Gracefully loop over the top crest and curve back to the center spine
+            cubicTo(
+                loopExtentRight, h * 0.14f,
+                cx, h * 0.28f,
+                cx, h * 0.84f
+            )
+
+            // 4. Glide straight down flush into the top edge of the bottom half-oval
+            lineTo(cx, h)
+        }
+
+        drawPath(
+            path = path,
+            color = color,
+            style = Stroke(
+                width = 2.dp.toPx(),
+                cap = StrokeCap.Round,
+                join = StrokeJoin.Round,
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.5.dp.toPx(), 4.5.dp.toPx()), 0f)
+            )
+        )
+    }
+}
+
+/**
+ * Shifted-Left Timeline Task Row with 100% Connected Spine, Oval Bubble Capsules,
+ * and Seamless Halved Oval + Smooth Dotted Loop + Task Icon in Both Halves on Break:
  */
 @Composable
 fun HybridSpineTaskRow(
@@ -383,221 +595,363 @@ fun HybridSpineTaskRow(
 ) {
     val task = item.task
     val accentColor = neoColorForKey(task.colorKey)
+    val capsuleFill by animateColorAsState(
+        targetValue = if (task.isCompleted) SoftSheetSurface else accentColor,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "capsule_fill_${task.id}"
+    )
+
     val isTimed = task.modeEnum == TaskMode.TIMED_BLOCK || task.startTimeMinutes != null
-    val startMin = task.startTimeMinutes ?: 0
+    val startMin = task.startTimeMinutes ?: (9 * 60)
     val endMin = (startMin + task.durationMinutes).coerceAtMost(23 * 60 + 59)
     val segments = task.parsedSessionSegments
     val hasPauseBreak = segments.size > 1 || (segments.size == 1 && task.activeSessionStartMin != null)
 
-    val capsuleHeight = when {
-        task.durationMinutes >= 60 -> 78.dp
-        task.durationMinutes >= 45 -> 66.dp
-        task.durationMinutes >= 30 -> 56.dp
-        else -> 48.dp
-    }
+    if (!hasPauseBreak) {
+        // =========================================================================
+        // CASE A: Normal Unbroken Task -> Smooth Vertical Oval Bubble Capsule
+        // Always >= 68.dp tall so the oval is the tallest element in the Row and
+        // touches incoming/outgoing spine lines with ZERO vertical gap!
+        // =========================================================================
+        val ovalHeight = when {
+            task.durationMinutes >= 60 -> 84.dp
+            task.durationMinutes >= 45 -> 76.dp
+            task.durationMinutes >= 30 -> 70.dp
+            else -> 68.dp
+        }
+        val ovalShape = RoundedCornerShape(percent = 50)
 
-    Column(modifier = modifier.fillMaxWidth()) {
         Row(
-            modifier = Modifier
+            modifier = modifier
                 .fillMaxWidth()
-                .clickable(onClick = onOpenTaskDetail),
+                .height(ovalHeight)
+                .smoothPressClickable(role = Role.Button, onClick = onOpenTaskDetail),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 1. Left Column: Start/End Time OR Step #
+            // 1. Left-shifted Time Column
             Column(
-                modifier = Modifier.width(46.dp),
-                horizontalAlignment = Alignment.End,
+                modifier = Modifier
+                    .width(TIME_COLUMN_WIDTH)
+                    .fillMaxHeight()
+                    .padding(top = 6.dp, bottom = 4.dp),
+                horizontalAlignment = Alignment.Start,
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
                 if (isTimed) {
                     Text(
                         text = formatMinutesAsClock(startMin),
                         style = MaterialTheme.typography.labelMedium.copy(
+                            fontSize = 10.5.sp,
                             fontWeight = if (isUpNext) FontWeight.SemiBold else FontWeight.Medium,
                             color = if (isUpNext) InkBlack else InkMuted
                         )
                     )
-                    Spacer(modifier = Modifier.height((capsuleHeight - 30.dp).coerceAtLeast(8.dp)))
                     Text(
                         text = formatMinutesAsClock(endMin),
                         style = MaterialTheme.typography.labelMedium.copy(fontSize = 10.sp),
                         color = InkMuted
                     )
                 } else {
+                    val displayStep = maxOf(sequenceNumber, effectiveTaskStepNumber(task))
+                    Spacer(modifier = Modifier.weight(1f))
                     Text(
-                        text = "#$sequenceNumber",
+                        text = "#$displayStep",
                         style = MaterialTheme.typography.labelLarge,
                         color = if (isUpNext) InkBlack else InkMuted
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
+
+            Spacer(modifier = Modifier.width(TIME_TO_CAPSULE_GAP))
+
+            // 2. Smooth Vertical Oval Bubble Capsule (fills full row height -> zero gap to spine lines)
+            Box(
+                modifier = Modifier
+                    .width(CAPSULE_COLUMN_WIDTH)
+                    .fillMaxHeight()
+                    .clip(ovalShape)
+                    .background(capsuleFill, ovalShape)
+                    .border(1.5.dp, InkBlack, ovalShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = iconForKey(task.iconKey),
+                    contentDescription = task.title,
+                    tint = InkBlack,
+                    modifier = Modifier.size(21.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            // 3. Right Content: Task Title + Checkbox
+            TaskRightTitleAndCheckRow(
+                item = item,
+                isUpNext = isUpNext,
+                accentColor = accentColor,
+                onToggleComplete = onToggleComplete,
+                modifier = Modifier.weight(1f)
+            )
+        }
+    } else {
+        // =========================================================================
+        // CASE B: Task WITH a Break -> Single Unified Row where the Center Spine Column
+        // stacks Top Half-Oval + Smooth Dotted Loop + Bottom Half-Oval with ZERO gaps!
+        // =========================================================================
+        val firstSegStart = segments.firstOrNull()?.first ?: startMin
+        val firstSegEnd = segments.firstOrNull()?.second ?: (startMin + task.durationMinutes / 2)
+        val secondSegStart = task.activeSessionStartMin ?: segments.lastOrNull()?.first ?: (firstSegEnd + 10)
+        val secondSegEnd = segments.lastOrNull()?.second ?: endMin
+
+        val topHalfHeight = 52.dp
+        val loopHeight = 54.dp
+        val bottomHalfHeight = 52.dp
+        val totalSplitHeight = topHalfHeight + loopHeight + bottomHalfHeight
+
+        // Top half of the oval: rounded oval top, abrupt flat cut at bottom
+        val topHalfOvalShape = RoundedCornerShape(
+            topStart = 22.dp,
+            topEnd = 22.dp,
+            bottomStart = 4.dp,
+            bottomEnd = 4.dp
+        )
+        // Bottom half of the oval: abrupt flat cut at top, rounded oval at bottom
+        val bottomHalfOvalShape = RoundedCornerShape(
+            topStart = 4.dp,
+            topEnd = 4.dp,
+            bottomStart = 22.dp,
+            bottomEnd = 22.dp
+        )
+
+        Row(
+            modifier = modifier
+                .fillMaxWidth()
+                .height(totalSplitHeight)
+                .smoothPressClickable(role = Role.Button, onClick = onOpenTaskDetail),
+            verticalAlignment = Alignment.Top
+        ) {
+            // 1. Left Time Column aligned with Top Half-Oval and Bottom Half-Oval
+            Column(
+                modifier = Modifier
+                    .width(TIME_COLUMN_WIDTH)
+                    .fillMaxHeight()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(topHalfHeight)
+                        .padding(top = 4.dp, bottom = 2.dp),
+                    horizontalAlignment = Alignment.Start,
+                    verticalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = formatMinutesAsClock(firstSegStart),
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontSize = 10.5.sp,
+                            fontWeight = if (isUpNext) FontWeight.SemiBold else FontWeight.Medium,
+                            color = if (isUpNext) InkBlack else InkMuted
+                        )
+                    )
+                    Text(
+                        text = formatMinutesAsClock(firstSegEnd),
+                        style = MaterialTheme.typography.labelMedium.copy(fontSize = 9.5.sp),
+                        color = InkMuted
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(loopHeight))
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(bottomHalfHeight)
+                        .padding(top = 2.dp, bottom = 4.dp),
+                    horizontalAlignment = Alignment.Start,
+                    verticalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = formatMinutesAsClock(secondSegStart),
+                        style = MaterialTheme.typography.labelMedium.copy(fontSize = 9.5.sp),
+                        color = InkMuted
+                    )
+                    Text(
+                        text = formatMinutesAsClock(secondSegEnd),
+                        style = MaterialTheme.typography.labelMedium.copy(fontSize = 10.sp),
+                        color = InkMuted
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.width(10.dp))
+            Spacer(modifier = Modifier.width(TIME_TO_CAPSULE_GAP))
 
-            // 2. Center Capsule Icon (Clean 1.5.dp normal line, no offset shadow)
-            Box(
+            // 2. Uninterrupted Center Spine Column (0px gap between incoming line, top half, loop, bottom half, and outgoing line!)
+            Column(
                 modifier = Modifier
-                    .width(50.dp)
-                    .height(capsuleHeight),
-                contentAlignment = Alignment.Center
+                    .width(CAPSULE_COLUMN_WIDTH)
+                    .fillMaxHeight(),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                // Top Half-Oval Tube with Task Icon
                 Box(
                     modifier = Modifier
-                        .width(46.dp)
-                        .height(capsuleHeight)
-                        .clip(RoundedCornerShape(23.dp))
-                        .background(if (task.isCompleted) SoftSheetSurface else accentColor)
-                        .border(1.5.dp, InkBlack, RoundedCornerShape(23.dp)),
+                        .width(CAPSULE_COLUMN_WIDTH)
+                        .height(topHalfHeight)
+                        .clip(topHalfOvalShape)
+                        .background(capsuleFill, topHalfOvalShape)
+                        .border(1.5.dp, InkBlack, topHalfOvalShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = iconForKey(task.iconKey),
                         contentDescription = task.title,
                         tint = InkBlack,
-                        modifier = Modifier.size(22.dp)
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                // Smooth Flowing Dotted Loop directly connecting Top Half and Bottom Half
+                DottedBreakLoopCanvas(
+                    height = loopHeight,
+                    color = InkBlack
+                )
+
+                // Bottom Half-Oval Tube with the SAME Task Icon (not a dot!)
+                Box(
+                    modifier = Modifier
+                        .width(CAPSULE_COLUMN_WIDTH)
+                        .height(bottomHalfHeight)
+                        .clip(bottomHalfOvalShape)
+                        .background(capsuleFill, bottomHalfOvalShape)
+                        .border(1.5.dp, InkBlack, bottomHalfOvalShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = iconForKey(task.iconKey),
+                        contentDescription = "${task.title} Continued",
+                        tint = InkBlack,
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.width(14.dp))
+            Spacer(modifier = Modifier.width(12.dp))
 
-            // 3. Right Content: ONLY Task Title + small icons + Circle Checkbox (No duplicate time text!)
-            Row(
+            // 3. Right Content Column aligned with Top Half-Oval (no redundant '(Continued)' text at bottom)
+            Box(
                 modifier = Modifier
                     .weight(1f)
-                    .then(
-                        if (isUpNext && !task.isCompleted) {
-                            Modifier
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(neoSoftColorForKey(task.colorKey))
-                                .border(1.5.dp, InkBlack, RoundedCornerShape(16.dp))
-                                .padding(horizontal = 14.dp, vertical = 12.dp)
-                        } else {
-                            Modifier.padding(vertical = 8.dp)
-                        }
-                    ),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                    .height(topHalfHeight + 8.dp),
+                contentAlignment = Alignment.CenterStart
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Text(
-                            text = task.title,
-                            style = MaterialTheme.typography.titleLarge.copy(
-                                textDecoration = if (task.isCompleted) TextDecoration.LineThrough else TextDecoration.None
-                            ),
-                            color = if (task.isCompleted) InkMuted else InkBlack,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f, fill = false)
-                        )
-
-                        if (task.recurrenceEnum != RecurrenceRule.NONE) {
-                            Icon(
-                                imageVector = Icons.Default.Repeat,
-                                contentDescription = task.recurrenceEnum.label,
-                                tint = InkMuted,
-                                modifier = Modifier.size(14.dp)
-                            )
-                        }
-                    }
-
-                    if (item.subtasks.isNotEmpty()) {
-                        val done = item.subtasks.count { it.isCompleted }
-                        Spacer(modifier = Modifier.height(3.dp))
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Checklist,
-                                contentDescription = null,
-                                tint = InkMuted,
-                                modifier = Modifier.size(13.dp)
-                            )
-                            Text(
-                                text = "$done/${item.subtasks.size}",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = InkMuted
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.width(10.dp))
-
-                NeoCircleCheckbox(
-                    checked = task.isCompleted,
+                TaskRightTitleAndCheckRow(
+                    item = item,
+                    isUpNext = isUpNext,
                     accentColor = accentColor,
-                    onCheckedChange = onToggleComplete,
-                    modifier = Modifier.testTag("toggle_task_${task.id}")
-                )
-            }
-        }
-
-        // 4. Clean visual dotted break connector when a task was paused & resumed (details live inside the popup on tap!)
-        if (hasPauseBreak) {
-            val resumedMin = task.activeSessionStartMin ?: segments.lastOrNull()?.first ?: endMin
-            SpineConnectorSegment(isDottedBreak = true, height = 22.dp)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onOpenTaskDetail),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = formatMinutesAsClock(resumedMin),
-                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 10.sp),
-                    color = InkMuted,
-                    textAlign = TextAlign.End,
-                    modifier = Modifier.width(46.dp)
-                )
-                Spacer(modifier = Modifier.width(10.dp))
-                Box(
-                    modifier = Modifier.width(50.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(28.dp)
-                            .clip(CircleShape)
-                            .background(if (task.isCompleted) SoftSheetSurface else accentColor)
-                            .border(1.5.dp, InkBlack, CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = iconForKey(task.iconKey),
-                            contentDescription = "Continued",
-                            tint = InkBlack,
-                            modifier = Modifier.size(14.dp)
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.width(14.dp))
-                Text(
-                    text = "${task.title} (Continued)",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = InkCharcoal,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    onToggleComplete = onToggleComplete,
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
         }
     }
 }
 
+@Composable
+private fun TaskRightTitleAndCheckRow(
+    item: TaskWithSubtasks,
+    isUpNext: Boolean,
+    accentColor: Color,
+    onToggleComplete: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val task = item.task
+    Row(
+        modifier = modifier
+            .then(
+                if (isUpNext && !task.isCompleted) {
+                    Modifier
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(neoSoftColorForKey(task.colorKey))
+                        .border(1.5.dp, InkBlack, RoundedCornerShape(16.dp))
+                        .padding(horizontal = 14.dp, vertical = 9.dp)
+                } else {
+                    Modifier.padding(vertical = 6.dp)
+                }
+            ),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = task.title,
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        textDecoration = if (task.isCompleted) TextDecoration.LineThrough else TextDecoration.None
+                    ),
+                    color = if (task.isCompleted) InkMuted else InkBlack,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+
+                if (task.recurrenceEnum != RecurrenceRule.NONE) {
+                    Icon(
+                        imageVector = Icons.Default.Repeat,
+                        contentDescription = task.recurrenceEnum.label,
+                        tint = InkMuted,
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+            }
+
+            if (item.subtasks.isNotEmpty()) {
+                val done = item.subtasks.count { it.isCompleted }
+                Spacer(modifier = Modifier.height(2.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Checklist,
+                        contentDescription = null,
+                        tint = InkMuted,
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Text(
+                        text = "$done/${item.subtasks.size}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = InkMuted
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.width(10.dp))
+
+        NeoCircleCheckbox(
+            checked = task.isCompleted,
+            accentColor = accentColor,
+            onCheckedChange = onToggleComplete,
+            modifier = Modifier.testTag("toggle_task_${task.id}")
+        )
+    }
+}
+
 /**
  * Dedicated Task & Subtasks Detail Window when a task is clicked on the timeline.
- * Shows full time/duration, pause/resume session history, and subtasks cleanly on tap.
+ * Includes a 1-tap "Split with Break Loop" / "Merge Capsule" button alongside Focus & Subtasks.
  */
 @Composable
 fun TaskDetailPopupModal(
     item: TaskWithSubtasks,
+    currentStepNumber: Int = 1,
+    onUpdateStepNumber: (Int) -> Unit = {},
     onDismiss: () -> Unit,
     onToggleComplete: () -> Unit,
+    onToggleBreakLoop: () -> Unit,
     onToggleSubtask: (SubtaskEntity) -> Unit,
     onAddSubtask: (String) -> Unit,
     onStartFocus: () -> Unit,
@@ -606,6 +960,11 @@ fun TaskDetailPopupModal(
     val task = item.task
     val accent = neoColorForKey(task.colorKey)
     var newSubtask by remember { mutableStateOf("") }
+    var stepVal by remember(task.id, task.sortOrder, currentStepNumber) {
+        mutableStateOf(maxOf(currentStepNumber, effectiveTaskStepNumber(task)))
+    }
+    val hasBreakLoop = task.parsedSessionSegments.size > 1 ||
+        (task.parsedSessionSegments.size == 1 && task.activeSessionStartMin != null)
 
     Dialog(onDismissRequest = onDismiss) {
         NeoCard(
@@ -704,7 +1063,110 @@ fun TaskDetailPopupModal(
                     )
                 }
 
-                // Recorded Session Segments (Started / Paused / Continued details shown on tap!)
+                if (task.modeEnum != TaskMode.TOP_BUBBLE) {
+                    // Sequence Position (#) Step Selector for Timeless / Spine tasks (e.g. change #4 -> #6)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(SoftSheetSurface)
+                            .border(1.5.dp, InkBlack, RoundedCornerShape(14.dp))
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Sequence Step (#)",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = InkBlack
+                            )
+                            Text(
+                                text = if (task.modeEnum == TaskMode.TIMELESS_STEP) {
+                                    "Adjust timeline position (#1, #4, #6...)"
+                                } else {
+                                    "Timed tasks sort by clock (${formatMinutesAsClock(task.startTimeMinutes ?: 480)})"
+                                },
+                                style = MaterialTheme.typography.labelMedium,
+                                color = InkMuted
+                            )
+                        }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .smoothPressClickable(role = Role.Button) {
+                                        val next = (stepVal - 1).coerceAtLeast(1)
+                                        stepVal = next
+                                        onUpdateStepNumber(next)
+                                    }
+                                    .clip(CircleShape)
+                                    .background(PureWhiteSurface)
+                                    .border(1.5.dp, InkBlack, CircleShape)
+                                    .testTag("step_number_minus"),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Remove,
+                                    contentDescription = "Decrease Step #",
+                                    tint = InkBlack,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(NeoYellow)
+                                    .border(1.5.dp, InkBlack, RoundedCornerShape(10.dp))
+                                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "#$stepVal",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = InkBlack
+                                )
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .smoothPressClickable(role = Role.Button) {
+                                        val next = (stepVal + 1).coerceAtMost(99)
+                                        stepVal = next
+                                        onUpdateStepNumber(next)
+                                    }
+                                    .clip(CircleShape)
+                                    .background(PureWhiteSurface)
+                                    .border(1.5.dp, InkBlack, CircleShape)
+                                    .testTag("step_number_plus"),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Add,
+                                    contentDescription = "Increase Step #",
+                                    tint = InkBlack,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // 1-Tap Break Loop Split Toggle + Recorded Session Log
+                NeoPillButton(
+                    text = if (hasBreakLoop) "Merge Halved Capsule (Clear Break)" else "Split Capsule with Dotted Break Loop",
+                    icon = Icons.Default.Pause,
+                    selected = hasBreakLoop,
+                    activeColor = NeoSkyBlue,
+                    onClick = onToggleBreakLoop,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
                 if (task.parsedSessionSegments.isNotEmpty() || task.activeSessionStartMin != null) {
                     Column(
                         modifier = Modifier
@@ -724,7 +1186,7 @@ fun TaskDetailPopupModal(
                         segments.forEachIndexed { idx, (s, e) ->
                             if (idx == 0) {
                                 Text(
-                                    text = "Started ${formatMinutesAsClock(s)} • Paused at ${formatMinutesAsClock(e)}",
+                                    text = "Started ${formatMinutesAsClock(s)} • Break at ${formatMinutesAsClock(e)}",
                                     style = MaterialTheme.typography.labelMedium,
                                     color = InkCharcoal
                                 )
@@ -758,7 +1220,7 @@ fun TaskDetailPopupModal(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { onToggleSubtask(sub) }
+                                .smoothPressClickable { onToggleSubtask(sub) }
                                 .padding(vertical = 2.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween

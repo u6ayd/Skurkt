@@ -1,6 +1,7 @@
 package com.example.ui
 
 import android.app.Application
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.FolderEntity
@@ -34,8 +35,19 @@ enum class FlowFilterMode(val label: String) {
     TIMED_ONLY("Timed")
 }
 
+fun effectiveTaskStepNumber(task: TaskEntity): Int {
+    val raw = task.sortOrder
+    return if (raw >= 20 && raw % 10 == 0) {
+        (raw / 10).coerceIn(1, 99)
+    } else {
+        raw.coerceIn(1, 99)
+    }
+}
+
+@Immutable
 data class PlannerUiState(
     val selectedDateEpochDay: Long = LocalDate.now().toEpochDay(),
+    val selectedLocalDate: LocalDate = LocalDate.now(),
     val activeDestination: StruktDestination = StruktDestination.FLOW,
     val flowFilter: FlowFilterMode = FlowFilterMode.ALL,
     val searchQuery: String = "",
@@ -55,22 +67,13 @@ data class PlannerUiState(
     val schedulingInboxTask: TaskEntity? = null,
     val focusedTaskId: Long? = null,
     val forceSplitPreview: Boolean? = null,
-    val statusBannerMessage: String? = null
+    val statusBannerMessage: String? = null,
+    val totalDayTasksCount: Int = 0,
+    val completedDayTasksCount: Int = 0,
+    val dayReadinessPercent: Int = 0
 ) {
-    val selectedLocalDate: LocalDate
-        get() = LocalDate.ofEpochDay(selectedDateEpochDay)
-
     val activeFocusTask: TaskWithSubtasks?
         get() = allTasks.firstOrNull { it.task.id == focusedTaskId } ?: upNextTask
-
-    val totalDayTasksCount: Int
-        get() = topBubbles.size + spineFlowTasks.size
-
-    val completedDayTasksCount: Int
-        get() = topBubbles.count { it.task.isCompleted } + spineFlowTasks.count { it.task.isCompleted }
-
-    val dayReadinessPercent: Int
-        get() = if (totalDayTasksCount == 0) 0 else ((completedDayTasksCount * 100f) / totalDayTasksCount).toInt()
 }
 
 private data class LocalNavState(
@@ -119,13 +122,33 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
             .filter { it.task.modeEnum == TaskMode.TOP_BUBBLE }
             .sortedBy { it.task.sortOrder }
 
-        val fullSpine = tasksForSelectedDay
+        val spineCandidates = tasksForSelectedDay
             .filter { it.task.modeEnum != TaskMode.TOP_BUBBLE }
+
+        // 1. Timed tasks sort strictly chronologically by startTimeMinutes (e.g., 08:00 -> 08:15 -> 09:00)
+        val timedTasks = spineCandidates
+            .filter { it.task.modeEnum == TaskMode.TIMED_BLOCK || it.task.startTimeMinutes != null }
             .sortedWith(
-                compareBy<TaskWithSubtasks> { it.task.sortOrder }
-                    .thenBy { it.task.startTimeMinutes ?: 9999 }
+                compareBy<TaskWithSubtasks> { it.task.startTimeMinutes ?: 0 }
                     .thenBy { it.task.id }
             )
+
+        // 2. Timeless tasks sort by their # step number (1..99) and slot into the spine at their # position
+        val timelessTasks = spineCandidates
+            .filter { it.task.modeEnum != TaskMode.TIMED_BLOCK && it.task.startTimeMinutes == null }
+            .sortedWith(
+                compareBy<TaskWithSubtasks> { effectiveTaskStepNumber(it.task) }
+                    .thenBy { it.task.id }
+            )
+
+        val fullSpine = buildList {
+            addAll(timedTasks)
+            for (timeless in timelessTasks) {
+                val desiredStep = effectiveTaskStepNumber(timeless.task)
+                val insertIndex = (desiredStep - 1).coerceIn(0, size)
+                add(insertIndex, timeless)
+            }
+        }
 
         val filteredSpine = when (nav.flowFilter) {
             FlowFilterMode.ALL -> fullSpine
@@ -144,16 +167,33 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
                     it.task.folderName.contains(nav.searchQuery, ignoreCase = true)
             }
 
-        // Compute miniature task color dots across surrounding weeks for smooth HorizontalPager swiping
+        // O(1) pre-partitioning for fast multi-week dot calculation (avoids 113 x N full scans)
+        val scheduledTasks = allTasks.filter { it.task.dateEpochDay != null }
+        val nonRecurringByDay = scheduledTasks
+            .filter { it.task.recurrenceEnum == RecurrenceRule.NONE }
+            .groupBy { it.task.dateEpochDay!! }
+        val recurringTasks = scheduledTasks
+            .filter { it.task.recurrenceEnum != RecurrenceRule.NONE }
+
         val startOfCurrentWeek = selectedDate.minusDays((selectedDate.dayOfWeek.value - 1).toLong())
         val weekDots = buildMap<Long, List<String>> {
             for (dayOffset in -56L..56L) {
                 val day = startOfCurrentWeek.plusDays(dayOffset)
                 val dayEpoch = day.toEpochDay()
-                val colors = allTasks
-                    .filter { matchesDate(it.task, day) }
-                    .take(4)
-                    .map { it.task.colorKey }
+                val direct = nonRecurringByDay[dayEpoch].orEmpty()
+                val colors = ArrayList<String>(4)
+                for (item in direct) {
+                    if (colors.size >= 4) break
+                    colors.add(item.task.colorKey)
+                }
+                if (colors.size < 4) {
+                    for (rec in recurringTasks) {
+                        if (colors.size >= 4) break
+                        if (rec.task.dateEpochDay != dayEpoch && matchesDate(rec.task, day)) {
+                            colors.add(rec.task.colorKey)
+                        }
+                    }
+                }
                 if (colors.isNotEmpty()) {
                     put(dayEpoch, colors)
                 }
@@ -164,8 +204,13 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
             allTasks.firstOrNull { it.task.id == id }
         }
 
+        val totalDayCount = bubbles.size + filteredSpine.size
+        val completedDayCount = bubbles.count { it.task.isCompleted } + filteredSpine.count { it.task.isCompleted }
+        val readinessPct = if (totalDayCount == 0) 0 else ((completedDayCount * 100f) / totalDayCount).toInt()
+
         PlannerUiState(
             selectedDateEpochDay = nav.selectedDateEpochDay,
+            selectedLocalDate = selectedDate,
             activeDestination = nav.activeDestination,
             flowFilter = nav.flowFilter,
             searchQuery = nav.searchQuery,
@@ -185,7 +230,10 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
             schedulingInboxTask = nav.schedulingInboxTask,
             focusedTaskId = nav.focusedTaskId,
             forceSplitPreview = nav.forceSplitPreview,
-            statusBannerMessage = nav.statusBannerMessage
+            statusBannerMessage = nav.statusBannerMessage,
+            totalDayTasksCount = totalDayCount,
+            completedDayTasksCount = completedDayCount,
+            dayReadinessPercent = readinessPct
         )
     }.stateIn(
         scope = viewModelScope,
@@ -441,7 +489,30 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             repository.pauseTaskSession(task)
             navState.update {
-                it.copy(statusBannerMessage = "Paused • Break noted on timeline")
+                it.copy(statusBannerMessage = "Paused • Break loop noted on timeline")
+            }
+        }
+    }
+
+    fun toggleTaskBreakLoop(task: TaskEntity) {
+        viewModelScope.launch {
+            repository.toggleTaskBreakLoop(task)
+            val hasBreak = task.parsedSessionSegments.size > 1 ||
+                (task.parsedSessionSegments.size == 1 && task.activeSessionStartMin != null)
+            navState.update {
+                it.copy(
+                    statusBannerMessage = if (hasBreak) "Break loop cleared" else "Break loop added to capsule"
+                )
+            }
+        }
+    }
+
+    fun updateTaskStepNumber(task: TaskEntity, newStepNumber: Int) {
+        val clamped = newStepNumber.coerceIn(1, 99)
+        viewModelScope.launch {
+            repository.updateTaskStepOrder(task, clamped)
+            navState.update {
+                it.copy(statusBannerMessage = "Step set to #$clamped")
             }
         }
     }

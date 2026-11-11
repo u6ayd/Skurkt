@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Icon
@@ -69,6 +70,7 @@ import com.example.data.SubtaskEntity
 import com.example.data.TaskEntity
 import com.example.data.TaskMode
 import com.example.data.TaskWithSubtasks
+import com.example.ui.effectiveTaskStepNumber
 import com.example.ui.theme.InkBlack
 import com.example.ui.theme.InkCharcoal
 import com.example.ui.theme.InkMuted
@@ -158,6 +160,9 @@ fun StructuredTaskEditorDialog(
     }
     var recurrenceDayOfMonth by remember(existingTask) {
         mutableIntStateOf(existingTask?.recurrenceDayOfMonth ?: selectedDate.dayOfMonth)
+    }
+    var stepOrder by remember(existingTask) {
+        mutableIntStateOf(existingTask?.let { effectiveTaskStepNumber(it) } ?: 4)
     }
 
     val subtasksList = remember(editingItem) {
@@ -371,10 +376,88 @@ fun StructuredTaskEditorDialog(
                                 taskMode == TaskMode.TOP_BUBBLE ->
                                     "Top Bubble • ${formatDurationBadge(durationMinutes)}"
                                 else ->
-                                    "Timeless • ${formatDurationBadge(durationMinutes)}"
+                                    "Timeless (#$stepOrder) • ${formatDurationBadge(durationMinutes)}"
                             },
                             onClick = { activeSubPopup = EditorSubPopup.DURATION_TIME }
                         )
+
+                        // Row 1b: Sequence Step (#) Adjuster when task is a Timeless Spine task
+                        if (!toInbox && taskMode == TaskMode.TIMELESS_STEP) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(PureWhiteSurface)
+                                    .border(1.5.dp, InkBlack, RoundedCornerShape(16.dp))
+                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Sequence Step (#)",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = InkBlack
+                                    )
+                                    Text(
+                                        text = "Order in spine (#1, #4, #6...)",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = InkMuted
+                                    )
+                                }
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(34.dp)
+                                            .clip(CircleShape)
+                                            .background(SoftSheetSurface)
+                                            .border(1.5.dp, InkBlack, CircleShape)
+                                            .clickable { stepOrder = (stepOrder - 1).coerceAtLeast(1) },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Remove,
+                                            contentDescription = "Decrease Step #",
+                                            tint = InkBlack,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(NeoYellow)
+                                            .border(1.5.dp, InkBlack, RoundedCornerShape(10.dp))
+                                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "#$stepOrder",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            color = InkBlack
+                                        )
+                                    }
+                                    Box(
+                                        modifier = Modifier
+                                            .size(34.dp)
+                                            .clip(CircleShape)
+                                            .background(SoftSheetSurface)
+                                            .border(1.5.dp, InkBlack, CircleShape)
+                                            .clickable { stepOrder = (stepOrder + 1).coerceAtMost(99) },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Add,
+                                            contentDescription = "Increase Step #",
+                                            tint = InkBlack,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
 
                         // Row 2: Color & Category Icon Popup Trigger
                         EditorSummaryRow(
@@ -439,7 +522,7 @@ fun StructuredTaskEditorDialog(
                                         recurrence,
                                         recurrenceDayOfMonth,
                                         subtasksList.toList(),
-                                        existingTask?.sortOrder ?: 0
+                                        if (taskMode == TaskMode.TIMELESS_STEP) stepOrder else (existingTask?.sortOrder ?: 0)
                                     )
                                 }
                                 .testTag("save_task_continue_button"),

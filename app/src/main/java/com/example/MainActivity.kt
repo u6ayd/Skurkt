@@ -69,6 +69,7 @@ import com.example.ui.components.SpineConnectorSegment
 import com.example.ui.components.StructuredTaskEditorDialog
 import com.example.ui.components.TaskDetailPopupModal
 import com.example.ui.components.TopAnytimeBubblesRow
+import com.example.ui.components.smoothPressClickable
 import com.example.ui.theme.InkBlack
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.theme.NavRailDark
@@ -179,10 +180,15 @@ fun StruktPlannerApp(
 
             // 2. Clean Task & Subtasks Detail Modal when clicking a task on the timeline
             uiState.inspectingTask?.let { inspected ->
+                val spineIdx = uiState.spineFlowTasks.indexOfFirst { it.task.id == inspected.task.id }
+                val currentStep = if (spineIdx >= 0) spineIdx + 1 else 1
                 TaskDetailPopupModal(
                     item = inspected,
+                    currentStepNumber = currentStep,
+                    onUpdateStepNumber = { newStep -> viewModel.updateTaskStepNumber(inspected.task, newStep) },
                     onDismiss = { viewModel.closeInspectTaskModal() },
                     onToggleComplete = { viewModel.toggleTaskDone(inspected.task) },
+                    onToggleBreakLoop = { viewModel.toggleTaskBreakLoop(inspected.task) },
                     onToggleSubtask = viewModel::toggleSubtaskDone,
                     onAddSubtask = { title -> viewModel.addQuickSubtask(inspected.task.id, title) },
                     onStartFocus = { viewModel.enterFocusForTask(inspected.task.id) },
@@ -261,9 +267,9 @@ private fun TabletLandscapeSplitLayout(
                     Box(
                         modifier = Modifier
                             .size(48.dp)
+                            .smoothPressClickable(role = Role.Tab) { viewModel.setDestination(dest) }
                             .clip(RoundedCornerShape(14.dp))
                             .background(if (selected) NeoYellow else NavRailDark)
-                            .clickable(role = Role.Tab) { viewModel.setDestination(dest) }
                             .testTag("tablet_nav_${dest.name.lowercase()}"),
                         contentAlignment = Alignment.Center
                     ) {
@@ -281,15 +287,15 @@ private fun TabletLandscapeSplitLayout(
             Box(
                 modifier = Modifier
                     .size(48.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(NeoCoral)
-                    .border(1.5.dp, PureWhiteSurface.copy(alpha = 0.25f), RoundedCornerShape(14.dp))
-                    .clickable(role = Role.Button) {
+                    .smoothPressClickable(role = Role.Button) {
                         viewModel.openCreateTaskSheet(
                             defaultMode = TaskMode.TIMELESS_STEP,
                             forInbox = false
                         )
                     }
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(NeoCoral)
+                    .border(1.5.dp, PureWhiteSurface.copy(alpha = 0.25f), RoundedCornerShape(14.dp))
                     .testTag("tablet_new_step_button"),
                 contentAlignment = Alignment.Center
             ) {
@@ -332,7 +338,7 @@ private fun TabletLandscapeSplitLayout(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxHeight()
-                .padding(horizontal = 16.dp, vertical = 10.dp)
+                .padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 0.dp)
         ) {
             when (uiState.activeDestination) {
                 StruktDestination.FOLDERS -> {
@@ -382,12 +388,12 @@ private fun PortraitHandheldLayout(
     viewModel: PlannerViewModel
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
-        // Main Content takes remaining height above the permanent bottom bar
+        // Main Content takes remaining height flush to the permanent bottom bar's top line
         Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 0.dp)
         ) {
             when (uiState.activeDestination) {
                 StruktDestination.INBOX -> {
@@ -496,13 +502,13 @@ private fun PermanentStraightBottomBar(
                 Box(
                     modifier = Modifier
                         .size(48.dp)
+                        .smoothPressClickable(role = Role.Tab) { onSelectDestination(dest) }
                         .clip(RoundedCornerShape(14.dp))
                         .background(if (selected) NeoYellow else PureWhiteSurface)
                         .then(
                             if (selected) Modifier.border(1.5.dp, InkBlack, RoundedCornerShape(14.dp))
                             else Modifier
                         )
-                        .clickable(role = Role.Tab) { onSelectDestination(dest) }
                         .testTag("bottom_nav_${dest.name.lowercase()}"),
                     contentAlignment = Alignment.Center
                 ) {
@@ -519,10 +525,10 @@ private fun PermanentStraightBottomBar(
             Box(
                 modifier = Modifier
                     .size(48.dp)
+                    .smoothPressClickable(role = Role.Button, onClick = onAddTaskClick)
                     .clip(RoundedCornerShape(14.dp))
                     .background(NeoCoral)
                     .border(1.5.dp, InkBlack, RoundedCornerShape(14.dp))
-                    .clickable(role = Role.Button, onClick = onAddTaskClick)
                     .testTag("fab_add_task"),
                 contentAlignment = Alignment.Center
             ) {
@@ -542,7 +548,11 @@ private fun DayFlowSheetContent(
     uiState: PlannerUiState,
     viewModel: PlannerViewModel
 ) {
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(bottom = 8.dp)
+    ) {
         DateAndWeekHeader(
             selectedDate = uiState.selectedLocalDate,
             weekDotColorsByEpochDay = uiState.weekDotColorsByEpochDay,
@@ -557,18 +567,18 @@ private fun DayFlowSheetContent(
                 .weight(1f),
             backgroundColor = PureWhiteSurface,
             cornerRadius = 24.dp,
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
+            contentPadding = PaddingValues(start = 10.dp, end = 16.dp, top = 14.dp, bottom = 14.dp)
         ) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 24.dp),
+                contentPadding = PaddingValues(bottom = 28.dp),
                 verticalArrangement = Arrangement.spacedBy(0.dp)
             ) {
                 item {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 8.dp),
+                            .padding(bottom = 10.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Box(
@@ -585,15 +595,21 @@ private fun DayFlowSheetContent(
                     item {
                         TopAnytimeBubblesRow(
                             bubbles = uiState.topBubbles,
-                            onBubbleClick = { item ->
-                                viewModel.openInspectTaskModal(item.task.id)
+                            onToggleBubbleDone = { item ->
+                                viewModel.toggleTaskDone(item.task)
+                            },
+                            onEditBubble = { item ->
+                                viewModel.openEditTaskSheet(item)
+                            },
+                            onDeleteBubble = { taskId ->
+                                viewModel.deleteTask(taskId)
                             }
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
                     }
                     item {
                         NeoDashedDivider()
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
                     }
                 }
 
@@ -602,7 +618,8 @@ private fun DayFlowSheetContent(
                         currentFilter = uiState.flowFilter,
                         onSelectFilter = viewModel::setFlowFilter
                     )
-                    Spacer(modifier = Modifier.height(10.dp))
+                    // Pushed downwards for clean breathing room before the vertical timeline spine begins
+                    Spacer(modifier = Modifier.height(22.dp))
                 }
 
                 if (uiState.spineFlowTasks.isEmpty()) {

@@ -263,10 +263,12 @@ class PlannerRepository(private val dao: PlannerDao) {
         task: TaskEntity,
         subtaskTitles: List<Pair<String, String>>
     ): Long {
-        val nextOrder = if (task.id == 0L && task.dateEpochDay != null) {
-            (dao.getMaxSortOrderForDay(task.dateEpochDay) ?: 0) + 10
+        val nextOrder = if (task.id == 0L && task.dateEpochDay != null && task.sortOrder <= 0) {
+            val currentMax = dao.getMaxSortOrderForDay(task.dateEpochDay) ?: 0
+            val normalizedMax = if (currentMax >= 10 && currentMax % 10 == 0) currentMax / 10 else currentMax
+            normalizedMax + 1
         } else {
-            task.sortOrder
+            task.sortOrder.coerceAtLeast(1)
         }
         val taskId = dao.insertTask(task.copy(sortOrder = nextOrder))
         dao.deleteSubtasksForTask(taskId)
@@ -285,6 +287,10 @@ class PlannerRepository(private val dao: PlannerDao) {
             dao.insertSubtasks(entities)
         }
         return taskId
+    }
+
+    suspend fun updateTaskStepOrder(task: TaskEntity, newStepOrder: Int) {
+        dao.updateTask(task.copy(sortOrder = newStepOrder.coerceIn(1, 99)))
     }
 
     suspend fun toggleTaskCompleted(task: TaskEntity) {
@@ -394,6 +400,36 @@ class PlannerRepository(private val dao: PlannerDao) {
                 isCompleted = true
             )
         )
+    }
+
+    /**
+     * Toggles a break loop split on any task so its timeline oval capsule halves
+     * and connects via a dotted loop, or merges back into a single continuous oval.
+     */
+    suspend fun toggleTaskBreakLoop(task: TaskEntity) {
+        val hasBreak = task.parsedSessionSegments.size > 1 ||
+            (task.parsedSessionSegments.size == 1 && task.activeSessionStartMin != null)
+        if (hasBreak) {
+            dao.updateTask(
+                task.copy(
+                    sessionSegments = "",
+                    activeSessionStartMin = null
+                )
+            )
+        } else {
+            val baseStart = task.startTimeMinutes ?: (9 * 60)
+            val halfDur = (task.durationMinutes / 2).coerceAtLeast(10)
+            val firstEnd = (baseStart + halfDur).coerceAtMost(23 * 60 + 40)
+            val resumeStart = (firstEnd + 10).coerceAtMost(23 * 60 + 49)
+            val secondEnd = (resumeStart + halfDur).coerceAtMost(23 * 60 + 59)
+            dao.updateTask(
+                task.copy(
+                    startTimeMinutes = task.startTimeMinutes ?: baseStart,
+                    sessionSegments = "$baseStart-$firstEnd||$resumeStart-$secondEnd",
+                    activeSessionStartMin = null
+                )
+            )
+        }
     }
 
     suspend fun createFolder(

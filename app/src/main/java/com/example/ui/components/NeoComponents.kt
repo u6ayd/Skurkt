@@ -2,12 +2,17 @@ package com.example.ui.components
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -50,13 +55,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
@@ -108,6 +116,72 @@ fun DotGridBackground(
 }
 
 /**
+ * Smooth color-dimming press modifier without a boxy rectangular ripple.
+ */
+fun Modifier.smoothPressClickable(
+    role: Role? = Role.Button,
+    onClick: () -> Unit
+): Modifier = composed {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val alpha by animateFloatAsState(
+        targetValue = if (isPressed) 0.72f else 1f,
+        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        label = "press_alpha"
+    )
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.97f else 1f,
+        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        label = "press_scale"
+    )
+    this
+        .graphicsLayer {
+            this.alpha = alpha
+            this.scaleX = scale
+            this.scaleY = scale
+        }
+        .clickable(
+            interactionSource = interactionSource,
+            indication = null,
+            role = role,
+            onClick = onClick
+        )
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+fun Modifier.smoothCombinedClickable(
+    role: Role? = Role.Button,
+    onLongClick: () -> Unit,
+    onClick: () -> Unit
+): Modifier = composed {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val alpha by animateFloatAsState(
+        targetValue = if (isPressed) 0.72f else 1f,
+        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        label = "combined_press_alpha"
+    )
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.96f else 1f,
+        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        label = "combined_press_scale"
+    )
+    this
+        .graphicsLayer {
+            this.alpha = alpha
+            this.scaleX = scale
+            this.scaleY = scale
+        }
+        .combinedClickable(
+            interactionSource = interactionSource,
+            indication = null,
+            role = role,
+            onLongClick = onLongClick,
+            onClick = onClick
+        )
+}
+
+/**
  * Clean Learnify-style Card: Crisp 1.5.dp normal border lines, symmetrical 20.dp curves, ZERO drop shadow.
  */
 @Composable
@@ -125,16 +199,16 @@ fun NeoCard(
     val shape = RoundedCornerShape(cornerRadius)
     Box(
         modifier = modifier
-            .clip(shape)
-            .background(backgroundColor, shape)
-            .border(BorderStroke(borderWidth, borderColor), shape)
             .then(
                 if (onClick != null) {
-                    Modifier.clickable(role = Role.Button, onClick = onClick)
+                    Modifier.smoothPressClickable(role = Role.Button, onClick = onClick)
                 } else {
                     Modifier
                 }
             )
+            .clip(shape)
+            .background(backgroundColor, shape)
+            .border(BorderStroke(borderWidth, borderColor), shape)
             .padding(contentPadding),
         content = content
     )
@@ -302,10 +376,10 @@ fun NeoPillButton(
     Box(
         modifier = modifier
             .height(40.dp)
+            .smoothPressClickable(role = Role.Button, onClick = onClick)
             .clip(shape)
             .background(bgColor, shape)
             .border(1.5.dp, InkBlack, shape)
-            .clickable(role = Role.Button, onClick = onClick)
             .padding(horizontal = 14.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -374,14 +448,19 @@ fun NeoSquareCheckbox(
     modifier: Modifier = Modifier,
     accentColor: Color = NeoMintGreen
 ) {
+    val bgColor by animateColorAsState(
+        targetValue = if (checked) accentColor else PureWhiteSurface,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "square_check_bg"
+    )
     val shape = RoundedCornerShape(8.dp)
     Box(
         modifier = modifier
             .size(24.dp)
+            .smoothPressClickable(role = Role.Checkbox, onClick = onCheckedChange)
             .clip(shape)
-            .background(if (checked) accentColor else PureWhiteSurface, shape)
-            .border(1.5.dp, InkBlack, shape)
-            .clickable(role = Role.Checkbox, onClick = onCheckedChange),
+            .background(bgColor, shape)
+            .border(1.5.dp, InkBlack, shape),
         contentAlignment = Alignment.Center
     ) {
         if (checked) {
@@ -402,13 +481,18 @@ fun NeoCircleCheckbox(
     onCheckedChange: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val bgColor by animateColorAsState(
+        targetValue = if (checked) accentColor else PureWhiteSurface,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "circle_check_bg"
+    )
     Box(
         modifier = modifier
             .size(28.dp)
+            .smoothPressClickable(role = Role.Checkbox, onClick = onCheckedChange)
             .clip(CircleShape)
-            .background(if (checked) accentColor else PureWhiteSurface, CircleShape)
-            .border(1.8.dp, if (checked) InkBlack else accentColor, CircleShape)
-            .clickable(role = Role.Checkbox, onClick = onCheckedChange),
+            .background(bgColor, CircleShape)
+            .border(1.8.dp, if (checked) InkBlack else accentColor, CircleShape),
         contentAlignment = Alignment.Center
     ) {
         if (checked) {
