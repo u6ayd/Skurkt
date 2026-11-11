@@ -3,7 +3,7 @@ package com.example.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.data.DayTemplateEntity
+import com.example.data.FolderEntity
 import com.example.data.PlannerDatabase
 import com.example.data.PlannerRepository
 import com.example.data.RecurrenceRule
@@ -21,17 +21,17 @@ import kotlinx.coroutines.launch
 import java.time.DayOfWeek
 import java.time.LocalDate
 
-enum class StruktDestination(val label: String) {
-    FLOW("Day Flow"),
-    INBOX("Inbox"),
-    BLUEPRINTS("Blueprints & Matrix"),
-    FOCUS("Focus Mode")
+enum class StruktDestination {
+    INBOX,
+    FLOW,
+    FOLDERS,
+    FOCUS
 }
 
 enum class FlowFilterMode(val label: String) {
-    ALL("All Structure"),
-    TIMELESS_ONLY("Timeless Steps"),
-    TIMED_ONLY("Timed Slots")
+    ALL("All"),
+    TIMELESS_ONLY("Timeless"),
+    TIMED_ONLY("Timed")
 }
 
 data class PlannerUiState(
@@ -44,14 +44,17 @@ data class PlannerUiState(
     val upNextTask: TaskWithSubtasks? = null,
     val inboxTasks: List<TaskWithSubtasks> = emptyList(),
     val allTasks: List<TaskWithSubtasks> = emptyList(),
-    val templates: List<DayTemplateEntity> = emptyList(),
+    val folders: List<FolderEntity> = emptyList(),
+    val selectedFolderId: Long? = null,
     val weekDotColorsByEpochDay: Map<Long, List<String>> = emptyMap(),
     val editingTask: TaskWithSubtasks? = null,
     val isEditorVisible: Boolean = false,
     val editorDefaultMode: TaskMode = TaskMode.TIMELESS_STEP,
     val editorTargetInbox: Boolean = false,
+    val inspectingTask: TaskWithSubtasks? = null,
+    val schedulingInboxTask: TaskEntity? = null,
     val focusedTaskId: Long? = null,
-    val focusStartedAtMs: Long? = null,
+    val forceSplitPreview: Boolean? = null,
     val statusBannerMessage: String? = null
 ) {
     val selectedLocalDate: LocalDate
@@ -75,12 +78,15 @@ private data class LocalNavState(
     val activeDestination: StruktDestination = StruktDestination.FLOW,
     val flowFilter: FlowFilterMode = FlowFilterMode.ALL,
     val searchQuery: String = "",
+    val selectedFolderId: Long? = null,
     val editingTask: TaskWithSubtasks? = null,
     val isEditorVisible: Boolean = false,
     val editorDefaultMode: TaskMode = TaskMode.TIMELESS_STEP,
     val editorTargetInbox: Boolean = false,
+    val inspectingTaskId: Long? = null,
+    val schedulingInboxTask: TaskEntity? = null,
     val focusedTaskId: Long? = null,
-    val focusStartedAtMs: Long? = null,
+    val forceSplitPreview: Boolean? = null,
     val statusBannerMessage: String? = null
 )
 
@@ -100,12 +106,11 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
 
     val uiState: StateFlow<PlannerUiState> = combine(
         repository.allTasksFlow,
-        repository.allTemplatesFlow,
+        repository.allFoldersFlow,
         navState
-    ) { allTasks, templates, nav ->
+    ) { allTasks, folders, nav ->
         val selectedDate = LocalDate.ofEpochDay(nav.selectedDateEpochDay)
 
-        // Filter tasks that belong to the selected day (or match recurrence rules)
         val tasksForSelectedDay = allTasks.filter { item ->
             matchesDate(item.task, selectedDate)
         }
@@ -128,7 +133,6 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
             FlowFilterMode.TIMED_ONLY -> fullSpine.filter { it.task.modeEnum == TaskMode.TIMED_BLOCK }
         }
 
-        // First incomplete spine task (or bubble if all spine tasks are done) is the anti-paralysis UP NEXT task
         val nextUp = fullSpine.firstOrNull { !it.task.isCompleted }
             ?: bubbles.firstOrNull { !it.task.isCompleted }
 
@@ -137,10 +141,9 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
             .filter {
                 nav.searchQuery.isBlank() ||
                     it.task.title.contains(nav.searchQuery, ignoreCase = true) ||
-                    it.task.subjectTag.contains(nav.searchQuery, ignoreCase = true)
+                    it.task.folderName.contains(nav.searchQuery, ignoreCase = true)
             }
 
-        // Compute miniature task color dots for the 7-day week strip around selectedDate
         val startOfWeek = selectedDate.minusDays((selectedDate.dayOfWeek.value - 1).toLong())
         val weekDots = buildMap<Long, List<String>> {
             for (offset in 0L..6L) {
@@ -154,6 +157,10 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
             }
         }
 
+        val inspected = nav.inspectingTaskId?.let { id ->
+            allTasks.firstOrNull { it.task.id == id }
+        }
+
         PlannerUiState(
             selectedDateEpochDay = nav.selectedDateEpochDay,
             activeDestination = nav.activeDestination,
@@ -164,14 +171,17 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
             upNextTask = nextUp,
             inboxTasks = inbox,
             allTasks = allTasks,
-            templates = templates,
+            folders = folders,
+            selectedFolderId = nav.selectedFolderId,
             weekDotColorsByEpochDay = weekDots,
             editingTask = nav.editingTask,
             isEditorVisible = nav.isEditorVisible,
             editorDefaultMode = nav.editorDefaultMode,
             editorTargetInbox = nav.editorTargetInbox,
+            inspectingTask = inspected,
+            schedulingInboxTask = nav.schedulingInboxTask,
             focusedTaskId = nav.focusedTaskId,
-            focusStartedAtMs = nav.focusStartedAtMs,
+            forceSplitPreview = nav.forceSplitPreview,
             statusBannerMessage = nav.statusBannerMessage
         )
     }.stateIn(
@@ -183,11 +193,16 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
     private fun matchesDate(task: TaskEntity, targetDate: LocalDate): Boolean {
         val taskEpoch = task.dateEpochDay ?: return false
         if (taskEpoch == targetDate.toEpochDay()) return true
+        val originDate = LocalDate.ofEpochDay(taskEpoch)
         return when (task.recurrenceEnum) {
             RecurrenceRule.NONE -> false
             RecurrenceRule.DAILY -> true
-            RecurrenceRule.WEEKDAYS -> targetDate.dayOfWeek != DayOfWeek.SATURDAY && targetDate.dayOfWeek != DayOfWeek.SUNDAY
-            RecurrenceRule.WEEKENDS -> targetDate.dayOfWeek == DayOfWeek.SATURDAY || targetDate.dayOfWeek == DayOfWeek.SUNDAY
+            RecurrenceRule.WEEKDAYS ->
+                targetDate.dayOfWeek != DayOfWeek.SATURDAY && targetDate.dayOfWeek != DayOfWeek.SUNDAY
+            RecurrenceRule.WEEKLY ->
+                targetDate.dayOfWeek == originDate.dayOfWeek
+            RecurrenceRule.MONTHLY ->
+                targetDate.dayOfMonth == task.recurrenceDayOfMonth.coerceIn(1, targetDate.lengthOfMonth())
         }
     }
 
@@ -207,14 +222,7 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun setDestination(destination: StruktDestination) {
-        navState.update { state ->
-            val startMs = if (destination == StruktDestination.FOCUS && state.focusStartedAtMs == null) {
-                System.currentTimeMillis()
-            } else {
-                state.focusStartedAtMs
-            }
-            state.copy(activeDestination = destination, focusStartedAtMs = startMs)
-        }
+        navState.update { it.copy(activeDestination = destination) }
     }
 
     fun setFlowFilter(filter: FlowFilterMode) {
@@ -223,6 +231,14 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
 
     fun setSearchQuery(query: String) {
         navState.update { it.copy(searchQuery = query) }
+    }
+
+    fun selectFolder(folderId: Long?) {
+        navState.update { it.copy(selectedFolderId = folderId) }
+    }
+
+    fun toggleSplitViewMode(currentlySplit: Boolean) {
+        navState.update { it.copy(forceSplitPreview = !currentlySplit) }
     }
 
     fun openCreateTaskSheet(
@@ -234,7 +250,8 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
                 editingTask = null,
                 isEditorVisible = true,
                 editorDefaultMode = defaultMode,
-                editorTargetInbox = forInbox
+                editorTargetInbox = forInbox,
+                inspectingTaskId = null
             )
         }
     }
@@ -245,13 +262,43 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
                 editingTask = taskWithSubtasks,
                 isEditorVisible = true,
                 editorDefaultMode = taskWithSubtasks.task.modeEnum,
-                editorTargetInbox = taskWithSubtasks.task.dateEpochDay == null
+                editorTargetInbox = taskWithSubtasks.task.dateEpochDay == null,
+                inspectingTaskId = null
             )
         }
     }
 
     fun closeTaskSheet() {
         navState.update { it.copy(isEditorVisible = false, editingTask = null) }
+    }
+
+    fun openInspectTaskModal(taskId: Long) {
+        navState.update { it.copy(inspectingTaskId = taskId) }
+    }
+
+    fun closeInspectTaskModal() {
+        navState.update { it.copy(inspectingTaskId = null) }
+    }
+
+    fun openScheduleInboxPopup(task: TaskEntity) {
+        navState.update { it.copy(schedulingInboxTask = task) }
+    }
+
+    fun closeScheduleInboxPopup() {
+        navState.update { it.copy(schedulingInboxTask = null) }
+    }
+
+    fun confirmScheduleInboxTask(task: TaskEntity, asTimed: Boolean, startTimeMinutes: Int?) {
+        val targetDay = navState.value.selectedDateEpochDay
+        viewModelScope.launch {
+            repository.scheduleInboxTaskToDay(task, targetDay, asTimed, startTimeMinutes)
+            navState.update {
+                it.copy(
+                    schedulingInboxTask = null,
+                    statusBannerMessage = "Scheduled into Flow"
+                )
+            }
+        }
     }
 
     fun saveTaskFromEditor(
@@ -264,28 +311,35 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
         durationMinutes: Int,
         colorKey: String,
         iconKey: String,
-        subjectTag: String,
+        folderName: String,
+        sectionName: String,
         recurrence: RecurrenceRule,
+        recurrenceDayOfMonth: Int,
         subtasks: List<Pair<String, String>>,
         sortOrder: Int
     ) {
         if (title.isBlank()) return
         val currentEpoch = navState.value.selectedDateEpochDay
         val targetEpoch = if (toInbox) null else currentEpoch
+        val prevTask = navState.value.editingTask?.task
         val entity = TaskEntity(
             id = existingId,
             title = title.trim(),
             notes = notes.trim(),
             dateEpochDay = targetEpoch,
             taskMode = taskMode.name,
-            startTimeMinutes = if (taskMode == TaskMode.TIMED_BLOCK) (startTimeMinutes ?: 9 * 60) else null,
+            startTimeMinutes = if (taskMode == TaskMode.TIMED_BLOCK) (startTimeMinutes ?: 9 * 60) else prevTask?.startTimeMinutes,
             durationMinutes = durationMinutes.coerceIn(5, 360),
             sortOrder = sortOrder,
             colorKey = colorKey,
             iconKey = iconKey,
-            subjectTag = subjectTag.ifBlank { if (toInbox) "INBOX" else "FLOW" },
+            folderName = folderName.ifBlank { "General" },
+            sectionName = sectionName.ifBlank { "Core" },
             recurrence = recurrence.name,
-            isCompleted = navState.value.editingTask?.task?.isCompleted ?: false
+            recurrenceDayOfMonth = recurrenceDayOfMonth.coerceIn(1, 31),
+            isCompleted = prevTask?.isCompleted ?: false,
+            sessionSegments = prevTask?.sessionSegments.orEmpty(),
+            activeSessionStartMin = prevTask?.activeSessionStartMin
         )
         viewModelScope.launch {
             repository.saveTaskWithSubtasks(entity, subtasks)
@@ -293,13 +347,13 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
                 it.copy(
                     isEditorVisible = false,
                     editingTask = null,
-                    statusBannerMessage = if (toInbox) "Saved to Brain-Dump Inbox" else "Added to Daily Structure"
+                    statusBannerMessage = if (toInbox) "Saved to Inbox" else "Saved to Flow"
                 )
             }
         }
     }
 
-    fun quickAddInboxTask(title: String, durationMinutes: Int = 30, colorKey: String = "SKY") {
+    fun quickAddInboxTask(title: String) {
         if (title.isBlank()) return
         viewModelScope.launch {
             repository.saveTaskWithSubtasks(
@@ -307,23 +361,14 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
                     title = title.trim(),
                     dateEpochDay = null,
                     taskMode = TaskMode.TIMELESS_STEP.name,
-                    durationMinutes = durationMinutes,
-                    colorKey = colorKey,
+                    durationMinutes = 30,
+                    colorKey = "SKY",
                     iconKey = "BOLT",
-                    subjectTag = "INBOX"
+                    folderName = "General",
+                    sectionName = "Inbox"
                 ),
                 subtaskTitles = emptyList()
             )
-        }
-    }
-
-    fun sendInboxTaskToSelectedDay(task: TaskEntity, asTimed: Boolean = false, startTimeMinutes: Int? = null) {
-        val targetDay = navState.value.selectedDateEpochDay
-        viewModelScope.launch {
-            repository.scheduleInboxTaskToDay(task, targetDay, asTimed, startTimeMinutes)
-            navState.update {
-                it.copy(statusBannerMessage = "Scheduled '${task.title}' into Day Flow")
-            }
         }
     }
 
@@ -334,7 +379,8 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
                 it.copy(
                     isEditorVisible = false,
                     editingTask = null,
-                    statusBannerMessage = "Moved '${task.title}' back to Inbox"
+                    inspectingTaskId = null,
+                    statusBannerMessage = "Moved to Inbox"
                 )
             }
         }
@@ -358,19 +404,6 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun moveSpineTask(taskId: Long, moveUp: Boolean) {
-        val currentList = uiState.value.spineFlowTasks
-        val index = currentList.indexOfFirst { it.task.id == taskId }
-        if (index == -1) return
-        val targetIndex = if (moveUp) index - 1 else index + 1
-        if (targetIndex !in currentList.indices) return
-        val first = currentList[index].task
-        val second = currentList[targetIndex].task
-        viewModelScope.launch {
-            repository.swapTaskSortOrder(first, second)
-        }
-    }
-
     fun deleteTask(taskId: Long) {
         viewModelScope.launch {
             repository.deleteTask(taskId)
@@ -378,7 +411,8 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
                 it.copy(
                     isEditorVisible = false,
                     editingTask = null,
-                    statusBannerMessage = "Task removed"
+                    inspectingTaskId = null,
+                    statusBannerMessage = "Removed"
                 )
             }
         }
@@ -388,65 +422,52 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
         navState.update {
             it.copy(
                 focusedTaskId = taskId,
-                focusStartedAtMs = System.currentTimeMillis(),
+                inspectingTaskId = null,
                 activeDestination = StruktDestination.FOCUS
             )
+        }
+    }
+
+    fun startOrResumeFocusTimer(task: TaskEntity) {
+        viewModelScope.launch {
+            repository.startOrResumeTaskSession(task)
+        }
+    }
+
+    fun pauseFocusTimer(task: TaskEntity) {
+        viewModelScope.launch {
+            repository.pauseTaskSession(task)
+            navState.update {
+                it.copy(statusBannerMessage = "Paused • Break noted on timeline")
+            }
         }
     }
 
     fun completeFocusedTaskAndAdvance() {
         val currentFocus = uiState.value.activeFocusTask ?: return
         viewModelScope.launch {
-            if (!currentFocus.task.isCompleted) {
-                repository.toggleTaskCompleted(currentFocus.task)
-            }
+            repository.finishTaskSessionAndComplete(currentFocus.task)
             navState.update {
                 it.copy(
                     focusedTaskId = null,
-                    focusStartedAtMs = System.currentTimeMillis(),
-                    statusBannerMessage = "Completed '${currentFocus.task.title}'! Advancing to next step."
+                    statusBannerMessage = "Completed • Advancing to next"
                 )
             }
         }
     }
 
-    fun applyBlueprintToSelectedDay(template: DayTemplateEntity) {
-        val targetDay = navState.value.selectedDateEpochDay
+    fun createNewFolder(name: String, codeTag: String, colorKey: String, iconKey: String, sections: List<String>) {
         viewModelScope.launch {
-            repository.applyTemplateToDay(template, targetDay)
+            repository.createFolder(name, codeTag, colorKey, iconKey, sections)
             navState.update {
-                it.copy(
-                    activeDestination = StruktDestination.FLOW,
-                    statusBannerMessage = "Applied '${template.title}' to your day!"
-                )
+                it.copy(statusBannerMessage = "Folder created")
             }
         }
     }
 
-    fun saveCurrentDayAsBlueprint(title: String, tabCode: String, colorKey: String) {
-        val dayTasks = uiState.value.topBubbles + uiState.value.spineFlowTasks
-        if (dayTasks.isEmpty()) return
+    fun addSectionToFolder(folder: FolderEntity, sectionName: String) {
         viewModelScope.launch {
-            repository.saveDayAsTemplate(
-                tabCode = tabCode,
-                title = title,
-                tagLabel = "CUSTOM FLOW",
-                colorKey = colorKey,
-                dayTasks = dayTasks
-            )
-            navState.update {
-                it.copy(statusBannerMessage = "Saved current day as '${title}' blueprint!")
-            }
-        }
-    }
-
-    fun resetSelectedDayProgress() {
-        val targetDay = navState.value.selectedDateEpochDay
-        viewModelScope.launch {
-            repository.resetDayProgress(targetDay)
-            navState.update {
-                it.copy(statusBannerMessage = "Reset completion for selected day")
-            }
+            repository.addSectionToFolder(folder, sectionName)
         }
     }
 

@@ -2,75 +2,116 @@ package com.example.data
 
 import kotlinx.coroutines.flow.Flow
 import java.time.LocalDate
+import java.time.LocalTime
 
 class PlannerRepository(private val dao: PlannerDao) {
 
     val allTasksFlow: Flow<List<TaskWithSubtasks>> = dao.observeAllTasksWithSubtasks()
-    val allTemplatesFlow: Flow<List<DayTemplateEntity>> = dao.observeAllTemplates()
+    val allFoldersFlow: Flow<List<FolderEntity>> = dao.observeAllFolders()
 
     suspend fun ensureSeedData(todayEpochDay: Long = LocalDate.now().toEpochDay()) {
+        if (dao.countFolders() == 0) {
+            dao.insertFolders(
+                listOf(
+                    FolderEntity(
+                        codeTag = "PHY 12",
+                        name = "Physics",
+                        colorKey = "SKY",
+                        iconKey = "SCIENCE",
+                        sectionsCsv = "Electrostatics;;Current Electricity;;Optics;;Mock Papers"
+                    ),
+                    FolderEntity(
+                        codeTag = "CHEM 12",
+                        name = "Chemistry",
+                        colorKey = "ORANGE",
+                        iconKey = "SCIENCE",
+                        sectionsCsv = "Physical Chemistry;;Organic;;Inorganic"
+                    ),
+                    FolderEntity(
+                        codeTag = "MATH 12",
+                        name = "Mathematics",
+                        colorKey = "YELLOW",
+                        iconKey = "CODE",
+                        sectionsCsv = "Calculus;;Vectors & 3D;;Algebra"
+                    ),
+                    FolderEntity(
+                        codeTag = "READ",
+                        name = "Reading & Daily",
+                        colorKey = "SAGE",
+                        iconKey = "BOOK",
+                        sectionsCsv = "Books;;Daily Habits;;Reflection"
+                    ),
+                    FolderEntity(
+                        codeTag = "SPORT",
+                        name = "Sports & Life",
+                        colorKey = "MINT",
+                        iconKey = "FITNESS",
+                        sectionsCsv = "Workouts;;Extracurriculars;;Admin & Taxes"
+                    )
+                )
+            )
+        }
+
         if (dao.countTasks() > 0) return
 
-        // 1. Top "Anytime" Routine Bubbles (Inspired by Screenshots 5 & 6)
+        // 1. Top Routine Bubbles (Matches Structured Screenshots 5 & 6: "Call Mum", "Structure Tomorrow", "Water Plants")
         dao.insertTask(
             TaskEntity(
                 title = "Structure Tomorrow",
-                notes = "Review inbox & line up top 3 timeless steps",
                 dateEpochDay = todayEpochDay,
                 taskMode = TaskMode.TOP_BUBBLE.name,
                 durationMinutes = 10,
                 sortOrder = 1,
                 colorKey = "CORAL",
                 iconKey = "CHECKLIST",
-                subjectTag = "ROUTINE",
-                recurrence = RecurrenceRule.DAILY.name,
-                isCompleted = false
+                folderName = "Reading & Daily",
+                sectionName = "Daily Habits",
+                recurrence = RecurrenceRule.DAILY.name
             )
         )
         dao.insertTask(
             TaskEntity(
                 title = "Water Plants",
-                notes = "Desk & balcony plants",
                 dateEpochDay = todayEpochDay,
                 taskMode = TaskMode.TOP_BUBBLE.name,
                 durationMinutes = 10,
                 sortOrder = 2,
-                colorKey = "MINT",
+                colorKey = "SAGE",
                 iconKey = "PLANT",
-                subjectTag = "HOME",
-                recurrence = RecurrenceRule.DAILY.name,
-                isCompleted = false
+                folderName = "Sports & Life",
+                sectionName = "Admin & Taxes",
+                recurrence = RecurrenceRule.DAILY.name
             )
         )
         dao.insertTask(
             TaskEntity(
                 title = "Call Mum",
-                notes = "Quick catch-up call",
                 dateEpochDay = todayEpochDay,
                 taskMode = TaskMode.TOP_BUBBLE.name,
                 durationMinutes = 15,
                 sortOrder = 3,
                 colorKey = "SKY",
                 iconKey = "CALL",
-                subjectTag = "FAMILY",
+                folderName = "Sports & Life",
+                sectionName = "Extracurriculars",
                 recurrence = RecurrenceRule.NONE.name,
                 isCompleted = true
             )
         )
 
-        // 2. Hybrid Daily Spine (Mixing Timed Anchors + Timeless Anti-Paralysis Steps)
+        // 2. Daily Timeline Spine (Mixing Timed & Timeless + Pause/Resume Continued Example)
         dao.insertTask(
             TaskEntity(
                 title = "Rise and Shine",
-                notes = "Hydrate & sunlight before screens",
                 dateEpochDay = todayEpochDay,
                 taskMode = TaskMode.TIMED_BLOCK.name,
-                startTimeMinutes = 8 * 60, // 08:00 AM
+                startTimeMinutes = 8 * 60,
                 durationMinutes = 15,
                 sortOrder = 10,
                 colorKey = "CORAL",
                 iconKey = "ALARM",
-                subjectTag = "MORNING",
+                folderName = "Reading & Daily",
+                sectionName = "Daily Habits",
                 recurrence = RecurrenceRule.DAILY.name,
                 isCompleted = true
             )
@@ -78,234 +119,142 @@ class PlannerRepository(private val dao: PlannerDao) {
 
         val yogaId = dao.insertTask(
             TaskEntity(
-                title = "Yoga & Mobility Workout",
-                notes = "Full body stretch for posture",
+                title = "Yoga Workout",
                 dateEpochDay = todayEpochDay,
                 taskMode = TaskMode.TIMED_BLOCK.name,
-                startTimeMinutes = 8 * 60 + 15, // 08:15 AM
+                startTimeMinutes = 8 * 60 + 15,
                 durationMinutes = 30,
                 sortOrder = 20,
                 colorKey = "SKY",
                 iconKey = "WORKOUT",
-                subjectTag = "HEALTH",
+                folderName = "Sports & Life",
+                sectionName = "Workouts",
                 recurrence = RecurrenceRule.DAILY.name,
                 isCompleted = true
             )
         )
         dao.insertSubtasks(
             listOf(
-                SubtaskEntity(taskId = yogaId, title = " Thoracic spine warm-up", stageTag = "WARMUP", isCompleted = true, sortOrder = 1),
-                SubtaskEntity(taskId = yogaId, title = "15m Sun Salutations", stageTag = "FLOW", isCompleted = true, sortOrder = 2)
+                SubtaskEntity(taskId = yogaId, title = "Warm-up stretch", stageTag = "STEP 1", isCompleted = true, sortOrder = 1),
+                SubtaskEntity(taskId = yogaId, title = "Core mobility", stageTag = "STEP 2", isCompleted = true, sortOrder = 2)
             )
         )
 
-        // Timeless Next Step #1 (Active UP NEXT — No clock anxiety!)
+        // Physics task with a recorded pause/resume session ("14:00-14:37" -> Continued "14:47-15:15")
         val physicsId = dao.insertTask(
             TaskEntity(
                 title = "Physics: Electric Charges & Fields",
-                notes = "No clock limit — complete the steps in order and move on.",
+                notes = "Gauss Law derivations and practice problems",
                 dateEpochDay = todayEpochDay,
                 taskMode = TaskMode.TIMELESS_STEP.name,
-                startTimeMinutes = null,
+                startTimeMinutes = 14 * 60,
                 durationMinutes = 60,
                 sortOrder = 30,
                 colorKey = "SKY",
                 iconKey = "SCIENCE",
-                subjectTag = "PHY 12",
+                folderName = "Physics",
+                sectionName = "Electrostatics",
                 recurrence = RecurrenceRule.NONE.name,
-                isCompleted = false
+                isCompleted = false,
+                sessionSegments = "${14 * 60}-${14 * 60 + 37}||${14 * 60 + 47}-${15 * 60 + 15}"
             )
         )
         dao.insertSubtasks(
             listOf(
-                SubtaskEntity(taskId = physicsId, title = "Lecture Watched & Core Derivations", stageTag = "LECTURE", isCompleted = true, sortOrder = 1),
-                SubtaskEntity(taskId = physicsId, title = "Anki Flashcards Active Recall", stageTag = "ANKI", isCompleted = false, sortOrder = 2),
-                SubtaskEntity(taskId = physicsId, title = "NotebookLM Summary & 25 MCQs", stageTag = "MCQS", isCompleted = false, sortOrder = 3),
-                SubtaskEntity(taskId = physicsId, title = "Revision 1 Mistake Log", stageTag = "REV 1", isCompleted = false, sortOrder = 4)
+                SubtaskEntity(taskId = physicsId, title = "Lecture Watched", stageTag = "LECTURE", isCompleted = true, sortOrder = 1),
+                SubtaskEntity(taskId = physicsId, title = "Anki Flashcards", stageTag = "ANKI", isCompleted = false, sortOrder = 2),
+                SubtaskEntity(taskId = physicsId, title = "25 Chapter MCQs", stageTag = "MCQS", isCompleted = false, sortOrder = 3)
             )
         )
 
-        // Timeless Next Step #2
-        val mathId = dao.insertTask(
-            TaskEntity(
-                title = "Mathematics: Calculus Problem Set",
-                notes = "Focus on integration techniques without watching the clock",
-                dateEpochDay = todayEpochDay,
-                taskMode = TaskMode.TIMELESS_STEP.name,
-                startTimeMinutes = null,
-                durationMinutes = 45,
-                sortOrder = 40,
-                colorKey = "YELLOW",
-                iconKey = "BOOK",
-                subjectTag = "MATH 12",
-                recurrence = RecurrenceRule.WEEKDAYS.name,
-                isCompleted = false
-            )
-        )
-        dao.insertSubtasks(
-            listOf(
-                SubtaskEntity(taskId = mathId, title = "Review standard integration formulas", stageTag = "REV 1", isCompleted = false, sortOrder = 1),
-                SubtaskEntity(taskId = mathId, title = "Solve 15 timed board-pattern problems", stageTag = "MOCK", isCompleted = false, sortOrder = 2)
-            )
-        )
-
-        // Timed Anchor Block in the afternoon
-        val meetingId = dao.insertTask(
-            TaskEntity(
-                title = "Study Group / Team Sync",
-                notes = "Compare mock paper solutions",
-                dateEpochDay = todayEpochDay,
-                taskMode = TaskMode.TIMED_BLOCK.name,
-                startTimeMinutes = 14 * 60 + 30, // 02:30 PM
-                durationMinutes = 45,
-                sortOrder = 50,
-                colorKey = "PINK",
-                iconKey = "MEETING",
-                subjectTag = "COLLAB",
-                recurrence = RecurrenceRule.NONE.name,
-                isCompleted = false
-            )
-        )
-        dao.insertSubtasks(
-            listOf(
-                SubtaskEntity(taskId = meetingId, title = "Review Electrochemistry doubts", stageTag = "STEP 1", isCompleted = false, sortOrder = 1),
-                SubtaskEntity(taskId = meetingId, title = "Pick next mock test date", stageTag = "STEP 2", isCompleted = false, sortOrder = 2)
-            )
-        )
-
-        // Timeless Evening Step
         dao.insertTask(
             TaskEntity(
-                title = "Read a Book & Wind Down",
-                notes = "20 pages in tablet reading mode",
+                title = "Read a Book",
+                notes = "20 pages daily reading",
                 dateEpochDay = todayEpochDay,
                 taskMode = TaskMode.TIMELESS_STEP.name,
-                startTimeMinutes = null,
                 durationMinutes = 45,
-                sortOrder = 60,
-                colorKey = "MINT",
+                sortOrder = 40,
+                colorKey = "SAGE",
                 iconKey = "BOOK",
-                subjectTag = "RECHARGE",
+                folderName = "Reading & Daily",
+                sectionName = "Books",
                 recurrence = RecurrenceRule.DAILY.name,
                 isCompleted = false
             )
         )
 
-        // 3. Brain-Dump Inbox Tasks (Inspired by Screenshot 5 left sidebar)
+        // Monthly recurring task on the 1st of every month ("File Taxes")
+        val firstOfCurrentMonth = LocalDate.ofEpochDay(todayEpochDay).withDayOfMonth(1).toEpochDay()
+        dao.insertTask(
+            TaskEntity(
+                title = "File Taxes & Monthly Review",
+                notes = "Automatically repeats on the 1st of every month",
+                dateEpochDay = firstOfCurrentMonth,
+                taskMode = TaskMode.TIMELESS_STEP.name,
+                durationMinutes = 45,
+                sortOrder = 50,
+                colorKey = "YELLOW",
+                iconKey = "TAX",
+                folderName = "Sports & Life",
+                sectionName = "Admin & Taxes",
+                recurrence = RecurrenceRule.MONTHLY.name,
+                recurrenceDayOfMonth = 1,
+                isCompleted = false
+            )
+        )
+
+        // 3. Brain-Dump Inbox Tasks (Matches Screenshot 5 left sidebar)
         dao.insertTask(
             TaskEntity(
                 title = "Do Laundry",
-                notes = "Sort darks & start quick cycle",
                 dateEpochDay = null,
                 taskMode = TaskMode.TIMELESS_STEP.name,
                 durationMinutes = 60,
                 sortOrder = 1,
                 colorKey = "SKY",
                 iconKey = "LAUNDRY",
-                subjectTag = "INBOX"
+                folderName = "Sports & Life",
+                sectionName = "Admin & Taxes"
             )
         )
-        val chemInboxId = dao.insertTask(
+        dao.insertTask(
             TaskEntity(
-                title = "Chemistry: Chemical Kinetics Notes",
-                notes = "Zero & first-order half-life graphs",
+                title = "Chemistry: Electrochemistry",
                 dateEpochDay = null,
                 taskMode = TaskMode.TIMELESS_STEP.name,
                 durationMinutes = 60,
                 sortOrder = 2,
                 colorKey = "ORANGE",
                 iconKey = "SCIENCE",
-                subjectTag = "CHEM 12"
-            )
-        )
-        dao.insertSubtasks(
-            listOf(
-                SubtaskEntity(taskId = chemInboxId, title = "Arrhenius equation derivation", stageTag = "LECTURE", isCompleted = false, sortOrder = 1),
-                SubtaskEntity(taskId = chemInboxId, title = "20 PYQ MCQs", stageTag = "MCQS", isCompleted = false, sortOrder = 2)
+                folderName = "Chemistry",
+                sectionName = "Physical Chemistry"
             )
         )
         dao.insertTask(
             TaskEntity(
                 title = "Call Grandparents",
-                notes = "Ask about weekend visit",
                 dateEpochDay = null,
                 taskMode = TaskMode.TIMELESS_STEP.name,
                 durationMinutes = 30,
                 sortOrder = 3,
-                colorKey = "LAVENDER",
+                colorKey = "SKY",
                 iconKey = "CALL",
-                subjectTag = "FAMILY"
+                folderName = "Sports & Life",
+                sectionName = "Extracurriculars"
             )
         )
         dao.insertTask(
             TaskEntity(
                 title = "Go for a Run",
-                notes = "Easy 5km outdoor pace",
                 dateEpochDay = null,
                 taskMode = TaskMode.TIMELESS_STEP.name,
-                durationMinutes = 45,
+                durationMinutes = 60,
                 sortOrder = 4,
                 colorKey = "CORAL",
                 iconKey = "FITNESS",
-                subjectTag = "HEALTH"
-            )
-        )
-
-        // 4. Folder-Tabbed Day Blueprints / Syllabus Templates (Inspired by Screenshot 2)
-        dao.insertTemplates(
-            listOf(
-                DayTemplateEntity(
-                    tabCode = "FLOW 01",
-                    title = "Zero-Clock Sequence Day",
-                    subtitle = "5 Timeless Steps • Pure Anti-Paralysis Queue",
-                    tagLabel = "TIMELESS FLOW",
-                    colorKey = "YELLOW",
-                    encodedItems = listOf(
-                        "Morning Brain Clear & Coffee::TIMELESS_STEP::-1::20::YELLOW::COFFEE::Jot top 3 priorities;;Clear desk",
-                        "Deep Block #1 (Hardest Task First)::TIMELESS_STEP::-1::60::SKY::BOLT::Break into 3 micro-steps;;Finish core draft",
-                        "Midday Walk & Stretch::TIMELESS_STEP::-1::25::MINT::WORKOUT::Step outside;;Hydrate",
-                        "Deep Block #2 (Hands-On Practice)::TIMELESS_STEP::-1::50::ORANGE::CODE::Complete practice set;;Review mistakes",
-                        "Evening Reset & Structure Tomorrow::TOP_BUBBLE::-1::15::CORAL::CHECKLIST::Check off completed steps"
-                    ).joinToString("||")
-                ),
-                DayTemplateEntity(
-                    tabCode = "PHY 12",
-                    title = "Physics Master Sprint",
-                    subtitle = "4 Chapters • 7 Milestones per Block",
-                    tagLabel = "PHYSICS",
-                    colorKey = "SKY",
-                    encodedItems = listOf(
-                        "08:30 Morning Formula Warmup::TIMED_BLOCK::510::30::SKY::SCIENCE::Review Anki deck;;Write key constants",
-                        "Electrostatics & Capacitance Deep Dive::TIMELESS_STEP::-1::60::SKY::BOOK::Lecture Watched;;Anki Flashcards;;25 MCQs",
-                        "Current Electricity Problem Drill::TIMELESS_STEP::-1::50::YELLOW::BOLT::Kirchhoff loop problems;;Revision 1",
-                        "16:00 Full Subject Mock Paper::TIMED_BLOCK::960::90::PINK::CHECKLIST::Timed section A;;Self-grade mistakes"
-                    ).joinToString("||")
-                ),
-                DayTemplateEntity(
-                    tabCode = "CHEM 12",
-                    title = "Chemistry & Lab Hybrid",
-                    subtitle = "4 Steps • Mixes Timed Anchors + Timeless Flow",
-                    tagLabel = "CHEMISTRY",
-                    colorKey = "ORANGE",
-                    encodedItems = listOf(
-                        "09:00 Organic Mechanisms Review::TIMED_BLOCK::540::45::ORANGE::SCIENCE::Named reactions sheet;;Practice conversions",
-                        "Physical Chemistry Numericals::TIMELESS_STEP::-1::50::YELLOW::BOOK::Electrochemistry Nernst eq;;15 MCQs",
-                        "Inorganic Trends & Exceptions::TIMELESS_STEP::-1::40::MINT::CHECKLIST::d- and f-block notes;;Anki review"
-                    ).joinToString("||")
-                ),
-                DayTemplateEntity(
-                    tabCode = "RESET 04",
-                    title = "Calm Recharge & Admin",
-                    subtitle = "4 Gentle Steps • Low-Pressure Recovery Day",
-                    tagLabel = "RECHARGE",
-                    colorKey = "MINT",
-                    encodedItems = listOf(
-                        "Water Plants & Tidy Workspace::TOP_BUBBLE::-1::15::MINT::PLANT::Open windows;;Clear desk",
-                        "Light Reading & Coffee::TIMELESS_STEP::-1::40::MINT::COFFEE::Read 1 chapter",
-                        "Inbox Zero & Week Planning::TIMELESS_STEP::-1::30::LAVENDER::CHECKLIST::Review Inbox items;;Pick Monday flow",
-                        "Evening Mobility & Early Sleep::TIMELESS_STEP::-1::30::SKY::WORKOUT::15m stretch"
-                    ).joinToString("||")
-                )
+                folderName = "Sports & Life",
+                sectionName = "Workouts"
             )
         )
     }
@@ -391,83 +340,94 @@ class PlannerRepository(private val dao: PlannerDao) {
         )
     }
 
-    suspend fun swapTaskSortOrder(first: TaskEntity, second: TaskEntity) {
-        val firstOrder = first.sortOrder
-        val secondOrder = second.sortOrder
-        if (firstOrder == secondOrder) {
-            dao.updateTask(first.copy(sortOrder = secondOrder + 5))
-        } else {
-            dao.updateTask(first.copy(sortOrder = secondOrder))
-            dao.updateTask(second.copy(sortOrder = firstOrder))
-        }
-    }
-
     suspend fun deleteTask(taskId: Long) {
         dao.deleteTaskById(taskId)
     }
 
-    suspend fun resetDayProgress(epochDay: Long) {
-        dao.resetDayCompletion(epochDay)
-    }
-
-    suspend fun applyTemplateToDay(template: DayTemplateEntity, targetEpochDay: Long) {
-        var currentOrder = (dao.getMaxSortOrderForDay(targetEpochDay) ?: 0) + 10
-        val specs = template.decodeSpecs()
-        for (spec in specs) {
-            val newTaskId = dao.insertTask(
-                TaskEntity(
-                    title = spec.title,
-                    notes = "From ${template.title} blueprint",
-                    dateEpochDay = targetEpochDay,
-                    taskMode = spec.mode.name,
-                    startTimeMinutes = spec.startTimeMinutes,
-                    durationMinutes = spec.durationMinutes,
-                    sortOrder = currentOrder,
-                    colorKey = spec.colorKey,
-                    iconKey = spec.iconKey,
-                    subjectTag = template.tabCode,
-                    isCompleted = false
-                )
-            )
-            if (spec.subtasks.isNotEmpty()) {
-                dao.insertSubtasks(
-                    spec.subtasks.mapIndexed { idx, subTitle ->
-                        SubtaskEntity(
-                            taskId = newTaskId,
-                            title = subTitle,
-                            stageTag = "STEP ${idx + 1}",
-                            isCompleted = false,
-                            sortOrder = idx + 1
-                        )
-                    }
-                )
-            }
-            currentOrder += 10
-        }
-    }
-
-    suspend fun saveDayAsTemplate(
-        tabCode: String,
-        title: String,
-        tagLabel: String,
-        colorKey: String,
-        dayTasks: List<TaskWithSubtasks>
-    ) {
-        if (dayTasks.isEmpty()) return
-        val encoded = dayTasks.joinToString("||") { item ->
-            val t = item.task
-            val subs = item.sortedSubtasks.joinToString(";;") { it.title }
-            "${t.title}::${t.taskMode}::${t.startTimeMinutes ?: -1}::${t.durationMinutes}::${t.colorKey}::${t.iconKey}::$subs"
-        }
-        dao.insertTemplate(
-            DayTemplateEntity(
-                tabCode = tabCode.ifBlank { "FLOW Custom" },
-                title = title.ifBlank { "Custom Day Structure" },
-                subtitle = "${dayTasks.size} Steps • Saved from Day Flow",
-                tagLabel = tagLabel.ifBlank { "CUSTOM FLOW" },
-                colorKey = colorKey,
-                encodedItems = encoded
+    /**
+     * Live Focus Session Logging:
+     * - When Play is tapped, notes current device clock time and feeds it to the timeline.
+     * - When Pause is tapped, saves the segment ("start-pause") so a break is implicitly noted.
+     * - When Resume is tapped, starts a new segment so the timeline displays a dotted "Continued" line!
+     */
+    suspend fun startOrResumeTaskSession(task: TaskEntity, currentClockMin: Int = currentMinutesFromMidnight()) {
+        if (task.activeSessionStartMin != null) return
+        val firstStart = task.startTimeMinutes ?: currentClockMin
+        dao.updateTask(
+            task.copy(
+                startTimeMinutes = firstStart,
+                activeSessionStartMin = currentClockMin
             )
         )
+    }
+
+    suspend fun pauseTaskSession(task: TaskEntity, currentClockMin: Int = currentMinutesFromMidnight()) {
+        val startMin = task.activeSessionStartMin ?: return
+        val endMin = currentClockMin.coerceAtLeast(startMin + 1)
+        val newSeg = "$startMin-$endMin"
+        val updatedSegments = if (task.sessionSegments.isBlank()) {
+            newSeg
+        } else {
+            "${task.sessionSegments}||$newSeg"
+        }
+        dao.updateTask(
+            task.copy(
+                sessionSegments = updatedSegments,
+                activeSessionStartMin = null
+            )
+        )
+    }
+
+    suspend fun finishTaskSessionAndComplete(task: TaskEntity, currentClockMin: Int = currentMinutesFromMidnight()) {
+        val startMin = task.activeSessionStartMin
+        val updatedSegments = if (startMin != null) {
+            val endMin = currentClockMin.coerceAtLeast(startMin + 1)
+            val newSeg = "$startMin-$endMin"
+            if (task.sessionSegments.isBlank()) newSeg else "${task.sessionSegments}||$newSeg"
+        } else {
+            task.sessionSegments
+        }
+        dao.updateTask(
+            task.copy(
+                sessionSegments = updatedSegments,
+                activeSessionStartMin = null,
+                isCompleted = true
+            )
+        )
+    }
+
+    suspend fun createFolder(
+        name: String,
+        codeTag: String,
+        colorKey: String,
+        iconKey: String,
+        initialSections: List<String>
+    ) {
+        if (name.isBlank()) return
+        val sectionsCsv = initialSections.ifEmpty { listOf("General", "Milestones") }.joinToString(";;")
+        dao.insertFolder(
+            FolderEntity(
+                codeTag = codeTag.ifBlank { name.take(4).uppercase() },
+                name = name.trim(),
+                colorKey = colorKey,
+                iconKey = iconKey,
+                sectionsCsv = sectionsCsv
+            )
+        )
+    }
+
+    suspend fun addSectionToFolder(folder: FolderEntity, newSection: String) {
+        if (newSection.isBlank()) return
+        val updated = (folder.sections + newSection.trim()).distinct().joinToString(";;")
+        dao.updateFolder(folder.copy(sectionsCsv = updated))
+    }
+
+    suspend fun deleteFolder(folderId: Long) {
+        dao.deleteFolderById(folderId)
+    }
+
+    private fun currentMinutesFromMidnight(): Int {
+        val now = LocalTime.now()
+        return now.hour * 60 + now.minute
     }
 }

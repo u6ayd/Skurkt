@@ -23,14 +23,20 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Inbox
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -48,9 +54,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -58,6 +62,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.example.data.FolderEntity
 import com.example.data.RecurrenceRule
 import com.example.data.SubtaskEntity
 import com.example.data.TaskEntity
@@ -80,14 +85,24 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
+private enum class EditorSubPopup {
+    NONE,
+    DURATION_TIME,
+    COLOR_ICON,
+    FOLDER_SECTION,
+    RECURRENCE,
+    SUBTASKS
+}
+
 /**
- * Structured-Inspired Task Creation & Edit Sheet (Directly inspired by Screenshot 7:
- * Full-bleed colored top header with large circular icon badge, Time selector, Duration pills
- * [15m, 30m, 45m, 1h, 1.5h], and full-width Continue button, hybridized with Neo-Brutalist 2.dp ink borders).
+ * De-Cramped Structured Task Editor (Inspired by Screenshot 7):
+ * - Input placeholder is simply "Task".
+ * - Tapping Duration, Color & Icon, Folder, Repeat, or Subtasks opens a dedicated clean Sub-Popup!
  */
 @Composable
 fun StructuredTaskEditorDialog(
     selectedDate: LocalDate,
+    folders: List<FolderEntity>,
     editingItem: TaskWithSubtasks?,
     defaultMode: TaskMode,
     defaultToInbox: Boolean,
@@ -102,8 +117,10 @@ fun StructuredTaskEditorDialog(
         durationMinutes: Int,
         colorKey: String,
         iconKey: String,
-        subjectTag: String,
+        folderName: String,
+        sectionName: String,
         recurrence: RecurrenceRule,
+        recurrenceDayOfMonth: Int,
         subtasks: List<Pair<String, String>>,
         sortOrder: Int
     ) -> Unit,
@@ -113,7 +130,6 @@ fun StructuredTaskEditorDialog(
     val existingTask = editingItem?.task
     var title by remember(existingTask) { mutableStateOf(existingTask?.title ?: "") }
     var notes by remember(existingTask) { mutableStateOf(existingTask?.notes ?: "") }
-    var subjectTag by remember(existingTask) { mutableStateOf(existingTask?.subjectTag ?: "FLOW") }
     var toInbox by remember(existingTask, defaultToInbox) {
         mutableStateOf(if (existingTask != null) existingTask.dateEpochDay == null else defaultToInbox)
     }
@@ -121,15 +137,26 @@ fun StructuredTaskEditorDialog(
         mutableStateOf(existingTask?.modeEnum ?: defaultMode)
     }
     var startTimeMinutes by remember(existingTask) {
-        mutableIntStateOf(existingTask?.startTimeMinutes ?: (9 * 60))
+        mutableIntStateOf(existingTask?.startTimeMinutes ?: (18 * 60))
     }
     var durationMinutes by remember(existingTask) {
         mutableIntStateOf(existingTask?.durationMinutes ?: 45)
     }
-    var colorKey by remember(existingTask) { mutableStateOf(existingTask?.colorKey ?: "MINT") }
+    var colorKey by remember(existingTask) { mutableStateOf(existingTask?.colorKey ?: "SAGE") }
     var iconKey by remember(existingTask) { mutableStateOf(existingTask?.iconKey ?: "BOOK") }
+    var folderName by remember(existingTask, folders) {
+        mutableStateOf(existingTask?.folderName ?: (folders.firstOrNull()?.name ?: "Physics"))
+    }
+    var sectionName by remember(existingTask, folders) {
+        val defaultSec = folders.firstOrNull { it.name == (existingTask?.folderName ?: folders.firstOrNull()?.name) }
+            ?.sections?.firstOrNull() ?: "Core"
+        mutableStateOf(existingTask?.sectionName ?: defaultSec)
+    }
     var recurrence by remember(existingTask) {
         mutableStateOf(existingTask?.recurrenceEnum ?: RecurrenceRule.NONE)
+    }
+    var recurrenceDayOfMonth by remember(existingTask) {
+        mutableIntStateOf(existingTask?.recurrenceDayOfMonth ?: selectedDate.dayOfMonth)
     }
 
     val subtasksList = remember(editingItem) {
@@ -137,8 +164,8 @@ fun StructuredTaskEditorDialog(
             editingItem?.sortedSubtasks?.forEach { add(it.title to it.stageTag) }
         }
     }
-    var draftSubtaskTitle by remember { mutableStateOf("") }
-    var draftSubtaskStage by remember { mutableStateOf("STEP") }
+
+    var activeSubPopup by remember { mutableStateOf(EditorSubPopup.NONE) }
 
     val headerColor = neoColorForKey(colorKey)
     val dateFormatter = remember { DateTimeFormatter.ofPattern("EEE dd. MMM yyyy", Locale.ENGLISH) }
@@ -155,11 +182,11 @@ fun StructuredTaskEditorDialog(
         ) {
             NeoCard(
                 modifier = Modifier
-                    .widthIn(max = 560.dp)
+                    .widthIn(max = 460.dp)
                     .fillMaxWidth(),
                 backgroundColor = PaperCanvas,
-                cornerRadius = 26.dp,
-                shadowOffset = 6.dp,
+                cornerRadius = 28.dp,
+                shadowOffset = 5.dp,
                 contentPadding = PaddingValues(0.dp)
             ) {
                 Column(
@@ -167,7 +194,7 @@ fun StructuredTaskEditorDialog(
                         .fillMaxWidth()
                         .verticalScroll(rememberScrollState())
                 ) {
-                    // 1. Full-Bleed Colored Top Banner (Directly inspired by Screenshot 7's green top header)
+                    // 1. Clean Colored Top Header (Matches Screenshot 7: green banner, circular icon, "Task" input)
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -182,42 +209,53 @@ fun StructuredTaskEditorDialog(
                             IconButton(
                                 onClick = onDismiss,
                                 modifier = Modifier
-                                    .size(38.dp)
+                                    .size(36.dp)
                                     .clip(CircleShape)
-                                    .background(PureWhiteSurface)
-                                    .border(2.dp, InkBlack, CircleShape)
+                                    .background(PureWhiteSurface.copy(alpha = 0.85f))
+                                    .border(1.5.dp, InkBlack, CircleShape)
                                     .testTag("close_editor_button")
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Close,
                                     contentDescription = "Close",
-                                    tint = InkBlack
+                                    tint = InkBlack,
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
 
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 if (existingTask != null && existingTask.dateEpochDay != null && onMoveToInbox != null) {
-                                    NeoPillButton(
-                                        text = "To Inbox",
-                                        icon = Icons.Default.Inbox,
+                                    IconButton(
                                         onClick = { onMoveToInbox(existingTask) },
-                                        shadowOffset = 2.dp
-                                    )
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .clip(CircleShape)
+                                            .background(PureWhiteSurface.copy(alpha = 0.85f))
+                                            .border(1.5.dp, InkBlack, CircleShape)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Inbox,
+                                            contentDescription = "Move to Inbox",
+                                            tint = InkBlack,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
                                 }
                                 if (existingTask != null && onDelete != null) {
                                     IconButton(
                                         onClick = { onDelete(existingTask.id) },
                                         modifier = Modifier
-                                            .size(38.dp)
+                                            .size(36.dp)
                                             .clip(CircleShape)
-                                            .background(NeoCoral)
-                                            .border(2.dp, InkBlack, CircleShape)
+                                            .background(PureWhiteSurface.copy(alpha = 0.85f))
+                                            .border(1.5.dp, InkBlack, CircleShape)
                                             .testTag("delete_task_button")
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.Delete,
                                             contentDescription = "Delete Task",
-                                            tint = InkBlack
+                                            tint = InkBlack,
+                                            modifier = Modifier.size(18.dp)
                                         )
                                     }
                                 }
@@ -226,37 +264,37 @@ fun StructuredTaskEditorDialog(
 
                         Spacer(modifier = Modifier.height(14.dp))
 
-                        // Large Circular Icon Badge + Title Input (Matches Screenshot 7)
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            // Tapping the large circular icon opens the Color & Icon popup
                             Box(
                                 modifier = Modifier
-                                    .size(64.dp)
+                                    .size(62.dp)
                                     .clip(CircleShape)
                                     .background(PureWhiteSurface)
-                                    .border(2.5.dp, InkBlack, CircleShape),
+                                    .border(2.dp, InkBlack, CircleShape)
+                                    .clickable { activeSubPopup = EditorSubPopup.COLOR_ICON },
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     imageVector = iconForKey(iconKey),
-                                    contentDescription = null,
+                                    contentDescription = "Change Icon & Color",
                                     tint = InkBlack,
-                                    modifier = Modifier.size(30.dp)
+                                    modifier = Modifier.size(28.dp)
                                 )
                             }
                             Spacer(modifier = Modifier.width(14.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = when {
-                                        toInbox -> "BRAIN-DUMP INBOX"
+                                        toInbox -> "Inbox"
                                         taskMode == TaskMode.TIMED_BLOCK ->
                                             "${formatMinutesAsClock(startTimeMinutes)}–${formatMinutesAsClock(startTimeMinutes + durationMinutes)} (${formatDurationBadge(durationMinutes)})"
-                                        taskMode == TaskMode.TOP_BUBBLE -> "TOP ROUTINE BUBBLE • ${formatDurationBadge(durationMinutes)}"
-                                        else -> "TIMELESS FLOW STEP • ${formatDurationBadge(durationMinutes)}"
+                                        else -> formatDurationBadge(durationMinutes)
                                     },
-                                    style = MaterialTheme.typography.labelLarge,
+                                    style = MaterialTheme.typography.labelMedium,
                                     color = InkCharcoal
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
@@ -265,450 +303,126 @@ fun StructuredTaskEditorDialog(
                                     onValueChange = { title = it },
                                     placeholder = {
                                         Text(
-                                            "Task title (e.g. Read a Book)...",
+                                            "Task",
                                             style = MaterialTheme.typography.titleLarge,
-                                            color = InkCharcoal.copy(alpha = 0.6f)
+                                            color = InkMuted
                                         )
                                     },
                                     singleLine = true,
                                     textStyle = MaterialTheme.typography.titleLarge,
+                                    shape = RoundedCornerShape(14.dp),
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .background(PureWhiteSurface, RoundedCornerShape(12.dp))
+                                        .background(PureWhiteSurface, RoundedCornerShape(14.dp))
                                         .testTag("editor_title_input")
                                 )
                             }
                         }
                     }
 
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(2.dp)
-                            .background(InkBlack)
-                    )
-
-                    // 2. Editor Body Controls
+                    // 2. Clean Summary Rows (Each opens a dedicated Sub-Popup so nothing is cramped!)
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(20.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                            .padding(18.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        // Destination Pill Bar: Selected Date Flow vs Inbox
+                        // Destination Toggle Row (Date Flow vs Inbox)
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(14.dp))
+                                .clip(RoundedCornerShape(16.dp))
                                 .background(PureWhiteSurface)
-                                .border(2.dp, InkBlack, RoundedCornerShape(14.dp))
-                                .padding(10.dp),
+                                .border(1.5.dp, InkBlack, RoundedCornerShape(16.dp))
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = if (toInbox) "Unscheduled Inbox" else selectedDate.format(dateFormatter),
+                                text = if (toInbox) "Inbox" else selectedDate.format(dateFormatter),
                                 style = MaterialTheme.typography.titleMedium,
                                 color = InkBlack
                             )
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 NeoPillButton(
-                                    text = "Day Flow",
+                                    text = "Timeline",
                                     selected = !toInbox,
                                     activeColor = NeoYellow,
-                                    shadowOffset = 1.5.dp,
                                     onClick = { toInbox = false }
                                 )
                                 NeoPillButton(
                                     text = "Inbox",
                                     selected = toInbox,
                                     activeColor = NeoCoral,
-                                    shadowOffset = 1.5.dp,
                                     onClick = { toInbox = true }
                                 )
                             }
                         }
 
-                        // Structure Mode Selector (Timeless Step vs Timed Slot vs Top Bubble)
-                        if (!toInbox) {
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text(
-                                    text = "Structure Mode (With or Without Clock Time)",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = InkBlack
-                                )
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .horizontalScroll(rememberScrollState()),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    NeoPillButton(
-                                        text = "Timeless Step (No Clock)",
-                                        selected = taskMode == TaskMode.TIMELESS_STEP,
-                                        activeColor = NeoYellow,
-                                        onClick = { taskMode = TaskMode.TIMELESS_STEP },
-                                        modifier = Modifier.testTag("mode_timeless_button")
-                                    )
-                                    NeoPillButton(
-                                        text = "Timed Slot (Clock)",
-                                        selected = taskMode == TaskMode.TIMED_BLOCK,
-                                        activeColor = NeoCoral,
-                                        onClick = { taskMode = TaskMode.TIMED_BLOCK },
-                                        modifier = Modifier.testTag("mode_timed_button")
-                                    )
-                                    NeoPillButton(
-                                        text = "Top Bubble",
-                                        selected = taskMode == TaskMode.TOP_BUBBLE,
-                                        activeColor = NeoSkyBlue,
-                                        onClick = { taskMode = TaskMode.TOP_BUBBLE },
-                                        modifier = Modifier.testTag("mode_bubble_button")
-                                    )
-                                }
-                            }
-                        }
-
-                        // Time Selector Card (Directly inspired by Screenshot 7's "Time 18:00-18:45" picker)
-                        if (!toInbox && taskMode == TaskMode.TIMED_BLOCK) {
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text(
-                                    text = "Time",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    color = InkBlack
-                                )
-                                NeoCard(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    backgroundColor = PureWhiteSurface,
-                                    cornerRadius = 18.dp,
-                                    shadowOffset = 3.dp,
-                                    contentPadding = PaddingValues(14.dp)
-                                ) {
-                                    Column(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                                    ) {
-                                        Text(
-                                            text = formatMinutesAsClock((startTimeMinutes - 15).coerceAtLeast(0)),
-                                            style = MaterialTheme.typography.labelMedium,
-                                            color = InkMuted
-                                        )
-
-                                        // Highlighted Coral Time Pill (Matches Screenshot 7)
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                        ) {
-                                            NeoPillButton(
-                                                text = "-30m",
-                                                onClick = {
-                                                    startTimeMinutes = (startTimeMinutes - 30).coerceAtLeast(0)
-                                                },
-                                                shadowOffset = 1.5.dp
-                                            )
-                                            Box(
-                                                modifier = Modifier
-                                                    .clip(RoundedCornerShape(50))
-                                                    .background(NeoCoral)
-                                                    .border(2.dp, InkBlack, RoundedCornerShape(50))
-                                                    .padding(horizontal = 24.dp, vertical = 10.dp)
-                                            ) {
-                                                Text(
-                                                    text = "${formatMinutesAsClock(startTimeMinutes)}–${formatMinutesAsClock((startTimeMinutes + durationMinutes).coerceAtMost(23 * 60 + 59))}",
-                                                    style = MaterialTheme.typography.titleMedium,
-                                                    color = InkBlack
-                                                )
-                                            }
-                                            NeoPillButton(
-                                                text = "+30m",
-                                                onClick = {
-                                                    startTimeMinutes = (startTimeMinutes + 30).coerceAtMost(23 * 60)
-                                                },
-                                                shadowOffset = 1.5.dp
-                                            )
-                                        }
-
-                                        Text(
-                                            text = formatMinutesAsClock((startTimeMinutes + 15).coerceAtMost(23 * 60 + 45)),
-                                            style = MaterialTheme.typography.labelMedium,
-                                            color = InkMuted
-                                        )
-
-                                        // Quick Preset Clock Anchors
-                                        Row(
-                                            modifier = Modifier.horizontalScroll(rememberScrollState()),
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                        ) {
-                                            listOf(
-                                                "08:00" to 8 * 60,
-                                                "09:30" to 9 * 60 + 30,
-                                                "12:00" to 12 * 60,
-                                                "14:30" to 14 * 60 + 30,
-                                                "18:00" to 18 * 60,
-                                                "20:30" to 20 * 60 + 30
-                                            ).forEach { (lbl, mins) ->
-                                                NeoPillButton(
-                                                    text = lbl,
-                                                    selected = startTimeMinutes == mins,
-                                                    activeColor = NeoYellow,
-                                                    shadowOffset = 1.dp,
-                                                    onClick = { startTimeMinutes = mins }
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // Duration Pill Bar (Directly inspired by Screenshot 7: 15, 30, 45m, 1h, 1.5h)
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(
-                                text = "Duration",
-                                style = MaterialTheme.typography.titleLarge,
-                                color = InkBlack
-                            )
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(50))
-                                    .background(PureWhiteSurface)
-                                    .border(2.dp, InkBlack, RoundedCornerShape(50))
-                                    .padding(6.dp)
-                                    .horizontalScroll(rememberScrollState()),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                listOf(
-                                    10 to "10m",
-                                    15 to "15m",
-                                    30 to "30m",
-                                    45 to "45m",
-                                    60 to "1h",
-                                    90 to "1.5h",
-                                    120 to "2h"
-                                ).forEach { (mins, label) ->
-                                    val isSelected = durationMinutes == mins
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(50))
-                                            .background(if (isSelected) NeoCoral else SoftSheetSurface)
-                                            .then(
-                                                if (isSelected) Modifier.border(2.dp, InkBlack, RoundedCornerShape(50))
-                                                else Modifier
-                                            )
-                                            .clickable { durationMinutes = mins }
-                                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text = label,
-                                            style = MaterialTheme.typography.titleMedium,
-                                            color = InkBlack
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        // Color Palette & Category Icon Pickers
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(
-                                text = "Color & Category Icon",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = InkBlack
-                            )
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .horizontalScroll(rememberScrollState()),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                NeoPalette.forEach { option ->
-                                    val selected = colorKey == option.key
-                                    Box(
-                                        modifier = Modifier
-                                            .size(38.dp)
-                                            .clip(CircleShape)
-                                            .background(option.fill)
-                                            .border(if (selected) 3.dp else 1.5.dp, InkBlack, CircleShape)
-                                            .clickable { colorKey = option.key },
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        if (selected) {
-                                            Icon(
-                                                imageVector = Icons.Default.Check,
-                                                contentDescription = option.label,
-                                                tint = InkBlack,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .horizontalScroll(rememberScrollState()),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                TaskIconCatalog.forEach { item ->
-                                    val selected = iconKey == item.key
-                                    Box(
-                                        modifier = Modifier
-                                            .size(42.dp)
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .background(if (selected) headerColor else PureWhiteSurface)
-                                            .border(2.dp, InkBlack, RoundedCornerShape(12.dp))
-                                            .clickable { iconKey = item.key },
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = item.icon,
-                                            contentDescription = item.label,
-                                            tint = InkBlack,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        // Folder Tag & Recurrence Row
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            OutlinedTextField(
-                                value = subjectTag,
-                                onValueChange = { subjectTag = it },
-                                label = { Text("Folder / Tag (e.g. PHY 12)") },
-                                singleLine = true,
-                                modifier = Modifier.width(170.dp)
-                            )
-                            Row(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .horizontalScroll(rememberScrollState()),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                RecurrenceRule.entries.forEach { rule ->
-                                    NeoPillButton(
-                                        text = rule.label,
-                                        selected = recurrence == rule,
-                                        activeColor = NeoYellow,
-                                        shadowOffset = 1.5.dp,
-                                        onClick = { recurrence = rule }
-                                    )
-                                }
-                            }
-                        }
-
-                        // Notes & Subtasks / Milestones Builder
-                        OutlinedTextField(
-                            value = notes,
-                            onValueChange = { notes = it },
-                            label = { Text("Notes / Context") },
-                            modifier = Modifier.fillMaxWidth()
+                        // Row 1: Time & Duration Popup Trigger
+                        EditorSummaryRow(
+                            icon = Icons.Default.Schedule,
+                            label = "Time & Duration",
+                            valueText = when {
+                                toInbox -> formatDurationBadge(durationMinutes)
+                                taskMode == TaskMode.TIMED_BLOCK ->
+                                    "${formatMinutesAsClock(startTimeMinutes)} • ${formatDurationBadge(durationMinutes)}"
+                                taskMode == TaskMode.TOP_BUBBLE ->
+                                    "Top Bubble • ${formatDurationBadge(durationMinutes)}"
+                                else ->
+                                    "Timeless • ${formatDurationBadge(durationMinutes)}"
+                            },
+                            onClick = { activeSubPopup = EditorSubPopup.DURATION_TIME }
                         )
 
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(
-                                text = "Subtasks & Milestones (${subtasksList.size})",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = InkBlack
-                            )
-                            subtasksList.forEachIndexed { index, (subTitle, stage) ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .background(PureWhiteSurface)
-                                        .border(1.5.dp, InkBlack, RoundedCornerShape(10.dp))
-                                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "${index + 1}. $subTitle ($stage)",
-                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                                        color = InkBlack,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    Icon(
-                                        imageVector = Icons.Default.Close,
-                                        contentDescription = "Remove Subtask",
-                                        tint = InkBlack,
-                                        modifier = Modifier
-                                            .size(18.dp)
-                                            .clickable { subtasksList.removeAt(index) }
-                                    )
-                                }
-                            }
+                        // Row 2: Color & Category Icon Popup Trigger
+                        EditorSummaryRow(
+                            icon = Icons.Default.Palette,
+                            label = "Color & Icon",
+                            valueText = NeoPalette.firstOrNull { it.key == colorKey }?.label ?: "Color",
+                            onClick = { activeSubPopup = EditorSubPopup.COLOR_ICON }
+                        )
 
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                OutlinedTextField(
-                                    value = draftSubtaskTitle,
-                                    onValueChange = { draftSubtaskTitle = it },
-                                    placeholder = { Text("Add milestone (e.g. Lecture, Anki, MCQs)...") },
-                                    singleLine = true,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                OutlinedTextField(
-                                    value = draftSubtaskStage,
-                                    onValueChange = { draftSubtaskStage = it },
-                                    placeholder = { Text("Tag") },
-                                    singleLine = true,
-                                    modifier = Modifier.width(86.dp)
-                                )
-                                IconButton(
-                                    onClick = {
-                                        if (draftSubtaskTitle.isNotBlank()) {
-                                            subtasksList.add(draftSubtaskTitle.trim() to draftSubtaskStage.trim())
-                                            draftSubtaskTitle = ""
-                                        }
-                                    },
-                                    modifier = Modifier
-                                        .size(44.dp)
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(NeoMintGreen)
-                                        .border(2.dp, InkBlack, RoundedCornerShape(12.dp))
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Add,
-                                        contentDescription = "Add Milestone",
-                                        tint = InkBlack
-                                    )
-                                }
-                            }
-                        }
+                        // Row 3: Folder & Section Popup Trigger
+                        EditorSummaryRow(
+                            icon = Icons.Default.Folder,
+                            label = "Folder",
+                            valueText = "$folderName • $sectionName",
+                            onClick = { activeSubPopup = EditorSubPopup.FOLDER_SECTION }
+                        )
 
-                        // Full-Width "Continue / Save Structure" Button (Matches Screenshot 7's bottom Coral button)
+                        // Row 4: Repeat / Recurrence Popup Trigger
+                        EditorSummaryRow(
+                            icon = Icons.Default.Repeat,
+                            label = "Repeat",
+                            valueText = if (recurrence == RecurrenceRule.MONTHLY) {
+                                "Monthly (Day $recurrenceDayOfMonth)"
+                            } else {
+                                recurrence.label
+                            },
+                            onClick = { activeSubPopup = EditorSubPopup.RECURRENCE }
+                        )
+
+                        // Row 5: Subtasks Popup Trigger
+                        EditorSummaryRow(
+                            icon = Icons.Default.Checklist,
+                            label = "Subtasks",
+                            valueText = if (subtasksList.isEmpty()) "None" else "${subtasksList.size} steps",
+                            onClick = { activeSubPopup = EditorSubPopup.SUBTASKS }
+                        )
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        // Bottom Full-Width Coral "Continue" Button (Matches Screenshot 7)
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(54.dp)
-                                .drawBehind {
-                                    drawRoundRect(
-                                        color = InkBlack,
-                                        topLeft = Offset(4.dp.toPx(), 4.dp.toPx()),
-                                        size = size,
-                                        cornerRadius = CornerRadius(27.dp.toPx(), 27.dp.toPx())
-                                    )
-                                }
+                                .height(52.dp)
                                 .clip(RoundedCornerShape(50))
                                 .background(NeoCoral)
                                 .border(2.dp, InkBlack, RoundedCornerShape(50))
                                 .clickable {
-                                    val finalTitle = title.ifBlank { "Untitled Step" }
-                                    if (draftSubtaskTitle.isNotBlank()) {
-                                        subtasksList.add(draftSubtaskTitle.trim() to draftSubtaskStage.trim())
-                                    }
+                                    val finalTitle = title.ifBlank { "Task" }
                                     onSave(
                                         existingTask?.id ?: 0L,
                                         finalTitle,
@@ -719,8 +433,10 @@ fun StructuredTaskEditorDialog(
                                         durationMinutes,
                                         colorKey,
                                         iconKey,
-                                        subjectTag,
+                                        folderName,
+                                        sectionName,
                                         recurrence,
+                                        recurrenceDayOfMonth,
                                         subtasksList.toList(),
                                         existingTask?.sortOrder ?: 0
                                     )
@@ -729,9 +445,9 @@ fun StructuredTaskEditorDialog(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = if (existingTask == null) "Continue • Add to Structure" else "Save Changes",
+                                text = "Continue",
                                 style = MaterialTheme.typography.titleLarge,
-                                color = InkBlack
+                                color = PureWhiteSurface
                             )
                         }
                     }
@@ -739,17 +455,725 @@ fun StructuredTaskEditorDialog(
             }
         }
     }
+
+    // Dedicated Sub-Popups so each setting has generous breathing room!
+    when (activeSubPopup) {
+        EditorSubPopup.DURATION_TIME -> {
+            TimeAndDurationSubPopup(
+                toInbox = toInbox,
+                taskMode = taskMode,
+                startTimeMinutes = startTimeMinutes,
+                durationMinutes = durationMinutes,
+                onModeChange = { taskMode = it },
+                onStartTimeChange = { startTimeMinutes = it },
+                onDurationChange = { durationMinutes = it },
+                onDismiss = { activeSubPopup = EditorSubPopup.NONE }
+            )
+        }
+
+        EditorSubPopup.COLOR_ICON -> {
+            ColorAndIconSubPopup(
+                selectedColorKey = colorKey,
+                selectedIconKey = iconKey,
+                onSelectColor = { colorKey = it },
+                onSelectIcon = { iconKey = it },
+                onDismiss = { activeSubPopup = EditorSubPopup.NONE }
+            )
+        }
+
+        EditorSubPopup.FOLDER_SECTION -> {
+            FolderAndSectionSubPopup(
+                folders = folders,
+                selectedFolder = folderName,
+                selectedSection = sectionName,
+                onSelectFolderAndSection = { f, s ->
+                    folderName = f
+                    sectionName = s
+                },
+                onDismiss = { activeSubPopup = EditorSubPopup.NONE }
+            )
+        }
+
+        EditorSubPopup.RECURRENCE -> {
+            RecurrenceSubPopup(
+                selectedRule = recurrence,
+                dayOfMonth = recurrenceDayOfMonth,
+                onSelectRule = { recurrence = it },
+                onSelectDayOfMonth = { recurrenceDayOfMonth = it },
+                onDismiss = { activeSubPopup = EditorSubPopup.NONE }
+            )
+        }
+
+        EditorSubPopup.SUBTASKS -> {
+            SubtasksSubPopup(
+                subtasks = subtasksList,
+                notes = notes,
+                onNotesChange = { notes = it },
+                onDismiss = { activeSubPopup = EditorSubPopup.NONE }
+            )
+        }
+
+        EditorSubPopup.NONE -> Unit
+    }
+}
+
+@Composable
+private fun EditorSummaryRow(
+    icon: ImageVector,
+    label: String,
+    valueText: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(PureWhiteSurface)
+            .border(1.5.dp, InkBlack, RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 13.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = InkBlack,
+                modifier = Modifier.size(19.dp)
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.titleMedium,
+                color = InkBlack
+            )
+        }
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = valueText,
+                style = MaterialTheme.typography.bodyMedium,
+                color = InkMuted
+            )
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = InkMuted,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
 }
 
 /**
- * Full-Screen Anti-Paralysis Focus View:
- * Isolates the single current task so the user never feels overwhelmed by the rest of the day.
- * Uses a battery-efficient timestamp calculation that only ticks while visible and unpaused.
+ * Sub-Popup 1: Time & Duration (Matches Screenshot 7's Time & Duration pickers!).
+ */
+@Composable
+private fun TimeAndDurationSubPopup(
+    toInbox: Boolean,
+    taskMode: TaskMode,
+    startTimeMinutes: Int,
+    durationMinutes: Int,
+    onModeChange: (TaskMode) -> Unit,
+    onStartTimeChange: (Int) -> Unit,
+    onDurationChange: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        NeoCard(
+            modifier = Modifier
+                .widthIn(max = 380.dp)
+                .fillMaxWidth(),
+            backgroundColor = PureWhiteSurface,
+            cornerRadius = 24.dp,
+            shadowOffset = 4.dp,
+            contentPadding = PaddingValues(20.dp)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text(
+                    text = "Time & Duration",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = InkBlack
+                )
+
+                if (!toInbox) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        NeoPillButton(
+                            text = "Timeless",
+                            selected = taskMode == TaskMode.TIMELESS_STEP,
+                            activeColor = NeoYellow,
+                            onClick = { onModeChange(TaskMode.TIMELESS_STEP) },
+                            modifier = Modifier.weight(1f)
+                        )
+                        NeoPillButton(
+                            text = "Timed",
+                            selected = taskMode == TaskMode.TIMED_BLOCK,
+                            activeColor = NeoCoral,
+                            onClick = { onModeChange(TaskMode.TIMED_BLOCK) },
+                            modifier = Modifier.weight(1f)
+                        )
+                        NeoPillButton(
+                            text = "Bubble",
+                            selected = taskMode == TaskMode.TOP_BUBBLE,
+                            activeColor = NeoSkyBlue,
+                            onClick = { onModeChange(TaskMode.TOP_BUBBLE) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                if (!toInbox && taskMode == TaskMode.TIMED_BLOCK) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(SoftSheetSurface)
+                            .padding(14.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = formatMinutesAsClock((startTimeMinutes - 15).coerceAtLeast(0)),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = InkMuted
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            NeoPillButton(
+                                text = "-15m",
+                                onClick = { onStartTimeChange((startTimeMinutes - 15).coerceAtLeast(0)) }
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(50))
+                                    .background(NeoCoral)
+                                    .padding(horizontal = 20.dp, vertical = 10.dp)
+                            ) {
+                                Text(
+                                    text = "${formatMinutesAsClock(startTimeMinutes)}–${formatMinutesAsClock((startTimeMinutes + durationMinutes).coerceAtMost(23 * 60 + 59))}",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = PureWhiteSurface
+                                )
+                            }
+                            NeoPillButton(
+                                text = "+15m",
+                                onClick = { onStartTimeChange((startTimeMinutes + 15).coerceAtMost(23 * 60 + 30)) }
+                            )
+                        }
+                        Text(
+                            text = formatMinutesAsClock((startTimeMinutes + 15).coerceAtMost(23 * 60 + 45)),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = InkMuted
+                        )
+                    }
+                }
+
+                // Duration Pill Strip (Matches Screenshot 7: 15, 30, 45m, 1h, 1.5h)
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Duration",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = InkBlack
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(50))
+                            .background(SoftSheetSurface)
+                            .padding(6.dp)
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf(
+                            15 to "15m",
+                            30 to "30m",
+                            45 to "45m",
+                            60 to "1h",
+                            90 to "1.5h",
+                            120 to "2h"
+                        ).forEach { (mins, label) ->
+                            val selected = durationMinutes == mins
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(50))
+                                    .background(if (selected) NeoCoral else PureWhiteSurface)
+                                    .clickable { onDurationChange(mins) }
+                                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = if (selected) PureWhiteSurface else InkBlack
+                                )
+                            }
+                        }
+                    }
+                }
+
+                NeoPillButton(
+                    text = "Done",
+                    selected = true,
+                    activeColor = NeoMintGreen,
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Sub-Popup 2: Color & Category Icon Picker.
+ */
+@Composable
+private fun ColorAndIconSubPopup(
+    selectedColorKey: String,
+    selectedIconKey: String,
+    onSelectColor: (String) -> Unit,
+    onSelectIcon: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val activeColor = neoColorForKey(selectedColorKey)
+    Dialog(onDismissRequest = onDismiss) {
+        NeoCard(
+            modifier = Modifier
+                .widthIn(max = 380.dp)
+                .fillMaxWidth(),
+            backgroundColor = PureWhiteSurface,
+            cornerRadius = 24.dp,
+            shadowOffset = 4.dp,
+            contentPadding = PaddingValues(20.dp)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text(
+                    text = "Color & Icon",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = InkBlack
+                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    NeoPalette.forEach { option ->
+                        val selected = selectedColorKey == option.key
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(CircleShape)
+                                .background(option.fill)
+                                .border(if (selected) 2.5.dp else 1.dp, InkBlack, CircleShape)
+                                .clickable { onSelectColor(option.key) },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (selected) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = option.label,
+                                    tint = InkBlack,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Clean 4-column rows of icons
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    TaskIconCatalog.chunked(4).forEach { rowItems ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly
+                        ) {
+                            rowItems.forEach { item ->
+                                val selected = selectedIconKey == item.key
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier
+                                        .width(68.dp)
+                                        .clickable { onSelectIcon(item.key) }
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(44.dp)
+                                            .clip(CircleShape)
+                                            .background(if (selected) activeColor else SoftSheetSurface)
+                                            .border(if (selected) 2.dp else 1.dp, InkBlack, CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = item.icon,
+                                            contentDescription = item.label,
+                                            tint = InkBlack,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = item.label,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = InkBlack
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                NeoPillButton(
+                    text = "Done",
+                    selected = true,
+                    activeColor = NeoMintGreen,
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Sub-Popup 3: Folder & Section Selector.
+ */
+@Composable
+private fun FolderAndSectionSubPopup(
+    folders: List<FolderEntity>,
+    selectedFolder: String,
+    selectedSection: String,
+    onSelectFolderAndSection: (String, String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val activeFolderObj = folders.firstOrNull { it.name.equals(selectedFolder, ignoreCase = true) }
+        ?: folders.firstOrNull()
+    val sections = activeFolderObj?.sections?.ifEmpty { listOf("Core") } ?: listOf("Core")
+
+    Dialog(onDismissRequest = onDismiss) {
+        NeoCard(
+            modifier = Modifier
+                .widthIn(max = 380.dp)
+                .fillMaxWidth(),
+            backgroundColor = PureWhiteSurface,
+            cornerRadius = 24.dp,
+            shadowOffset = 4.dp,
+            contentPadding = PaddingValues(20.dp)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Text(
+                    text = "Folder & Section",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = InkBlack
+                )
+
+                Text(
+                    text = "Folder",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = InkMuted
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    folders.forEach { folder ->
+                        val isSelected = folder.name.equals(selectedFolder, ignoreCase = true)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(if (isSelected) neoColorForKey(folder.colorKey) else SoftSheetSurface)
+                                .border(if (isSelected) 1.8.dp else 1.dp, InkBlack, RoundedCornerShape(12.dp))
+                                .clickable {
+                                    val firstSec = folder.sections.firstOrNull() ?: "Core"
+                                    onSelectFolderAndSection(folder.name, firstSec)
+                                }
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = folder.name,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = InkBlack
+                            )
+                            Text(
+                                text = folder.codeTag,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = InkCharcoal
+                            )
+                        }
+                    }
+                }
+
+                Text(
+                    text = "Section",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = InkMuted
+                )
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    sections.forEach { sec ->
+                        NeoPillButton(
+                            text = sec,
+                            selected = sec.equals(selectedSection, ignoreCase = true),
+                            activeColor = NeoYellow,
+                            onClick = {
+                                onSelectFolderAndSection(activeFolderObj?.name ?: selectedFolder, sec)
+                            }
+                        )
+                    }
+                }
+
+                NeoPillButton(
+                    text = "Done",
+                    selected = true,
+                    activeColor = NeoMintGreen,
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Sub-Popup 4: Repeat / Recurrence Picker (Supports Daily, Weekdays, Weekly, and Monthly on Day 1..31).
+ */
+@Composable
+private fun RecurrenceSubPopup(
+    selectedRule: RecurrenceRule,
+    dayOfMonth: Int,
+    onSelectRule: (RecurrenceRule) -> Unit,
+    onSelectDayOfMonth: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        NeoCard(
+            modifier = Modifier
+                .widthIn(max = 360.dp)
+                .fillMaxWidth(),
+            backgroundColor = PureWhiteSurface,
+            cornerRadius = 24.dp,
+            shadowOffset = 4.dp,
+            contentPadding = PaddingValues(20.dp)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = "Repeat",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = InkBlack
+                )
+
+                RecurrenceRule.entries.forEach { rule ->
+                    val selected = selectedRule == rule
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (selected) NeoYellow else SoftSheetSurface)
+                            .border(if (selected) 1.8.dp else 1.dp, InkBlack, RoundedCornerShape(12.dp))
+                            .clickable { onSelectRule(rule) }
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = rule.label,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = InkBlack
+                        )
+                        if (selected) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                tint = InkBlack,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
+
+                if (selectedRule == RecurrenceRule.MONTHLY) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Day of Month",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = InkBlack
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            NeoPillButton(
+                                text = "-",
+                                onClick = { onSelectDayOfMonth((dayOfMonth - 1).coerceAtLeast(1)) }
+                            )
+                            Text(
+                                text = "$dayOfMonth",
+                                style = MaterialTheme.typography.titleLarge,
+                                color = InkBlack
+                            )
+                            NeoPillButton(
+                                text = "+",
+                                onClick = { onSelectDayOfMonth((dayOfMonth + 1).coerceAtMost(31)) }
+                            )
+                        }
+                    }
+                }
+
+                NeoPillButton(
+                    text = "Done",
+                    selected = true,
+                    activeColor = NeoMintGreen,
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Sub-Popup 5: Subtasks & Notes Builder.
+ */
+@Composable
+private fun SubtasksSubPopup(
+    subtasks: MutableList<Pair<String, String>>,
+    notes: String,
+    onNotesChange: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var draftSubtask by remember { mutableStateOf("") }
+
+    Dialog(onDismissRequest = onDismiss) {
+        NeoCard(
+            modifier = Modifier
+                .widthIn(max = 380.dp)
+                .fillMaxWidth(),
+            backgroundColor = PureWhiteSurface,
+            cornerRadius = 24.dp,
+            shadowOffset = 4.dp,
+            contentPadding = PaddingValues(20.dp)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = "Subtasks & Notes",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = InkBlack
+                )
+
+                OutlinedTextField(
+                    value = notes,
+                    onValueChange = onNotesChange,
+                    placeholder = { Text("Notes") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                subtasks.forEachIndexed { idx, (subTitle, _) ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(SoftSheetSurface)
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "${idx + 1}. $subTitle",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = InkBlack,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Remove",
+                            tint = InkBlack,
+                            modifier = Modifier
+                                .size(18.dp)
+                                .clickable { subtasks.removeAt(idx) }
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = draftSubtask,
+                        onValueChange = { draftSubtask = it },
+                        placeholder = { Text("Subtask") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(
+                        onClick = {
+                            if (draftSubtask.isNotBlank()) {
+                                subtasks.add(draftSubtask.trim() to "STEP")
+                                draftSubtask = ""
+                            }
+                        },
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(NeoMintGreen)
+                            .border(1.8.dp, InkBlack, RoundedCornerShape(12.dp))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Add",
+                            tint = InkBlack
+                        )
+                    }
+                }
+
+                NeoPillButton(
+                    text = "Done",
+                    selected = true,
+                    activeColor = NeoMintGreen,
+                    onClick = {
+                        if (draftSubtask.isNotBlank()) {
+                            subtasks.add(draftSubtask.trim() to "STEP")
+                        }
+                        onDismiss()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Clean Focus Screen with Live Session Recording:
+ * - Play notes the current device time and feeds it to the timeline.
+ * - Pause notes a break segment ("14:00-14:37") without creating a separate Break task.
+ * - Resume starts a new segment ("14:47-...") and draws a dotted "Continued" line on the timeline!
  */
 @Composable
 fun AntiParalysisFocusScreen(
     focusItem: TaskWithSubtasks?,
     onBackToFlow: () -> Unit,
+    onStartOrResumeSession: (TaskEntity) -> Unit,
+    onPauseSession: (TaskEntity) -> Unit,
     onToggleSubtask: (SubtaskEntity) -> Unit,
     onAddQuickSubtask: (Long, String) -> Unit,
     onCompleteAndAdvance: () -> Unit,
@@ -763,27 +1187,21 @@ fun AntiParalysisFocusScreen(
             contentAlignment = Alignment.Center
         ) {
             NeoCard(
-                modifier = Modifier.widthIn(max = 480.dp),
+                modifier = Modifier.widthIn(max = 420.dp),
                 backgroundColor = NeoMintGreen,
-                cornerRadius = 22.dp,
-                shadowOffset = 5.dp,
+                cornerRadius = 24.dp,
+                shadowOffset = 4.dp,
                 contentPadding = PaddingValues(24.dp)
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = "All Steps Complete!",
+                        text = "All Done",
                         style = MaterialTheme.typography.displayMedium,
                         color = InkBlack
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "You have cleared every task in today's flow. Add a new step or enjoy your free time.",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = InkCharcoal
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
                     NeoPillButton(
-                        text = "Back to Day Flow",
+                        text = "Timeline",
                         selected = true,
                         activeColor = PureWhiteSurface,
                         onClick = onBackToFlow
@@ -797,7 +1215,7 @@ fun AntiParalysisFocusScreen(
     val task = focusItem.task
     val accent = neoColorForKey(task.colorKey)
     val targetSeconds = (task.durationMinutes * 60).coerceAtLeast(60)
-    var isRunning by remember(task.id) { mutableStateOf(true) }
+    var isRunning by remember(task.id) { mutableStateOf(task.activeSessionStartMin != null) }
     var elapsedSeconds by remember(task.id) { mutableLongStateOf(0L) }
     var newStepTitle by remember { mutableStateOf("") }
 
@@ -817,47 +1235,41 @@ fun AntiParalysisFocusScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 14.dp),
+            .padding(horizontal = 18.dp, vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Row(
             modifier = Modifier
-                .widthIn(max = 680.dp)
+                .widthIn(max = 560.dp)
                 .fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            horizontalArrangement = Arrangement.Start
         ) {
-            NeoPillButton(
-                text = "Back to Day Flow",
-                icon = Icons.AutoMirrored.Filled.ArrowBack,
+            IconButton(
                 onClick = onBackToFlow,
-                shadowOffset = 2.dp
-            )
-            Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(50))
-                    .background(NeoYellow)
-                    .border(2.dp, InkBlack, RoundedCornerShape(50))
-                    .padding(horizontal = 14.dp, vertical = 6.dp)
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(PureWhiteSurface)
+                    .border(1.8.dp, InkBlack, CircleShape)
             ) {
-                Text(
-                    text = "ANTI-PARALYSIS FOCUS MODE",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = InkBlack
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                    tint = InkBlack
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(18.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
         NeoCard(
             modifier = Modifier
-                .widthIn(max = 680.dp)
+                .widthIn(max = 560.dp)
                 .fillMaxWidth(),
             backgroundColor = accent,
-            cornerRadius = 24.dp,
-            shadowOffset = 6.dp,
-            contentPadding = PaddingValues(24.dp)
+            cornerRadius = 26.dp,
+            shadowOffset = 5.dp,
+            contentPadding = PaddingValues(22.dp)
         ) {
             Column(
                 modifier = Modifier.fillMaxWidth(),
@@ -865,87 +1277,98 @@ fun AntiParalysisFocusScreen(
             ) {
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(PureWhiteSurface)
-                        .border(2.dp, InkBlack, RoundedCornerShape(8.dp))
-                        .padding(horizontal = 12.dp, vertical = 4.dp)
-                ) {
-                    Text(
-                        text = "${task.subjectTag} • DO ONLY THIS RIGHT NOW",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = InkBlack
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                Box(
-                    modifier = Modifier
-                        .size(72.dp)
+                        .size(64.dp)
                         .clip(CircleShape)
                         .background(PureWhiteSurface)
-                        .border(2.5.dp, InkBlack, CircleShape),
+                        .border(2.dp, InkBlack, CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = iconForKey(task.iconKey),
                         contentDescription = null,
                         tint = InkBlack,
-                        modifier = Modifier.size(34.dp)
+                        modifier = Modifier.size(30.dp)
                     )
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Text(
+                    text = "${task.folderName} • ${task.sectionName}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = InkCharcoal
+                )
 
                 Text(
                     text = task.title,
                     style = MaterialTheme.typography.displayMedium,
                     color = InkBlack
                 )
-                if (task.notes.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = task.notes,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = InkCharcoal
-                    )
-                }
 
-                Spacer(modifier = Modifier.height(18.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                // Low-Power Monospace Countdown / Pacing Card
+                // Timer Card with Play / Pause (Break) / Resume
                 NeoCard(
                     modifier = Modifier.fillMaxWidth(),
                     backgroundColor = PureWhiteSurface,
-                    cornerRadius = 18.dp,
-                    shadowOffset = 3.dp,
+                    cornerRadius = 20.dp,
+                    shadowOffset = 2.5.dp,
                     contentPadding = PaddingValues(18.dp)
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            text = "OPTIONAL PACING TIMER (ZERO CLOCK PRESSURE)",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = InkMuted
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
                             text = String.format(Locale.US, "%02d:%02d", mins, secs),
-                            style = MaterialTheme.typography.displayLarge.copy(fontSize = 46.sp),
+                            style = MaterialTheme.typography.displayLarge.copy(fontSize = 44.sp),
                             color = InkBlack
                         )
                         Spacer(modifier = Modifier.height(10.dp))
-                        NeoProgressBar(progress = progress, fillColor = accent, height = 12.dp)
+                        NeoProgressBar(progress = progress, fillColor = accent, height = 10.dp)
+
+                        // Show recorded session segments if paused/resumed
+                        if (task.parsedSessionSegments.isNotEmpty() || task.activeSessionStartMin != null) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            val segLabels = buildList {
+                                task.parsedSessionSegments.forEachIndexed { idx, (s, e) ->
+                                    val prefix = if (idx == 0) "Started" else "Continued"
+                                    add("$prefix ${formatMinutesAsClock(s)}–${formatMinutesAsClock(e)}")
+                                }
+                                task.activeSessionStartMin?.let { activeMin ->
+                                    val prefix = if (task.parsedSessionSegments.isEmpty()) "Started" else "Continued"
+                                    add("$prefix ${formatMinutesAsClock(activeMin)}")
+                                }
+                            }
+                            Text(
+                                text = segLabels.joinToString("  ⋮  "),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = InkCharcoal
+                            )
+                        }
+
                         Spacer(modifier = Modifier.height(14.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             NeoPillButton(
-                                text = if (isRunning) "Pause Timer" else "Resume Timer",
+                                text = when {
+                                    isRunning -> "Pause (Break)"
+                                    task.parsedSessionSegments.isNotEmpty() -> "Resume (Continue)"
+                                    else -> "Play Timer"
+                                },
                                 icon = if (isRunning) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                selected = isRunning,
-                                activeColor = NeoYellow,
-                                onClick = { isRunning = !isRunning }
+                                selected = true,
+                                activeColor = if (isRunning) NeoYellow else NeoMintGreen,
+                                onClick = {
+                                    if (isRunning) {
+                                        isRunning = false
+                                        onPauseSession(task)
+                                    } else {
+                                        isRunning = true
+                                        onStartOrResumeSession(task)
+                                    }
+                                },
+                                modifier = Modifier.testTag("focus_play_pause_button")
                             )
                             NeoPillButton(
-                                text = "Reset",
+                                text = "",
                                 icon = Icons.Default.Refresh,
                                 onClick = { elapsedSeconds = 0L }
                             )
@@ -953,59 +1376,41 @@ fun AntiParalysisFocusScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(18.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
-                // Interactive Step-by-Step Checklist
+                // Subtasks Card
                 NeoCard(
                     modifier = Modifier.fillMaxWidth(),
                     backgroundColor = PureWhiteSurface,
-                    cornerRadius = 18.dp,
-                    shadowOffset = 3.dp,
+                    cornerRadius = 20.dp,
+                    shadowOffset = 2.5.dp,
                     contentPadding = PaddingValues(16.dp)
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text(
-                            text = "Step-by-Step Milestones (${focusItem.subtasks.count { it.isCompleted }}/${focusItem.subtasks.size})",
-                            style = MaterialTheme.typography.titleLarge,
+                            text = "Subtasks (${focusItem.subtasks.count { it.isCompleted }}/${focusItem.subtasks.size})",
+                            style = MaterialTheme.typography.titleMedium,
                             color = InkBlack
                         )
-                        if (focusItem.sortedSubtasks.isEmpty()) {
-                            Text(
-                                text = "Break this task into tiny micro-steps below if you feel stuck:",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = InkMuted
-                            )
-                        }
                         focusItem.sortedSubtasks.forEach { sub ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable { onToggleSubtask(sub) },
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    NeoSquareCheckbox(
-                                        checked = sub.isCompleted,
-                                        onCheckedChange = { onToggleSubtask(sub) },
-                                        accentColor = NeoMintGreen
-                                    )
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Text(
-                                        text = sub.title,
-                                        style = MaterialTheme.typography.titleMedium.copy(
-                                            textDecoration = if (sub.isCompleted) TextDecoration.LineThrough else TextDecoration.None
-                                        ),
-                                        color = if (sub.isCompleted) InkMuted else InkBlack
-                                    )
-                                }
+                                NeoSquareCheckbox(
+                                    checked = sub.isCompleted,
+                                    onCheckedChange = { onToggleSubtask(sub) },
+                                    accentColor = NeoMintGreen
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
                                 Text(
-                                    text = sub.stageTag,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = InkMuted
+                                    text = sub.title,
+                                    style = MaterialTheme.typography.bodyLarge.copy(
+                                        textDecoration = if (sub.isCompleted) TextDecoration.LineThrough else TextDecoration.None
+                                    ),
+                                    color = if (sub.isCompleted) InkMuted else InkBlack
                                 )
                             }
                         }
@@ -1018,7 +1423,7 @@ fun AntiParalysisFocusScreen(
                             OutlinedTextField(
                                 value = newStepTitle,
                                 onValueChange = { newStepTitle = it },
-                                placeholder = { Text("Add micro-step...") },
+                                placeholder = { Text("Subtask") },
                                 singleLine = true,
                                 modifier = Modifier.weight(1f)
                             )
@@ -1037,24 +1442,15 @@ fun AntiParalysisFocusScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                // Primary Complete & Advance to Next Step CTA
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(56.dp)
-                        .drawBehind {
-                            drawRoundRect(
-                                color = InkBlack,
-                                topLeft = Offset(4.dp.toPx(), 4.dp.toPx()),
-                                size = size,
-                                cornerRadius = CornerRadius(28.dp.toPx(), 28.dp.toPx())
-                            )
-                        }
+                        .height(52.dp)
                         .clip(RoundedCornerShape(50))
                         .background(NeoMintGreen)
-                        .border(2.5.dp, InkBlack, RoundedCornerShape(50))
+                        .border(2.dp, InkBlack, RoundedCornerShape(50))
                         .clickable(onClick = onCompleteAndAdvance)
                         .testTag("complete_and_advance_button"),
                     contentAlignment = Alignment.Center
@@ -1067,7 +1463,7 @@ fun AntiParalysisFocusScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "DONE — ADVANCE TO NEXT STEP",
+                            text = "Done • Next Task",
                             style = MaterialTheme.typography.titleLarge,
                             color = InkBlack
                         )

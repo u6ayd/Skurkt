@@ -14,11 +14,14 @@ interface PlannerDao {
     @Query("SELECT * FROM tasks ORDER BY sortOrder ASC, COALESCE(startTimeMinutes, 9999) ASC, id ASC")
     fun observeAllTasksWithSubtasks(): Flow<List<TaskWithSubtasks>>
 
-    @Query("SELECT * FROM day_templates ORDER BY id ASC")
-    fun observeAllTemplates(): Flow<List<DayTemplateEntity>>
+    @Query("SELECT * FROM folders ORDER BY id ASC")
+    fun observeAllFolders(): Flow<List<FolderEntity>>
 
     @Query("SELECT COUNT(*) FROM tasks")
     suspend fun countTasks(): Int
+
+    @Query("SELECT COUNT(*) FROM folders")
+    suspend fun countFolders(): Int
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTask(task: TaskEntity): Long
@@ -45,13 +48,16 @@ interface PlannerDao {
     suspend fun deleteSubtaskById(subtaskId: Long)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertTemplates(templates: List<DayTemplateEntity>)
+    suspend fun insertFolders(folders: List<FolderEntity>)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertTemplate(template: DayTemplateEntity): Long
+    suspend fun insertFolder(folder: FolderEntity): Long
 
-    @Query("UPDATE tasks SET isCompleted = 0 WHERE dateEpochDay = :epochDay")
-    suspend fun resetDayCompletion(epochDay: Long)
+    @Update
+    suspend fun updateFolder(folder: FolderEntity)
+
+    @Query("DELETE FROM folders WHERE id = :folderId")
+    suspend fun deleteFolderById(folderId: Long)
 
     @Query("SELECT MAX(sortOrder) FROM tasks WHERE dateEpochDay = :epochDay")
     suspend fun getMaxSortOrderForDay(epochDay: Long): Int?

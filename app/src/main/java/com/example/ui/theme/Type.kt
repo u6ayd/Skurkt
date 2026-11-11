@@ -4,17 +4,11 @@ import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.example.R
 
-val PlayfairFontFamily = FontFamily(
-    Font(R.font.playfair_display, FontWeight.Normal),
-    Font(R.font.playfair_display, FontWeight.Bold),
-    Font(R.font.playfair_display, FontWeight.Bold, FontStyle.Italic)
-)
-
+// 100% Geometric Plus Jakarta Sans + JetBrains Mono (Removed Playfair Serif per user feedback)
 val JakartaFontFamily = FontFamily(
     Font(R.font.plus_jakarta_sans, FontWeight.Normal),
     Font(R.font.plus_jakarta_sans, FontWeight.Medium),
@@ -30,55 +24,54 @@ val MonoFontFamily = FontFamily(
 
 val Typography = Typography(
     displayLarge = TextStyle(
-        fontFamily = PlayfairFontFamily,
+        fontFamily = JakartaFontFamily,
         fontWeight = FontWeight.Bold,
-        fontStyle = FontStyle.Italic,
-        fontSize = 36.sp,
-        lineHeight = 42.sp,
+        fontSize = 34.sp,
+        lineHeight = 40.sp,
+        letterSpacing = (-0.5).sp,
         color = InkBlack
     ),
     displayMedium = TextStyle(
-        fontFamily = PlayfairFontFamily,
+        fontFamily = JakartaFontFamily,
         fontWeight = FontWeight.Bold,
-        fontStyle = FontStyle.Italic,
-        fontSize = 28.sp,
-        lineHeight = 34.sp,
+        fontSize = 26.sp,
+        lineHeight = 32.sp,
+        letterSpacing = (-0.3).sp,
         color = InkBlack
     ),
     displaySmall = TextStyle(
-        fontFamily = PlayfairFontFamily,
-        fontWeight = FontWeight.Bold,
-        fontStyle = FontStyle.Italic,
-        fontSize = 22.sp,
-        lineHeight = 28.sp,
-        color = InkBlack
-    ),
-    headlineMedium = TextStyle(
         fontFamily = JakartaFontFamily,
         fontWeight = FontWeight.Bold,
         fontSize = 20.sp,
         lineHeight = 26.sp,
         color = InkBlack
     ),
-    titleLarge = TextStyle(
+    headlineMedium = TextStyle(
         fontFamily = JakartaFontFamily,
         fontWeight = FontWeight.Bold,
         fontSize = 18.sp,
         lineHeight = 24.sp,
         color = InkBlack
     ),
+    titleLarge = TextStyle(
+        fontFamily = JakartaFontFamily,
+        fontWeight = FontWeight.Bold,
+        fontSize = 17.sp,
+        lineHeight = 22.sp,
+        color = InkBlack
+    ),
     titleMedium = TextStyle(
         fontFamily = JakartaFontFamily,
         fontWeight = FontWeight.Bold,
-        fontSize = 15.sp,
-        lineHeight = 20.sp,
+        fontSize = 14.sp,
+        lineHeight = 19.sp,
         color = InkBlack
     ),
     bodyLarge = TextStyle(
         fontFamily = JakartaFontFamily,
         fontWeight = FontWeight.Medium,
         fontSize = 15.sp,
-        lineHeight = 22.sp,
+        lineHeight = 21.sp,
         color = InkCharcoal
     ),
     bodyMedium = TextStyle(
@@ -93,7 +86,6 @@ val Typography = Typography(
         fontWeight = FontWeight.Bold,
         fontSize = 12.sp,
         lineHeight = 16.sp,
-        letterSpacing = 0.5.sp,
         color = InkBlack
     ),
     labelMedium = TextStyle(
@@ -101,7 +93,6 @@ val Typography = Typography(
         fontWeight = FontWeight.Medium,
         fontSize = 11.sp,
         lineHeight = 14.sp,
-        letterSpacing = 0.4.sp,
         color = InkMuted
     )
 )

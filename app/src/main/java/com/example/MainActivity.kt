@@ -1,5 +1,7 @@
 package com.example
 
+import android.app.Activity
+import android.content.pm.ActivityInfo
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -9,7 +11,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -27,17 +28,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CenterFocusStrong
-import androidx.compose.material.icons.filled.FolderSpecial
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.ViewTimeline
 import androidx.compose.material3.Icon
@@ -52,11 +51,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.data.TaskMode
@@ -64,21 +62,21 @@ import com.example.ui.PlannerUiState
 import com.example.ui.PlannerViewModel
 import com.example.ui.StruktDestination
 import com.example.ui.components.AntiParalysisFocusScreen
-import com.example.ui.components.BlueprintsAndMatrixScreen
 import com.example.ui.components.DateAndWeekHeader
 import com.example.ui.components.DotGridBackground
 import com.example.ui.components.FlowStructureFilterBar
+import com.example.ui.components.FoldersAndSectionsScreen
 import com.example.ui.components.FreeTimeGapIndicator
 import com.example.ui.components.HybridSpineTaskRow
 import com.example.ui.components.NeoCard
 import com.example.ui.components.NeoDashedDivider
 import com.example.ui.components.NeoInboxPane
 import com.example.ui.components.NeoPillButton
-import com.example.ui.components.PinnedUpNextBanner
+import com.example.ui.components.ScheduleInboxMiniPopup
 import com.example.ui.components.StructuredTaskEditorDialog
+import com.example.ui.components.TaskDetailPopupModal
 import com.example.ui.components.TopAnytimeBubblesRow
 import com.example.ui.theme.InkBlack
-import com.example.ui.theme.InkCharcoal
 import com.example.ui.theme.InkMuted
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.theme.NeoCoral
@@ -110,19 +108,27 @@ fun StruktPlannerApp(
     uiState: PlannerUiState,
     viewModel: PlannerViewModel
 ) {
-    // Handle system Back button when on secondary tabs or modals
-    BackHandler(enabled = uiState.isEditorVisible || uiState.activeDestination != StruktDestination.FLOW) {
-        if (uiState.isEditorVisible) {
-            viewModel.closeTaskSheet()
-        } else {
-            viewModel.setDestination(StruktDestination.FLOW)
+    val context = LocalContext.current
+
+    BackHandler(
+        enabled = uiState.isEditorVisible ||
+            uiState.inspectingTask != null ||
+            uiState.schedulingInboxTask != null ||
+            uiState.selectedFolderId != null ||
+            uiState.activeDestination != StruktDestination.FLOW
+    ) {
+        when {
+            uiState.isEditorVisible -> viewModel.closeTaskSheet()
+            uiState.inspectingTask != null -> viewModel.closeInspectTaskModal()
+            uiState.schedulingInboxTask != null -> viewModel.closeScheduleInboxPopup()
+            uiState.selectedFolderId != null -> viewModel.selectFolder(null)
+            else -> viewModel.setDestination(StruktDestination.FLOW)
         }
     }
 
-    // Auto-dismiss transient toast banner after 3 seconds
     LaunchedEffect(uiState.statusBannerMessage) {
         if (uiState.statusBannerMessage != null) {
-            delay(3000L)
+            delay(2200L)
             viewModel.clearStatusBanner()
         }
     }
@@ -133,34 +139,48 @@ fun StruktPlannerApp(
             .windowInsetsPadding(WindowInsets.safeDrawing)
     ) {
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-            // Responsive threshold: Redmi Pad Pro 5G in horizontal/landscape or wide tablet split-view
-            val isTabletSplitLayout = maxWidth >= 760.dp
+            val naturalSplit = maxWidth >= 680.dp
+            val isTabletSplitLayout = uiState.forceSplitPreview ?: naturalSplit
+
+            val handleToggleOrientation = {
+                val activity = context as? Activity
+                if (activity != null) {
+                    activity.requestedOrientation = if (isTabletSplitLayout) {
+                        ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                    } else {
+                        ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                    }
+                }
+                viewModel.toggleSplitViewMode(isTabletSplitLayout)
+            }
 
             if (isTabletSplitLayout) {
                 TabletLandscapeSplitLayout(
                     uiState = uiState,
-                    viewModel = viewModel
+                    viewModel = viewModel,
+                    onToggleOrientation = handleToggleOrientation
                 )
             } else {
                 PortraitHandheldLayout(
                     uiState = uiState,
-                    viewModel = viewModel
+                    viewModel = viewModel,
+                    onToggleOrientation = handleToggleOrientation
                 )
             }
 
-            // Status Toast Banner at Top Center
+            // Minimal Toast Banner
             AnimatedVisibility(
                 visible = uiState.statusBannerMessage != null,
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = 12.dp)
+                    .padding(top = 10.dp)
             ) {
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(50))
                         .background(NeoMintGreen)
-                        .border(2.dp, InkBlack, RoundedCornerShape(50))
-                        .padding(horizontal = 18.dp, vertical = 8.dp)
+                        .border(1.8.dp, InkBlack, RoundedCornerShape(50))
+                        .padding(horizontal = 16.dp, vertical = 6.dp)
                 ) {
                     Text(
                         text = uiState.statusBannerMessage.orEmpty(),
@@ -170,15 +190,40 @@ fun StruktPlannerApp(
                 }
             }
 
-            // Task Creation / Edit Modal Sheet (Inspired by Screenshot 7)
+            // 1. Small Schedule Mini-Popup from Inbox "+"
+            uiState.schedulingInboxTask?.let { inboxTask ->
+                ScheduleInboxMiniPopup(
+                    task = inboxTask,
+                    onDismiss = { viewModel.closeScheduleInboxPopup() },
+                    onConfirmSchedule = { asTimed, startMin ->
+                        viewModel.confirmScheduleInboxTask(inboxTask, asTimed, startMin)
+                    }
+                )
+            }
+
+            // 2. Clean Task & Subtasks Detail Modal when clicking a task on the timeline
+            uiState.inspectingTask?.let { inspected ->
+                TaskDetailPopupModal(
+                    item = inspected,
+                    onDismiss = { viewModel.closeInspectTaskModal() },
+                    onToggleComplete = { viewModel.toggleTaskDone(inspected.task) },
+                    onToggleSubtask = viewModel::toggleSubtaskDone,
+                    onAddSubtask = { title -> viewModel.addQuickSubtask(inspected.task.id, title) },
+                    onStartFocus = { viewModel.enterFocusForTask(inspected.task.id) },
+                    onEditTask = { viewModel.openEditTaskSheet(inspected) }
+                )
+            }
+
+            // 3. Progressive Sub-Popup Task Editor Sheet
             if (uiState.isEditorVisible) {
                 StructuredTaskEditorDialog(
                     selectedDate = uiState.selectedLocalDate,
+                    folders = uiState.folders,
                     editingItem = uiState.editingTask,
                     defaultMode = uiState.editorDefaultMode,
                     defaultToInbox = uiState.editorTargetInbox,
                     onDismiss = { viewModel.closeTaskSheet() },
-                    onSave = { id, title, notes, toInbox, mode, startMin, duration, color, icon, tag, recur, subs, order ->
+                    onSave = { id, title, notes, toInbox, mode, startMin, duration, color, icon, folder, section, recur, dayOfMonth, subs, order ->
                         viewModel.saveTaskFromEditor(
                             existingId = id,
                             title = title,
@@ -189,8 +234,10 @@ fun StruktPlannerApp(
                             durationMinutes = duration,
                             colorKey = color,
                             iconKey = icon,
-                            subjectTag = tag,
+                            folderName = folder,
+                            sectionName = section,
                             recurrence = recur,
+                            recurrenceDayOfMonth = dayOfMonth,
                             subtasks = subs,
                             sortOrder = order
                         )
@@ -204,25 +251,26 @@ fun StruktPlannerApp(
 }
 
 /**
- * Redmi Pad Pro 5G Horizontal Split-Screen Layout (Inspired by Screenshot 5 iPad view + Screenshot 1 Trackerly Top Bar):
- * - Left Column: Always-accessible Brain-Dump Inbox + Readiness Stats + one-tap "+" to schedule into the day.
- * - Right Area: Top Navigation Bar + Date/Week Ribbon + Main White Structured Sheet (or Blueprints/Focus).
+ * Redmi Pad Pro 5G Horizontal Split-Screen Layout (Matches Screenshot 5 iPad view):
+ * Left Sidebar: Brain-dump Inbox.
+ * Right Workspace: Clean Month Header + Week Strip + White Timeline Sheet (or Folders/Focus).
  */
 @Composable
 private fun TabletLandscapeSplitLayout(
     uiState: PlannerUiState,
-    viewModel: PlannerViewModel
+    viewModel: PlannerViewModel,
+    onToggleOrientation: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 14.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp)
+        horizontalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // Left Sidebar (330.dp width) — Persistent Brain-Dump Inbox & Quick Readiness
+        // Left Sidebar — Inbox Panel
         Box(
             modifier = Modifier
-                .width(340.dp)
+                .width(300.dp)
                 .fillMaxHeight()
         ) {
             NeoInboxPane(
@@ -231,94 +279,55 @@ private fun TabletLandscapeSplitLayout(
                 completedCount = uiState.completedDayTasksCount,
                 totalCount = uiState.totalDayTasksCount,
                 onQuickAddInbox = { title -> viewModel.quickAddInboxTask(title) },
-                onOpenFullCreateForInbox = {
-                    viewModel.openCreateTaskSheet(defaultMode = TaskMode.TIMELESS_STEP, forInbox = true)
-                },
-                onSendToDayTimeless = { task -> viewModel.sendInboxTaskToSelectedDay(task) },
+                onOpenSchedulePopup = { task -> viewModel.openScheduleInboxPopup(task) },
                 onEditInboxTask = { item -> viewModel.openEditTaskSheet(item) }
             )
         }
 
-        // Vertical Divider Line
+        // Subtle Vertical Divider
         Box(
             modifier = Modifier
-                .width(2.dp)
+                .width(1.5.dp)
                 .fillMaxHeight()
                 .padding(vertical = 12.dp)
-                .background(InkBlack.copy(alpha = 0.15f))
+                .background(InkBlack.copy(alpha = 0.12f))
         )
 
-        // Right Main Workspace (Day Flow / Blueprints & Matrix / Focus Mode)
+        // Right Main Workspace
         Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxHeight()
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                // Top Brand & Workspace Switcher Bar (Inspired by Screenshot 1: "Trackerly STUDY OS")
+                // Centered Geometric Icon-Only Switcher Bar at Top Right
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 10.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                        .padding(bottom = 8.dp),
+                    horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.horizontalScroll(rememberScrollState())
-                    ) {
-                        NeoPillButton(
-                            text = "Day Flow",
-                            icon = Icons.Default.ViewTimeline,
-                            selected = uiState.activeDestination == StruktDestination.FLOW,
-                            activeColor = NeoYellow,
-                            onClick = { viewModel.setDestination(StruktDestination.FLOW) },
-                            modifier = Modifier.testTag("tablet_nav_flow")
-                        )
-                        NeoPillButton(
-                            text = "Blueprints & Matrix",
-                            icon = Icons.Default.FolderSpecial,
-                            selected = uiState.activeDestination == StruktDestination.BLUEPRINTS,
-                            activeColor = NeoSkyBlue,
-                            onClick = { viewModel.setDestination(StruktDestination.BLUEPRINTS) },
-                            modifier = Modifier.testTag("tablet_nav_blueprints")
-                        )
-                        NeoPillButton(
-                            text = "Focus Now",
-                            icon = Icons.Default.CenterFocusStrong,
-                            selected = uiState.activeDestination == StruktDestination.FOCUS,
-                            activeColor = NeoMintGreen,
-                            onClick = { viewModel.setDestination(StruktDestination.FOCUS) },
-                            modifier = Modifier.testTag("tablet_nav_focus")
-                        )
-                    }
-
-                    NeoPillButton(
-                        text = "+ New Step",
-                        icon = Icons.Default.Add,
-                        selected = true,
-                        activeColor = NeoCoral,
-                        onClick = {
-                            viewModel.openCreateTaskSheet(
-                                defaultMode = TaskMode.TIMELESS_STEP,
-                                forInbox = false
-                            )
-                        },
-                        modifier = Modifier.testTag("tablet_new_step_button")
+                    GeometricIconNavPill(
+                        activeDestination = uiState.activeDestination,
+                        includeInbox = false,
+                        onSelectDestination = viewModel::setDestination
                     )
                 }
 
                 when (uiState.activeDestination) {
-                    StruktDestination.BLUEPRINTS -> {
-                        BlueprintsAndMatrixScreen(
+                    StruktDestination.FOLDERS -> {
+                        FoldersAndSectionsScreen(
                             allTasks = uiState.allTasks,
-                            templates = uiState.templates,
+                            folders = uiState.folders,
+                            selectedFolderId = uiState.selectedFolderId,
                             searchQuery = uiState.searchQuery,
                             onSearchQueryChange = viewModel::setSearchQuery,
-                            onApplyTemplate = viewModel::applyBlueprintToSelectedDay,
-                            onSaveCurrentDayAsTemplate = viewModel::saveCurrentDayAsBlueprint,
-                            onToggleSubtask = viewModel::toggleSubtaskDone
+                            onSelectFolder = viewModel::selectFolder,
+                            onCreateFolder = viewModel::createNewFolder,
+                            onAddSectionToFolder = viewModel::addSectionToFolder,
+                            onTaskClick = { item -> viewModel.openInspectTaskModal(item.task.id) },
+                            onToggleTaskDone = viewModel::toggleTaskDone
                         )
                     }
 
@@ -326,6 +335,8 @@ private fun TabletLandscapeSplitLayout(
                         AntiParalysisFocusScreen(
                             focusItem = uiState.activeFocusTask,
                             onBackToFlow = { viewModel.setDestination(StruktDestination.FLOW) },
+                            onStartOrResumeSession = viewModel::startOrResumeFocusTimer,
+                            onPauseSession = viewModel::pauseFocusTimer,
                             onToggleSubtask = viewModel::toggleSubtaskDone,
                             onAddQuickSubtask = viewModel::addQuickSubtask,
                             onCompleteAndAdvance = viewModel::completeFocusedTaskAndAdvance
@@ -335,14 +346,14 @@ private fun TabletLandscapeSplitLayout(
                     else -> {
                         DayFlowSheetContent(
                             uiState = uiState,
-                            viewModel = viewModel
+                            viewModel = viewModel,
+                            onToggleOrientation = onToggleOrientation
                         )
                     }
                 }
             }
 
-            // Floating "+" Coral Action Button in bottom-right corner (Matches Screenshot 5)
-            if (uiState.activeDestination == StruktDestination.FLOW) {
+            if (uiState.activeDestination != StruktDestination.FOCUS) {
                 NeoFloatingAddButton(
                     onClick = {
                         viewModel.openCreateTaskSheet(
@@ -360,13 +371,13 @@ private fun TabletLandscapeSplitLayout(
 }
 
 /**
- * Portrait / Vertical Handheld Layout (Inspired by Screenshot 6):
- * Full-width content + Structured's floating bottom pill navigation bar + bottom-right Coral "+" FAB.
+ * Portrait Handheld Layout (Matches Screenshot 6 + Centered Icon-Only Bottom Nav Bar).
  */
 @Composable
 private fun PortraitHandheldLayout(
     uiState: PlannerUiState,
-    viewModel: PlannerViewModel
+    viewModel: PlannerViewModel,
+    onToggleOrientation: () -> Unit
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -382,29 +393,23 @@ private fun PortraitHandheldLayout(
                         completedCount = uiState.completedDayTasksCount,
                         totalCount = uiState.totalDayTasksCount,
                         onQuickAddInbox = { title -> viewModel.quickAddInboxTask(title) },
-                        onOpenFullCreateForInbox = {
-                            viewModel.openCreateTaskSheet(
-                                defaultMode = TaskMode.TIMELESS_STEP,
-                                forInbox = true
-                            )
-                        },
-                        onSendToDayTimeless = { task ->
-                            viewModel.sendInboxTaskToSelectedDay(task)
-                            viewModel.setDestination(StruktDestination.FLOW)
-                        },
+                        onOpenSchedulePopup = { task -> viewModel.openScheduleInboxPopup(task) },
                         onEditInboxTask = { item -> viewModel.openEditTaskSheet(item) }
                     )
                 }
 
-                StruktDestination.BLUEPRINTS -> {
-                    BlueprintsAndMatrixScreen(
+                StruktDestination.FOLDERS -> {
+                    FoldersAndSectionsScreen(
                         allTasks = uiState.allTasks,
-                        templates = uiState.templates,
+                        folders = uiState.folders,
+                        selectedFolderId = uiState.selectedFolderId,
                         searchQuery = uiState.searchQuery,
                         onSearchQueryChange = viewModel::setSearchQuery,
-                        onApplyTemplate = viewModel::applyBlueprintToSelectedDay,
-                        onSaveCurrentDayAsTemplate = viewModel::saveCurrentDayAsBlueprint,
-                        onToggleSubtask = viewModel::toggleSubtaskDone
+                        onSelectFolder = viewModel::selectFolder,
+                        onCreateFolder = viewModel::createNewFolder,
+                        onAddSectionToFolder = viewModel::addSectionToFolder,
+                        onTaskClick = { item -> viewModel.openInspectTaskModal(item.task.id) },
+                        onToggleTaskDone = viewModel::toggleTaskDone
                     )
                 }
 
@@ -412,6 +417,8 @@ private fun PortraitHandheldLayout(
                     AntiParalysisFocusScreen(
                         focusItem = uiState.activeFocusTask,
                         onBackToFlow = { viewModel.setDestination(StruktDestination.FLOW) },
+                        onStartOrResumeSession = viewModel::startOrResumeFocusTimer,
+                        onPauseSession = viewModel::pauseFocusTimer,
                         onToggleSubtask = viewModel::toggleSubtaskDone,
                         onAddQuickSubtask = viewModel::addQuickSubtask,
                         onCompleteAndAdvance = viewModel::completeFocusedTaskAndAdvance
@@ -421,80 +428,29 @@ private fun PortraitHandheldLayout(
                 StruktDestination.FLOW -> {
                     DayFlowSheetContent(
                         uiState = uiState,
-                        viewModel = viewModel
+                        viewModel = viewModel,
+                        onToggleOrientation = onToggleOrientation
                     )
                 }
             }
         }
 
-        // Structured-Style Floating Bottom Pill Bar + "+" FAB (Directly inspired by Screenshot 6)
+        // Geometric Centered Icon-Only Bottom Bar + "+" FAB
         Row(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .navigationBarsPadding()
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Floating Pill Bar
-            Row(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(60.dp)
-                    .drawBehind {
-                        drawRoundRect(
-                            color = InkBlack,
-                            topLeft = Offset(3.5.dp.toPx(), 3.5.dp.toPx()),
-                            size = size,
-                            cornerRadius = CornerRadius(30.dp.toPx(), 30.dp.toPx())
-                        )
-                    }
-                    .clip(RoundedCornerShape(50))
-                    .background(PureWhiteSurface)
-                    .border(2.dp, InkBlack, RoundedCornerShape(50))
-                    .padding(horizontal = 8.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                val navItems = listOf(
-                    Triple(StruktDestination.INBOX, "Inbox", Icons.Default.Inbox),
-                    Triple(StruktDestination.FLOW, "Timeline", Icons.Default.ViewTimeline),
-                    Triple(StruktDestination.BLUEPRINTS, "Blueprints", Icons.Default.FolderSpecial),
-                    Triple(StruktDestination.FOCUS, "Focus", Icons.Default.CenterFocusStrong)
-                )
-                navItems.forEach { (dest, label, icon) ->
-                    val selected = uiState.activeDestination == dest
-                    Column(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(50))
-                            .background(if (selected) NeoYellow else PureWhiteSurface)
-                            .then(
-                                if (selected) Modifier.border(1.5.dp, InkBlack, RoundedCornerShape(50))
-                                else Modifier
-                            )
-                            .clickable(role = Role.Tab) { viewModel.setDestination(dest) }
-                            .padding(horizontal = 12.dp, vertical = 6.dp)
-                            .testTag("bottom_nav_${dest.name.lowercase()}"),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(
-                            imageVector = icon,
-                            contentDescription = label,
-                            tint = InkBlack,
-                            modifier = Modifier.size(19.dp)
-                        )
-                        Text(
-                            text = label,
-                            style = MaterialTheme.typography.labelMedium.copy(
-                                fontSize = 10.sp,
-                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                                color = InkBlack
-                            )
-                        )
-                    }
-                }
-            }
+            GeometricIconNavPill(
+                activeDestination = uiState.activeDestination,
+                includeInbox = true,
+                onSelectDestination = viewModel::setDestination,
+                modifier = Modifier.weight(1f)
+            )
 
             Spacer(modifier = Modifier.width(12.dp))
 
@@ -511,13 +467,74 @@ private fun PortraitHandheldLayout(
 }
 
 /**
- * Main Day Flow Sheet combining the 7-Day Week Ribbon, Pinned Anti-Paralysis Banner,
- * Top Anytime Bubbles, and Unified Timeless + Timed Vertical Capsule Spine.
+ * Geometric Icon-Only Navigation Pill — Every icon is strictly centered and aligned with zero text clutter.
+ */
+@Composable
+private fun GeometricIconNavPill(
+    activeDestination: StruktDestination,
+    includeInbox: Boolean,
+    onSelectDestination: (StruktDestination) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val navItems = buildList {
+        if (includeInbox) add(Triple(StruktDestination.INBOX, "Inbox", Icons.Default.Inbox))
+        add(Triple(StruktDestination.FLOW, "Timeline", Icons.Default.ViewTimeline))
+        add(Triple(StruktDestination.FOLDERS, "Folders", Icons.Default.Folder))
+        add(Triple(StruktDestination.FOCUS, "Focus", Icons.Default.CenterFocusStrong))
+    }
+
+    Row(
+        modifier = modifier
+            .height(54.dp)
+            .drawBehind {
+                drawRoundRect(
+                    color = InkBlack,
+                    topLeft = Offset(3.dp.toPx(), 3.dp.toPx()),
+                    size = size,
+                    cornerRadius = CornerRadius(27.dp.toPx(), 27.dp.toPx())
+                )
+            }
+            .clip(RoundedCornerShape(50))
+            .background(PureWhiteSurface)
+            .border(1.8.dp, InkBlack, RoundedCornerShape(50))
+            .padding(horizontal = 10.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        navItems.forEach { (dest, contentDesc, icon) ->
+            val selected = activeDestination == dest
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(if (selected) NeoCoral else PureWhiteSurface)
+                    .then(
+                        if (selected) Modifier.border(1.5.dp, InkBlack, CircleShape)
+                        else Modifier
+                    )
+                    .clickable(role = Role.Tab) { onSelectDestination(dest) }
+                    .testTag("bottom_nav_${dest.name.lowercase()}"),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = contentDesc,
+                    tint = InkBlack,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Clean Single-Window Day Flow Sheet (Removed separate upper "Do This Next" card so the calendar/sheet never shifts!).
  */
 @Composable
 private fun DayFlowSheetContent(
     uiState: PlannerUiState,
-    viewModel: PlannerViewModel
+    viewModel: PlannerViewModel,
+    onToggleOrientation: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         DateAndWeekHeader(
@@ -526,27 +543,26 @@ private fun DayFlowSheetContent(
             onSelectDate = viewModel::selectDate,
             onShiftWeek = viewModel::shiftWeek,
             onJumpToToday = viewModel::jumpToToday,
-            onResetDay = viewModel::resetSelectedDayProgress
+            onToggleOrientationMode = onToggleOrientation
         )
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
-        // White Neo-Brutalist Sheet Container (Matches Screenshot 5 & 6 white timeline sheet with 2.dp ink border)
         NeoCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
             backgroundColor = PureWhiteSurface,
             cornerRadius = 26.dp,
-            shadowOffset = 5.dp,
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
+            shadowOffset = 4.dp,
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
         ) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 96.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Sheet Handle Pill at Top Center (Like Screenshot 5 & 6)
+                // Sheet Handle Pill at Top Center (Matches Screenshot 5 & 6)
                 item {
                     Box(
                         modifier = Modifier.fillMaxWidth(),
@@ -554,109 +570,63 @@ private fun DayFlowSheetContent(
                     ) {
                         Box(
                             modifier = Modifier
-                                .width(44.dp)
-                                .height(5.dp)
+                                .width(40.dp)
+                                .height(4.dp)
                                 .clip(RoundedCornerShape(50))
-                                .background(InkBlack.copy(alpha = 0.2f))
+                                .background(InkBlack.copy(alpha = 0.16f))
                         )
                     }
                 }
 
-                // 1. Pinned Anti-Paralysis "UP NEXT" Card
-                if (uiState.upNextTask != null) {
+                // 1. Top Routine Bubbles (Clean, no "+ Add Bubble" clutter)
+                if (uiState.topBubbles.isNotEmpty()) {
                     item {
-                        PinnedUpNextBanner(
-                            upNext = uiState.upNextTask,
-                            onEnterFocus = {
-                                viewModel.enterFocusForTask(uiState.upNextTask.task.id)
-                            },
-                            onCompleteNow = {
-                                viewModel.toggleTaskDone(uiState.upNextTask.task)
+                        TopAnytimeBubblesRow(
+                            bubbles = uiState.topBubbles,
+                            onBubbleClick = { item ->
+                                viewModel.openInspectTaskModal(item.task.id)
                             }
                         )
                     }
+                    item {
+                        NeoDashedDivider()
+                    }
                 }
 
-                // 2. Top Circular "Anytime" Routine Bubbles (Like Screenshot 5 & 6)
-                item {
-                    TopAnytimeBubblesRow(
-                        bubbles = uiState.topBubbles,
-                        onToggleBubble = viewModel::toggleTaskDone,
-                        onEditBubble = viewModel::openEditTaskSheet,
-                        onAddBubble = {
-                            viewModel.openCreateTaskSheet(
-                                defaultMode = TaskMode.TOP_BUBBLE,
-                                forInbox = false
-                            )
-                        }
-                    )
-                }
-
-                item {
-                    NeoDashedDivider()
-                }
-
-                // 3. Structure Mode Filter & Quick Add Strip (All / Timeless Steps / Timed Slots)
+                // 2. Minimal Filter Bar (All / Timeless / Timed)
                 item {
                     FlowStructureFilterBar(
                         currentFilter = uiState.flowFilter,
-                        onSelectFilter = viewModel::setFlowFilter,
-                        onAddTimelessStep = {
-                            viewModel.openCreateTaskSheet(
-                                defaultMode = TaskMode.TIMELESS_STEP,
-                                forInbox = false
-                            )
-                        },
-                        onAddTimedBlock = {
-                            viewModel.openCreateTaskSheet(
-                                defaultMode = TaskMode.TIMED_BLOCK,
-                                forInbox = false
-                            )
-                        }
+                        onSelectFilter = viewModel::setFlowFilter
                     )
                 }
 
-                // 4. Unified Timeless + Timed Vertical Capsule Spine
+                // 3. Unified Timeless + Timed Vertical Capsule Spine
                 if (uiState.spineFlowTasks.isEmpty()) {
                     item {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 32.dp),
+                                .padding(vertical = 36.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                text = "No Tasks in This View Yet",
-                                style = MaterialTheme.typography.displaySmall,
+                                text = "No Tasks Scheduled",
+                                style = MaterialTheme.typography.titleLarge,
                                 color = InkBlack
                             )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = "Add a Timeless Step (so you know what's next without clock pressure), a Timed Slot, or load a Day Blueprint.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = InkMuted
+                            Spacer(modifier = Modifier.height(10.dp))
+                            NeoPillButton(
+                                text = "+ Add Task",
+                                selected = true,
+                                activeColor = NeoYellow,
+                                onClick = {
+                                    viewModel.openCreateTaskSheet(
+                                        defaultMode = TaskMode.TIMELESS_STEP,
+                                        forInbox = false
+                                    )
+                                }
                             )
-                            Spacer(modifier = Modifier.height(14.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                NeoPillButton(
-                                    text = "+ Timeless Step",
-                                    selected = true,
-                                    activeColor = NeoYellow,
-                                    onClick = {
-                                        viewModel.openCreateTaskSheet(
-                                            defaultMode = TaskMode.TIMELESS_STEP,
-                                            forInbox = false
-                                        )
-                                    }
-                                )
-                                NeoPillButton(
-                                    text = "Load Day Blueprint",
-                                    selected = false,
-                                    onClick = {
-                                        viewModel.setDestination(StruktDestination.BLUEPRINTS)
-                                    }
-                                )
-                            }
                         }
                     }
                 } else {
@@ -666,7 +636,6 @@ private fun DayFlowSheetContent(
                     ) { index, item ->
                         val isUpNext = uiState.upNextTask?.task?.id == item.task.id
 
-                        // Check if there is a free-time gap between the previous timed task and this timed task
                         if (index > 0) {
                             val prev = uiState.spineFlowTasks[index - 1].task
                             val curr = item.task
@@ -696,16 +665,8 @@ private fun DayFlowSheetContent(
                             item = item,
                             sequenceNumber = index + 1,
                             isUpNext = isUpNext,
-                            canMoveUp = index > 0,
-                            canMoveDown = index < uiState.spineFlowTasks.lastIndex,
                             onToggleComplete = { viewModel.toggleTaskDone(item.task) },
-                            onToggleSubtask = viewModel::toggleSubtaskDone,
-                            onAddQuickSubtask = { subTitle ->
-                                viewModel.addQuickSubtask(item.task.id, subTitle)
-                            },
-                            onMoveUp = { viewModel.moveSpineTask(item.task.id, moveUp = true) },
-                            onMoveDown = { viewModel.moveSpineTask(item.task.id, moveUp = false) },
-                            onEditTask = { viewModel.openEditTaskSheet(item) }
+                            onOpenTaskDetail = { viewModel.openInspectTaskModal(item.task.id) }
                         )
                     }
                 }
@@ -721,26 +682,26 @@ private fun NeoFloatingAddButton(
 ) {
     Box(
         modifier = modifier
-            .size(58.dp)
+            .size(54.dp)
             .drawBehind {
                 drawCircle(
                     color = InkBlack,
                     radius = size.minDimension / 2f,
-                    center = Offset(center.x + 3.5.dp.toPx(), center.y + 3.5.dp.toPx())
+                    center = Offset(center.x + 3.dp.toPx(), center.y + 3.dp.toPx())
                 )
             }
             .clip(CircleShape)
             .background(NeoCoral)
-            .border(2.5.dp, InkBlack, CircleShape)
+            .border(2.dp, InkBlack, CircleShape)
             .clickable(role = Role.Button, onClick = onClick)
             .testTag("fab_add_task"),
         contentAlignment = Alignment.Center
     ) {
         Icon(
             imageVector = Icons.Default.Add,
-            contentDescription = "Add Task to Structure",
-            tint = InkBlack,
-            modifier = Modifier.size(28.dp)
+            contentDescription = "Add Task",
+            tint = PureWhiteSurface,
+            modifier = Modifier.size(26.dp)
         )
     }
 }

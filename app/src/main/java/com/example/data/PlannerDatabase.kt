@@ -6,8 +6,8 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 @Database(
-    entities = [TaskEntity::class, SubtaskEntity::class, DayTemplateEntity::class],
-    version = 1,
+    entities = [TaskEntity::class, SubtaskEntity::class, FolderEntity::class],
+    version = 2,
     exportSchema = false
 )
 abstract class PlannerDatabase : RoomDatabase() {

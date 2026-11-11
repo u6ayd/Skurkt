@@ -30,6 +30,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.DirectionsBike
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.AccessAlarm
+import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Check
@@ -46,7 +47,6 @@ import androidx.compose.material.icons.filled.Shower
 import androidx.compose.material.icons.filled.TaskAlt
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -59,10 +59,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -75,10 +73,6 @@ import com.example.ui.theme.NeoYellow
 import com.example.ui.theme.PaperCanvas
 import com.example.ui.theme.PureWhiteSurface
 
-/**
- * Single-pass Canvas dot-grid background matching the Trackerly Neo-Brutalist screenshots.
- * Zero recomposition overhead and battery-friendly.
- */
 @Composable
 fun DotGridBackground(
     modifier: Modifier = Modifier,
@@ -91,8 +85,8 @@ fun DotGridBackground(
             .fillMaxSize()
             .background(backgroundColor)
             .drawBehind {
-                val stepPx = 22.dp.toPx()
-                val radiusPx = 1.35.dp.toPx()
+                val stepPx = 24.dp.toPx()
+                val radiusPx = 1.25.dp.toPx()
                 var x = stepPx / 2f
                 while (x < size.width) {
                     var y = stepPx / 2f
@@ -111,28 +105,24 @@ fun DotGridBackground(
     )
 }
 
-/**
- * Neo-Brutalist Card with crisp 2.dp ink stroke and hard solid offset shadow.
- */
 @Composable
 fun NeoCard(
     modifier: Modifier = Modifier,
     backgroundColor: Color = PureWhiteSurface,
     borderColor: Color = InkBlack,
-    cornerRadius: Dp = 18.dp,
-    shadowOffset: Dp = 4.dp,
-    borderWidth: Dp = 2.dp,
+    cornerRadius: Dp = 20.dp,
+    shadowOffset: Dp = 3.dp,
+    borderWidth: Dp = 1.8.dp,
     onClick: (() -> Unit)? = null,
     contentPadding: PaddingValues = PaddingValues(16.dp),
     content: @Composable BoxScope.() -> Unit
 ) {
     val shape = RoundedCornerShape(cornerRadius)
-    val shadowPx = shadowOffset
     Box(
         modifier = modifier
             .drawBehind {
-                if (shadowPx > 0.dp) {
-                    val offsetPx = shadowPx.toPx()
+                if (shadowOffset > 0.dp) {
+                    val offsetPx = shadowOffset.toPx()
                     val radiusPx = cornerRadius.toPx()
                     drawRoundRect(
                         color = borderColor,
@@ -158,7 +148,7 @@ fun NeoCard(
 }
 
 /**
- * Folder-tabbed Neo-Brutalist card inspired directly by Screenshot 2 ("PHY 12", "CHEM 12").
+ * Clean Folder Card for organizing tasks by Folder & Sections (Physics, Reading, Sports, etc.).
  */
 @Composable
 fun NeoFolderCard(
@@ -169,19 +159,17 @@ fun NeoFolderCard(
     tagLabel: String,
     fillColor: Color,
     onCardClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    actionLabel: String? = null
+    modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
-        // Folder top-left protruding tab
         Box(
             modifier = Modifier
-                .width(136.dp)
-                .height(30.dp)
+                .width(124.dp)
+                .height(28.dp)
                 .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
                 .background(fillColor)
                 .border(
-                    BorderStroke(2.dp, InkBlack),
+                    BorderStroke(1.8.dp, InkBlack),
                     RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)
                 )
                 .padding(horizontal = 12.dp),
@@ -200,21 +188,20 @@ fun NeoFolderCard(
                 )
                 Box(
                     modifier = Modifier
-                        .size(7.dp)
+                        .size(6.dp)
                         .clip(CircleShape)
                         .background(InkBlack)
                 )
             }
         }
 
-        // Main Folder Body overlapping the tab bottom border
         NeoCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .offset(y = (-2).dp),
+                .offset(y = (-1.8).dp),
             backgroundColor = fillColor,
             cornerRadius = 18.dp,
-            shadowOffset = 4.dp,
+            shadowOffset = 3.dp,
             onClick = onCardClick,
             contentPadding = PaddingValues(18.dp)
         ) {
@@ -222,7 +209,7 @@ fun NeoFolderCard(
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Top
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
@@ -235,16 +222,15 @@ fun NeoFolderCard(
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = subtitle,
-                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                            style = MaterialTheme.typography.bodyMedium,
                             color = InkCharcoal
                         )
                     }
-                    // Percentage Pill Badge
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(50))
                             .background(PureWhiteSurface)
-                            .border(2.dp, InkBlack, RoundedCornerShape(50))
+                            .border(1.8.dp, InkBlack, RoundedCornerShape(50))
                             .padding(horizontal = 10.dp, vertical = 4.dp)
                     ) {
                         Text(
@@ -255,52 +241,41 @@ fun NeoFolderCard(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(12.dp))
                 NeoProgressBar(progress = progressPercent / 100f)
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Bottom left white pill tag
                     Box(
                         modifier = Modifier
-                            .drawBehind {
-                                drawRoundRect(
-                                    color = InkBlack,
-                                    topLeft = Offset(2.dp.toPx(), 2.dp.toPx()),
-                                    size = size,
-                                    cornerRadius = CornerRadius(10.dp.toPx(), 10.dp.toPx())
-                                )
-                            }
                             .clip(RoundedCornerShape(10.dp))
                             .background(PureWhiteSurface)
-                            .border(2.dp, InkBlack, RoundedCornerShape(10.dp))
-                            .padding(horizontal = 12.dp, vertical = 7.dp)
+                            .border(1.8.dp, InkBlack, RoundedCornerShape(10.dp))
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
                     ) {
                         Text(
-                            text = (actionLabel ?: tagLabel).uppercase(),
+                            text = tagLabel.uppercase(),
                             style = MaterialTheme.typography.labelLarge,
                             color = InkBlack
                         )
                     }
 
-                    // Bottom right circular arrow button
                     Box(
                         modifier = Modifier
-                            .size(36.dp)
+                            .size(34.dp)
                             .clip(CircleShape)
-                            .background(InkBlack)
-                            .border(2.dp, InkBlack, CircleShape),
+                            .background(InkBlack),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = "Apply or Open",
+                            contentDescription = "Open Folder",
                             tint = PureWhiteSurface,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(17.dp)
                         )
                     }
                 }
@@ -310,7 +285,7 @@ fun NeoFolderCard(
 }
 
 /**
- * High-contrast Neo-Brutalist pill button with 2.dp ink border and hard offset shadow.
+ * Clean Pill Button — No heavy offset shadow on small buttons per user feedback.
  */
 @Composable
 fun NeoPillButton(
@@ -321,7 +296,7 @@ fun NeoPillButton(
     selected: Boolean = false,
     activeColor: Color = NeoYellow,
     inactiveColor: Color = PureWhiteSurface,
-    shadowOffset: Dp = 3.dp
+    shadowOffset: Dp = 0.dp
 ) {
     val bgColor by animateColorAsState(
         targetValue = if (selected) activeColor else inactiveColor,
@@ -331,23 +306,12 @@ fun NeoPillButton(
     val shape = RoundedCornerShape(50)
     Box(
         modifier = modifier
-            .height(42.dp)
-            .drawBehind {
-                if (shadowOffset > 0.dp) {
-                    val offsetPx = shadowOffset.toPx()
-                    drawRoundRect(
-                        color = InkBlack,
-                        topLeft = Offset(offsetPx, offsetPx),
-                        size = size,
-                        cornerRadius = CornerRadius(size.height / 2f, size.height / 2f)
-                    )
-                }
-            }
+            .height(40.dp)
             .clip(shape)
             .background(bgColor, shape)
-            .border(2.dp, InkBlack, shape)
+            .border(1.8.dp, InkBlack, shape)
             .clickable(role = Role.Button, onClick = onClick)
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = 14.dp),
         contentAlignment = Alignment.Center
     ) {
         Row(
@@ -359,30 +323,31 @@ fun NeoPillButton(
                     imageVector = icon,
                     contentDescription = null,
                     tint = InkBlack,
-                    modifier = Modifier.size(17.dp)
+                    modifier = Modifier.size(16.dp)
                 )
-                Spacer(modifier = Modifier.width(6.dp))
+                if (text.isNotEmpty()) {
+                    Spacer(modifier = Modifier.width(6.dp))
+                }
             }
-            Text(
-                text = text,
-                style = MaterialTheme.typography.titleMedium.copy(fontSize = 13.sp),
-                color = InkBlack,
-                maxLines = 1
-            )
+            if (text.isNotEmpty()) {
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.titleMedium.copy(fontSize = 13.sp),
+                    color = InkBlack,
+                    maxLines = 1
+                )
+            }
         }
     }
 }
 
-/**
- * Neo-Brutalist Progress Bar with white track and 1.5.dp ink outline (Screenshots 1, 2 & 4).
- */
 @Composable
 fun NeoProgressBar(
     progress: Float,
     modifier: Modifier = Modifier,
     fillColor: Color = InkBlack,
     trackColor: Color = PureWhiteSurface,
-    height: Dp = 10.dp
+    height: Dp = 9.dp
 ) {
     val clamped = progress.coerceIn(0f, 1f)
     val shape = RoundedCornerShape(50)
@@ -405,9 +370,6 @@ fun NeoProgressBar(
     }
 }
 
-/**
- * Neo-Brutalist Square Checkbox (inspired by Screenshot 3's milestone matrix).
- */
 @Composable
 fun NeoSquareCheckbox(
     checked: Boolean,
@@ -418,10 +380,10 @@ fun NeoSquareCheckbox(
     val shape = RoundedCornerShape(7.dp)
     Box(
         modifier = modifier
-            .size(26.dp)
+            .size(24.dp)
             .clip(shape)
             .background(if (checked) accentColor else PureWhiteSurface, shape)
-            .border(2.dp, InkBlack, shape)
+            .border(1.8.dp, InkBlack, shape)
             .clickable(role = Role.Checkbox, onClick = onCheckedChange),
         contentAlignment = Alignment.Center
     ) {
@@ -430,14 +392,14 @@ fun NeoSquareCheckbox(
                 imageVector = Icons.Default.Check,
                 contentDescription = "Completed",
                 tint = InkBlack,
-                modifier = Modifier.size(16.dp)
+                modifier = Modifier.size(15.dp)
             )
         }
     }
 }
 
 /**
- * Hybrid Structured × Neo-Brutalist circular completion checkbox (Screenshots 5 & 6).
+ * Clean Structured-style Circular Checkbox (Matches Screenshots 5 & 6).
  */
 @Composable
 fun NeoCircleCheckbox(
@@ -448,10 +410,10 @@ fun NeoCircleCheckbox(
 ) {
     Box(
         modifier = modifier
-            .size(30.dp)
+            .size(28.dp)
             .clip(CircleShape)
             .background(if (checked) accentColor else PureWhiteSurface, CircleShape)
-            .border(2.dp, if (checked) InkBlack else accentColor, CircleShape)
+            .border(2.dp, accentColor, CircleShape)
             .clickable(role = Role.Checkbox, onClick = onCheckedChange),
         contentAlignment = Alignment.Center
     ) {
@@ -459,27 +421,17 @@ fun NeoCircleCheckbox(
             Icon(
                 imageVector = Icons.Default.Check,
                 contentDescription = "Completed",
-                tint = InkBlack,
-                modifier = Modifier.size(17.dp)
-            )
-        } else {
-            Box(
-                modifier = Modifier
-                    .size(22.dp)
-                    .clip(CircleShape)
-                    .border(1.5.dp, InkBlack.copy(alpha = 0.25f), CircleShape)
+                tint = PureWhiteSurface,
+                modifier = Modifier.size(16.dp)
             )
         }
     }
 }
 
-/**
- * Dotted divider line matching Screenshot 1 ("Academic Master Tracker" header divider).
- */
 @Composable
 fun NeoDashedDivider(
     modifier: Modifier = Modifier,
-    color: Color = InkBlack.copy(alpha = 0.2f)
+    color: Color = InkBlack.copy(alpha = 0.14f)
 ) {
     Canvas(
         modifier = modifier
@@ -503,21 +455,22 @@ data class TaskIconOption(
 )
 
 val TaskIconCatalog = listOf(
-    TaskIconOption("ALARM", "Wake / Alarm", Icons.Default.AccessAlarm),
-    TaskIconOption("WORKOUT", "Workout", Icons.Default.SelfImprovement),
-    TaskIconOption("FITNESS", "Gym / Run", Icons.Default.FitnessCenter),
-    TaskIconOption("BIKE", "Commute", Icons.AutoMirrored.Filled.DirectionsBike),
-    TaskIconOption("BOOK", "Study / Read", Icons.AutoMirrored.Filled.MenuBook),
-    TaskIconOption("SCIENCE", "Lab / Physics", Icons.Default.Science),
-    TaskIconOption("CODE", "Deep Work", Icons.Default.Code),
-    TaskIconOption("MEETING", "Team / Call", Icons.Default.Groups),
-    TaskIconOption("COFFEE", "Break / Coffee", Icons.Default.Coffee),
-    TaskIconOption("PLANT", "Chores / Home", Icons.Default.Eco),
-    TaskIconOption("CALL", "Phone Call", Icons.Default.Call),
+    TaskIconOption("ALARM", "Wake", Icons.Default.AccessAlarm),
+    TaskIconOption("WORKOUT", "Yoga", Icons.Default.SelfImprovement),
+    TaskIconOption("FITNESS", "Sport", Icons.Default.FitnessCenter),
+    TaskIconOption("BIKE", "Bike", Icons.AutoMirrored.Filled.DirectionsBike),
+    TaskIconOption("BOOK", "Book", Icons.AutoMirrored.Filled.MenuBook),
+    TaskIconOption("SCIENCE", "Physics", Icons.Default.Science),
+    TaskIconOption("CODE", "Code", Icons.Default.Code),
+    TaskIconOption("MEETING", "Team", Icons.Default.Groups),
+    TaskIconOption("COFFEE", "Coffee", Icons.Default.Coffee),
+    TaskIconOption("PLANT", "Plants", Icons.Default.Eco),
+    TaskIconOption("CALL", "Call", Icons.Default.Call),
     TaskIconOption("LAUNDRY", "Laundry", Icons.Default.LocalLaundryService),
-    TaskIconOption("SHOWER", "Refresh", Icons.Default.Shower),
+    TaskIconOption("SHOWER", "Shower", Icons.Default.Shower),
+    TaskIconOption("TAX", "Finance", Icons.Default.AccountBalance),
     TaskIconOption("CHECKLIST", "Routine", Icons.Default.Checklist),
-    TaskIconOption("BOLT", "Quick Sprint", Icons.Default.Bolt),
+    TaskIconOption("BOLT", "Focus", Icons.Default.Bolt),
     TaskIconOption("TASK", "Task", Icons.Default.TaskAlt)
 )
 

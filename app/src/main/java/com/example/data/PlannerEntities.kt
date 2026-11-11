@@ -7,23 +7,21 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 import androidx.room.Relation
 
-/**
- * Defines how a task behaves in the daily structure:
- * - TIMELESS_STEP: Part of the ordered vertical flow WITHOUT a clock time (solves schedule paralysis).
- * - TIMED_BLOCK: Part of the vertical flow WITH a start clock time and duration.
- * - TOP_BUBBLE: Circular "Anytime" routine bubble at the top of the day sheet (like Structured's "Structure Tomorrow", "Water Plants", "Call Mum").
- */
 enum class TaskMode {
     TIMELESS_STEP,
     TIMED_BLOCK,
     TOP_BUBBLE
 }
 
+/**
+ * Supports One-Time, Daily (e.g. Pray, Read), Weekdays, Weekly, and Monthly (e.g. 1st of month File Taxes).
+ */
 enum class RecurrenceRule(val label: String) {
     NONE("One-Time"),
     DAILY("Every Day"),
     WEEKDAYS("Weekdays"),
-    WEEKENDS("Weekends")
+    WEEKLY("Weekly"),
+    MONTHLY("Monthly")
 }
 
 @Entity(
@@ -34,29 +32,49 @@ data class TaskEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val title: String,
     val notes: String = "",
-    /**
-     * Null when the task lives in the unscheduled Brain-Dump Inbox.
-     * Otherwise stores LocalDate.toEpochDay().
-     */
     val dateEpochDay: Long? = null,
     val taskMode: String = TaskMode.TIMELESS_STEP.name,
-    /**
-     * Optional minutes from midnight (0..1439) when taskMode == TIMED_BLOCK.
-     */
     val startTimeMinutes: Int? = null,
     val durationMinutes: Int = 30,
     val sortOrder: Int = 0,
-    val colorKey: String = "SKY",
+    val colorKey: String = "CORAL",
     val iconKey: String = "BOOK",
-    val subjectTag: String = "FLOW",
+    val folderName: String = "General",
+    val sectionName: String = "Core",
     val recurrence: String = RecurrenceRule.NONE.name,
-    val isCompleted: Boolean = false
+    /**
+     * Day of month (1..31) when recurrence == MONTHLY (e.g. 1 for "1st of every month: File Taxes").
+     */
+    val recurrenceDayOfMonth: Int = 1,
+    val isCompleted: Boolean = false,
+    /**
+     * Stores recorded Focus timer segments ("14:00-14:37||14:47-15:15") so pausing & resuming
+     * shows a dotted "Continued" line on the timeline without creating a separate Break task.
+     */
+    val sessionSegments: String = "",
+    /**
+     * Non-null when a live Focus timer segment is currently running (stores start minutes from midnight).
+     */
+    val activeSessionStartMin: Int? = null
 ) {
     val modeEnum: TaskMode
         get() = runCatching { TaskMode.valueOf(taskMode) }.getOrDefault(TaskMode.TIMELESS_STEP)
 
     val recurrenceEnum: RecurrenceRule
         get() = runCatching { RecurrenceRule.valueOf(recurrence) }.getOrDefault(RecurrenceRule.NONE)
+
+    val parsedSessionSegments: List<Pair<Int, Int>>
+        get() {
+            if (sessionSegments.isBlank()) return emptyList()
+            return sessionSegments.split("||").mapNotNull { seg ->
+                val parts = seg.split("-")
+                if (parts.size == 2) {
+                    val s = parts[0].toIntOrNull()
+                    val e = parts[1].toIntOrNull()
+                    if (s != null && e != null) s to e else null
+                } else null
+            }
+        }
 }
 
 @Entity(
@@ -93,54 +111,21 @@ data class TaskWithSubtasks(
 }
 
 /**
- * Reusable Day Blueprint / Folder Template (styled like Screenshot 2's PHY 12 / CHEM 12 folder cards).
+ * Folder Entity with customizable Sections inside each Folder (replaces static Templates per user feedback).
+ * Examples: Physics (Sections: Electrostatics, Optics, Modern Physics), Reading, Extracurriculars & Sport.
  */
-@Entity(tableName = "day_templates")
-data class DayTemplateEntity(
+@Entity(tableName = "folders")
+data class FolderEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val tabCode: String,
-    val title: String,
-    val subtitle: String,
-    val tagLabel: String,
-    val colorKey: String,
-    /**
-     * Pipe-delimited blueprint items:
-     * title::mode::startTimeOrMinusOne::duration::colorKey::iconKey::subtask1,subtask2
-     */
-    val encodedItems: String
-)
-
-data class BlueprintTaskSpec(
-    val title: String,
-    val mode: TaskMode,
-    val startTimeMinutes: Int?,
-    val durationMinutes: Int,
+    val codeTag: String,
+    val name: String,
     val colorKey: String,
     val iconKey: String,
-    val subtasks: List<String>
-)
-
-fun DayTemplateEntity.decodeSpecs(): List<BlueprintTaskSpec> {
-    if (encodedItems.isBlank()) return emptyList()
-    return encodedItems.split("||").mapNotNull { row ->
-        val parts = row.split("::")
-        if (parts.size < 6) return@mapNotNull null
-        val mode = runCatching { TaskMode.valueOf(parts[1]) }.getOrDefault(TaskMode.TIMELESS_STEP)
-        val startMin = parts[2].toIntOrNull()?.takeIf { it >= 0 }
-        val duration = parts[3].toIntOrNull() ?: 30
-        val subs = if (parts.size >= 7 && parts[6].isNotBlank()) {
-            parts[6].split(";;").filter { it.isNotBlank() }
-        } else {
-            emptyList()
-        }
-        BlueprintTaskSpec(
-            title = parts[0],
-            mode = mode,
-            startTimeMinutes = startMin,
-            durationMinutes = duration,
-            colorKey = parts[4],
-            iconKey = parts[5],
-            subtasks = subs
-        )
-    }
+    /**
+     * Semicolon-separated list of sections inside this folder (e.g. "Electrostatics;;Optics;;Practice").
+     */
+    val sectionsCsv: String
+) {
+    val sections: List<String>
+        get() = sectionsCsv.split(";;").map { it.trim() }.filter { it.isNotEmpty() }
 }
