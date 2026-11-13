@@ -25,6 +25,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -37,6 +38,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -53,8 +55,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.example.data.FolderEntity
 import com.example.data.TaskEntity
+import com.example.data.TaskMode
 import com.example.data.TaskWithSubtasks
 import com.example.ui.theme.InkBlack
 import com.example.ui.theme.InkCharcoal
@@ -260,7 +264,11 @@ fun NeoInboxPane(
             verticalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(bottom = 24.dp)
         ) {
-            items(inboxTasks, key = { it.task.id }) { item ->
+            items(
+                items = inboxTasks,
+                key = { it.task.id },
+                contentType = { "inbox_task" }
+            ) { item ->
                 val task = item.task
                 val color = neoColorForKey(task.colorKey)
                 NeoCard(
@@ -316,6 +324,7 @@ fun NeoInboxPane(
 
                         Box(
                             modifier = Modifier
+                                .minimumInteractiveComponentSize()
                                 .size(38.dp)
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(SoftSheetSurface)
@@ -339,29 +348,47 @@ fun NeoInboxPane(
 }
 
 /**
- * Small, minimal pop-up when clicking "+" on an Inbox task ("Schedule into Flow").
+ * Unified "Schedule into Flow" popup when clicking "+" on an Inbox task:
+ * - Powered by `UnifiedTimeAndDurationPickerSection`:
+ *   - Supports Timeless (with 0m Stopwatch default or optional target duration)
+ *   - Supports Timed (with Dual-Mode Start + Duration OR Start + End Time, plus direct Hour/Minute selection).
  */
 @Composable
 fun ScheduleInboxMiniPopup(
     task: TaskEntity,
     onDismiss: () -> Unit,
-    onConfirmSchedule: (asTimed: Boolean, startTimeMinutes: Int?) -> Unit
+    onConfirmSchedule: (asTimed: Boolean, startTimeMinutes: Int?, durationMinutes: Int) -> Unit
 ) {
-    var asTimed by remember { mutableStateOf(false) }
-    var startTimeMin by remember { mutableIntStateOf(9 * 60) }
+    var selectedMode by remember(task.id) { mutableStateOf(TaskMode.TIMELESS_STEP) }
+    var startTimeMin by remember(task.id) {
+        val defaultStart = (GlobalClockFormat.startOfDayMinutes + 60).coerceIn(0, 22 * 60)
+        mutableIntStateOf(task.startTimeMinutes ?: defaultStart)
+    }
+    var durationMin by remember(task.id) {
+        mutableIntStateOf(task.durationMinutes.coerceAtLeast(0))
+    }
+    var errorBanner by remember { mutableStateOf<String?>(null) }
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true
+        )
+    ) {
         NeoCard(
             modifier = Modifier
-                .widthIn(max = 340.dp)
+                .widthIn(max = 420.dp)
                 .fillMaxWidth(),
             backgroundColor = PureWhiteSurface,
-            cornerRadius = 20.dp,
+            cornerRadius = 22.dp,
             shadowOffset = 4.dp,
             contentPadding = PaddingValues(18.dp)
         ) {
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Row(
@@ -369,59 +396,65 @@ fun ScheduleInboxMiniPopup(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "Schedule into Flow",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = InkBlack
-                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Schedule into Flow",
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                            color = InkBlack
+                        )
+                        Text(
+                            text = task.title,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = InkMuted,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                     Icon(
                         imageVector = Icons.Default.Close,
                         contentDescription = "Close",
                         tint = InkBlack,
                         modifier = Modifier
+                            .minimumInteractiveComponentSize()
                             .size(20.dp)
                             .clickable(onClick = onDismiss)
                     )
                 }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    NeoPillButton(
-                        text = "Timeless",
-                        selected = !asTimed,
-                        activeColor = NeoYellow,
-                        onClick = { asTimed = false },
-                        modifier = Modifier.weight(1f)
-                    )
-                    NeoPillButton(
-                        text = "With Time",
-                        selected = asTimed,
-                        activeColor = NeoCoral,
-                        onClick = { asTimed = true },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
+                UnifiedTimeAndDurationPickerSection(
+                    toInbox = false,
+                    taskMode = selectedMode,
+                    stepOrder = 1,
+                    startTimeMinutes = startTimeMin,
+                    durationMinutes = durationMin,
+                    showBubbleOption = false,
+                    onModeChange = {
+                        errorBanner = null
+                        selectedMode = it
+                    },
+                    onStartTimeChange = {
+                        errorBanner = null
+                        startTimeMin = it
+                    },
+                    onDurationChange = {
+                        errorBanner = null
+                        durationMin = it
+                    }
+                )
 
-                if (asTimed) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                errorBanner?.let { msg ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(NeoYellow)
+                            .border(1.5.dp, InkBlack, RoundedCornerShape(12.dp))
+                            .padding(10.dp)
                     ) {
-                        NeoPillButton(
-                            text = "-30m",
-                            onClick = { startTimeMin = (startTimeMin - 30).coerceAtLeast(0) }
-                        )
                         Text(
-                            text = formatMinutesAsClock(startTimeMin),
-                            style = MaterialTheme.typography.titleLarge,
+                            text = msg,
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
                             color = InkBlack
-                        )
-                        NeoPillButton(
-                            text = "+30m",
-                            onClick = { startTimeMin = (startTimeMin + 30).coerceAtMost(23 * 60 + 30) }
                         )
                     }
                 }
@@ -430,7 +463,20 @@ fun ScheduleInboxMiniPopup(
                     text = "Schedule into Day Flow",
                     selected = true,
                     activeColor = NeoMintGreen,
-                    onClick = { onConfirmSchedule(asTimed, if (asTimed) startTimeMin else null) },
+                    onClick = {
+                        val isTimed = selectedMode == TaskMode.TIMED_BLOCK
+                        val finalDur = if (isTimed) durationMin.coerceIn(5, 720) else durationMin.coerceIn(0, 720)
+                        if (isTimed && (startTimeMin + finalDur) > GlobalClockFormat.endOfDayMinutes) {
+                            errorBanner =
+                                "Task ends past End of Day (${formatMinutesAsClock(GlobalClockFormat.endOfDayMinutes)}). Adjust time or Settings."
+                            return@NeoPillButton
+                        }
+                        onConfirmSchedule(
+                            isTimed,
+                            if (isTimed) startTimeMin else null,
+                            finalDur
+                        )
+                    },
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -461,13 +507,65 @@ fun FoldersAndSectionsScreen(
     var showCreateFolderPopup by remember { mutableStateOf(false) }
     var showAddSectionPopup by remember { mutableStateOf(false) }
 
-    val allSubtasks = allTasks.flatMap { it.subtasks }
-    val doneSubtasks = allSubtasks.count { it.isCompleted }
-    val completedTasks = allTasks.count { it.task.isCompleted }
-    val totalTasks = allTasks.size.coerceAtLeast(1)
-    val overallReadiness = ((completedTasks * 100f) / totalTasks).toInt()
+    val (doneSubtasks, totalSubtasksCount, completedTasks, overallReadiness) = remember(allTasks) {
+        var doneSubs = 0
+        var totalSubs = 0
+        var doneTasks = 0
+        for (item in allTasks) {
+            doneSubs += item.completedSubtasksCount
+            totalSubs += item.subtasks.size
+            if (item.task.isCompleted) doneTasks++
+        }
+        val total = allTasks.size.coerceAtLeast(1)
+        val readiness = ((doneTasks * 100f) / total).toInt()
+        listOf(doneSubs, totalSubs, doneTasks, readiness)
+    }
 
-    val selectedFolder = folders.firstOrNull { it.id == selectedFolderId }
+    val tasksByFolderKey = remember(allTasks) {
+        allTasks.groupBy { it.task.folderName.trim().lowercase() }
+    }
+
+    val folderStatsByKey = remember(tasksByFolderKey) {
+        tasksByFolderKey.mapValues { (_, list) ->
+            val done = list.count { it.task.isCompleted }
+            val pct = if (list.isEmpty()) 0 else ((done * 100f) / list.size).toInt()
+            Triple(list.size, done, pct)
+        }
+    }
+
+    val selectedFolder = remember(folders, selectedFolderId) {
+        folders.firstOrNull { it.id == selectedFolderId }
+    }
+
+    val filteredFolders = remember(folders, searchQuery) {
+        if (searchQuery.isBlank()) {
+            folders
+        } else {
+            folders.filter {
+                it.name.contains(searchQuery, ignoreCase = true) ||
+                    it.codeTag.contains(searchQuery, ignoreCase = true)
+            }
+        }
+    }
+
+    val selectedFolderTasks = remember(selectedFolder, tasksByFolderKey) {
+        selectedFolder?.let { tasksByFolderKey[it.name.trim().lowercase()].orEmpty() }.orEmpty()
+    }
+
+    val selectedFolderSectionsList = remember(selectedFolder, selectedFolderTasks) {
+        if (selectedFolder == null) {
+            emptyList()
+        } else {
+            (selectedFolder.sections + selectedFolderTasks.map { it.task.sectionName })
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .distinct()
+        }
+    }
+
+    val selectedSectionTasksByKey = remember(selectedFolderTasks) {
+        selectedFolderTasks.groupBy { it.task.sectionName.trim().lowercase() }
+    }
 
     BoxWithConstraints(
         modifier = modifier
@@ -484,7 +582,7 @@ fun FoldersAndSectionsScreen(
         ) {
             if (selectedFolder == null) {
                 // 1. Equal-Height 2x2 Minimal Stat Grid (Title + Value only, symmetrical 18.dp corners)
-                item {
+                item(key = "folders_stat_grid", contentType = "stat_grid") {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Row(
                             modifier = Modifier
@@ -545,7 +643,7 @@ fun FoldersAndSectionsScreen(
                                         color = InkBlack
                                     )
                                     Text(
-                                        text = "$doneSubtasks / ${allSubtasks.size}",
+                                        text = "$doneSubtasks / $totalSubtasksCount",
                                         style = MaterialTheme.typography.displayMedium.copy(
                                             fontSize = 26.6.ssp,
                                             lineHeight = 32.5.ssp,
@@ -631,7 +729,7 @@ fun FoldersAndSectionsScreen(
                 }
 
                 // 2. Clean Search Bar + "+ Folder" Button
-                item {
+                item(key = "folders_search_bar", contentType = "search_bar") {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -677,30 +775,25 @@ fun FoldersAndSectionsScreen(
                 }
 
                 // 3. Symmetrical Learnify-Style Folders Grid / List with generous 18.dp spacing
-                val filteredFolders = folders.filter {
-                    searchQuery.isBlank() ||
-                        it.name.contains(searchQuery, ignoreCase = true) ||
-                        it.codeTag.contains(searchQuery, ignoreCase = true)
-                }
-
                 if (useTwoColumnFolderGrid) {
                     val folderRows = filteredFolders.chunked(2)
-                    items(folderRows, key = { row -> row.first().id }) { rowFolders ->
+                    items(
+                        items = folderRows,
+                        key = { row -> row.first().id },
+                        contentType = { "folder_row" }
+                    ) { rowFolders ->
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
                             rowFolders.forEach { folder ->
-                                val folderTasks = allTasks.filter {
-                                    it.task.folderName.equals(folder.name, ignoreCase = true)
-                                }
-                                val folderDone = folderTasks.count { it.task.isCompleted }
-                                val folderPct = if (folderTasks.isEmpty()) 0 else ((folderDone * 100f) / folderTasks.size).toInt()
+                                val (folderTaskCount, _, folderPct) = folderStatsByKey[folder.name.trim().lowercase()]
+                                    ?: Triple(0, 0, 0)
 
                                 NeoFolderCard(
                                     tabCode = folder.codeTag,
                                     title = folder.name,
-                                    subtitle = "${folder.sections.size} Sections • ${folderTasks.size} Tasks",
+                                    subtitle = "${folder.sections.size} Sections • $folderTaskCount Tasks",
                                     progressPercent = folderPct,
                                     fillColor = neoColorForKey(folder.colorKey),
                                     onCardClick = { onSelectFolder(folder.id) },
@@ -715,17 +808,18 @@ fun FoldersAndSectionsScreen(
                         }
                     }
                 } else {
-                    items(filteredFolders, key = { it.id }) { folder ->
-                        val folderTasks = allTasks.filter {
-                            it.task.folderName.equals(folder.name, ignoreCase = true)
-                        }
-                        val folderDone = folderTasks.count { it.task.isCompleted }
-                        val folderPct = if (folderTasks.isEmpty()) 0 else ((folderDone * 100f) / folderTasks.size).toInt()
+                    items(
+                        items = filteredFolders,
+                        key = { it.id },
+                        contentType = { "folder_card" }
+                    ) { folder ->
+                        val (folderTaskCount, _, folderPct) = folderStatsByKey[folder.name.trim().lowercase()]
+                            ?: Triple(0, 0, 0)
 
                         NeoFolderCard(
                             tabCode = folder.codeTag,
                             title = folder.name,
-                            subtitle = "${folder.sections.size} Sections • ${folderTasks.size} Tasks",
+                            subtitle = "${folder.sections.size} Sections • $folderTaskCount Tasks",
                             progressPercent = folderPct,
                             fillColor = neoColorForKey(folder.colorKey),
                             onCardClick = { onSelectFolder(folder.id) },
@@ -735,14 +829,11 @@ fun FoldersAndSectionsScreen(
                 }
             } else {
                 // Inside a Selected Folder: Symmetrical Learnify Folder Header + Spaced Section Cards
-                val folderTasks = allTasks.filter {
-                    it.task.folderName.equals(selectedFolder.name, ignoreCase = true)
-                }
-                val folderDone = folderTasks.count { it.task.isCompleted }
-                val folderPct = if (folderTasks.isEmpty()) 0 else ((folderDone * 100f) / folderTasks.size).toInt()
+                val (folderTaskCount, folderDone, folderPct) = folderStatsByKey[selectedFolder.name.trim().lowercase()]
+                    ?: Triple(0, 0, 0)
                 val accent = neoColorForKey(selectedFolder.colorKey)
 
-                item {
+                item(key = "selected_folder_header_${selectedFolder.id}", contentType = "folder_header") {
                     NeoCard(
                         modifier = Modifier.fillMaxWidth(),
                         backgroundColor = accent,
@@ -798,7 +889,7 @@ fun FoldersAndSectionsScreen(
                                         color = InkBlack
                                     )
                                     Text(
-                                        text = "$folderDone / ${folderTasks.size} tasks completed",
+                                        text = "$folderDone / $folderTaskCount tasks completed",
                                         style = MaterialTheme.typography.labelMedium.copy(
                                             fontSize = 11.4.ssp,
                                             lineHeight = 15.5.ssp,
@@ -830,15 +921,12 @@ fun FoldersAndSectionsScreen(
                     }
                 }
 
-                val sectionsList = (selectedFolder.sections + folderTasks.map { it.task.sectionName })
-                    .map { it.trim() }
-                    .filter { it.isNotEmpty() }
-                    .distinct()
-
-                items(sectionsList, key = { it }) { sectionName ->
-                    val sectionTasks = folderTasks.filter {
-                        it.task.sectionName.equals(sectionName, ignoreCase = true)
-                    }
+                items(
+                    items = selectedFolderSectionsList,
+                    key = { "section_${selectedFolder.id}_$it" },
+                    contentType = { "folder_section" }
+                ) { sectionName ->
+                    val sectionTasks = selectedSectionTasksByKey[sectionName.trim().lowercase()].orEmpty()
 
                     NeoCard(
                         modifier = Modifier.fillMaxWidth(),
@@ -906,7 +994,7 @@ fun FoldersAndSectionsScreen(
                                             )
                                             if (item.subtasks.isNotEmpty()) {
                                                 Text(
-                                                    text = "${item.subtasks.count { it.isCompleted }}/${item.subtasks.size} subtasks",
+                                                    text = "${item.completedSubtasksCount}/${item.subtasks.size} subtasks",
                                                     style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.4.ssp),
                                                     color = InkMuted
                                                 )
@@ -960,7 +1048,10 @@ private fun CreateFolderPopupModal(
     var colorKey by remember { mutableStateOf("SKY") }
     var sectionsInput by remember { mutableStateOf("Chapters, Practice, Milestones") }
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true)
+    ) {
         NeoCard(
             modifier = Modifier
                 .widthIn(max = 380.dp)
@@ -1046,7 +1137,10 @@ private fun AddSectionPopupModal(
     onAdd: (String) -> Unit
 ) {
     var sectionName by remember { mutableStateOf("") }
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true)
+    ) {
         NeoCard(
             modifier = Modifier
                 .widthIn(max = 340.dp)

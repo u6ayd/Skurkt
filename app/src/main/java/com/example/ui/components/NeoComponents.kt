@@ -53,6 +53,7 @@ import androidx.compose.material.icons.filled.TaskAlt
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -60,10 +61,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Canvas as ComposeCanvas
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.ImageShader
+import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.ShaderBrush
+import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
@@ -72,6 +79,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.roundToInt
 import com.example.ui.theme.DotGridColor
 import com.example.ui.theme.InkBlack
 import com.example.ui.theme.InkCharcoal
@@ -84,7 +92,9 @@ import com.example.ui.theme.sdp
 import com.example.ui.theme.ssp
 
 /**
- * Subtle papery small dot-grid background.
+ * Hardware-accelerated cached dot-grid background:
+ * Pre-renders a single 18.dp x 18.dp tile into an ImageBitmap once and tiles it across the screen
+ * in a single GPU drawRect call (eliminating ~2,800 drawCircle calls per frame).
  */
 @Composable
 fun DotGridBackground(
@@ -97,21 +107,22 @@ fun DotGridBackground(
         modifier = Modifier
             .fillMaxSize()
             .background(backgroundColor)
-            .drawBehind {
-                val stepPx = 18.dp.toPx()
+            .drawWithCache {
+                val stepPx = 18.dp.toPx().roundToInt().coerceAtLeast(8)
                 val radiusPx = 0.95.dp.toPx()
-                var x = stepPx / 2f
-                while (x < size.width) {
-                    var y = stepPx / 2f
-                    while (y < size.height) {
-                        drawCircle(
-                            color = dotColor,
-                            radius = radiusPx,
-                            center = Offset(x, y)
-                        )
-                        y += stepPx
-                    }
-                    x += stepPx
+                val tileBitmap = ImageBitmap(stepPx, stepPx)
+                val tileCanvas = ComposeCanvas(tileBitmap)
+                val dotPaint = Paint().apply {
+                    color = dotColor
+                    isAntiAlias = true
+                }
+                val center = stepPx / 2f
+                tileCanvas.drawCircle(Offset(center, center), radiusPx, dotPaint)
+                val tiledBrush = ShaderBrush(
+                    ImageShader(tileBitmap, TileMode.Repeated, TileMode.Repeated)
+                )
+                onDrawBehind {
+                    drawRect(brush = tiledBrush)
                 }
             }
             .then(modifier),
@@ -494,20 +505,26 @@ fun NeoSquareCheckbox(
     val shape = RoundedCornerShape(8.sdp)
     Box(
         modifier = modifier
-            .size(24.sdp)
-            .smoothPressClickable(role = Role.Checkbox, onClick = onCheckedChange)
-            .clip(shape)
-            .background(bgColor, shape)
-            .border(1.5.dp, InkBlack, shape),
+            .minimumInteractiveComponentSize()
+            .smoothPressClickable(role = Role.Checkbox, onClick = onCheckedChange),
         contentAlignment = Alignment.Center
     ) {
-        if (checked) {
-            Icon(
-                imageVector = Icons.Default.Check,
-                contentDescription = "Completed",
-                tint = InkBlack,
-                modifier = Modifier.size(15.sdp)
-            )
+        Box(
+            modifier = Modifier
+                .size(24.sdp)
+                .clip(shape)
+                .background(bgColor, shape)
+                .border(1.5.dp, InkBlack, shape),
+            contentAlignment = Alignment.Center
+        ) {
+            if (checked) {
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = "Completed",
+                    tint = InkBlack,
+                    modifier = Modifier.size(15.sdp)
+                )
+            }
         }
     }
 }
@@ -526,20 +543,26 @@ fun NeoCircleCheckbox(
     )
     Box(
         modifier = modifier
-            .size(28.sdp)
-            .smoothPressClickable(role = Role.Checkbox, onClick = onCheckedChange)
-            .clip(CircleShape)
-            .background(bgColor, CircleShape)
-            .border(1.8.dp, if (checked) InkBlack else accentColor, CircleShape),
+            .minimumInteractiveComponentSize()
+            .smoothPressClickable(role = Role.Checkbox, onClick = onCheckedChange),
         contentAlignment = Alignment.Center
     ) {
-        if (checked) {
-            Icon(
-                imageVector = Icons.Default.Check,
-                contentDescription = "Completed",
-                tint = InkBlack,
-                modifier = Modifier.size(16.sdp)
-            )
+        Box(
+            modifier = Modifier
+                .size(28.sdp)
+                .clip(CircleShape)
+                .background(bgColor, CircleShape)
+                .border(1.8.dp, if (checked) InkBlack else accentColor, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            if (checked) {
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = "Completed",
+                    tint = InkBlack,
+                    modifier = Modifier.size(16.sdp)
+                )
+            }
         }
     }
 }
@@ -549,19 +572,24 @@ fun NeoDashedDivider(
     modifier: Modifier = Modifier,
     color: Color = InkBlack.copy(alpha = 0.14f)
 ) {
-    Canvas(
+    Spacer(
         modifier = modifier
             .fillMaxWidth()
             .height(2.dp)
-    ) {
-        drawLine(
-            color = color,
-            start = Offset(0f, size.height / 2f),
-            end = Offset(size.width, size.height / 2f),
-            strokeWidth = 1.5.dp.toPx(),
-            pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 8f), 0f)
-        )
-    }
+            .drawWithCache {
+                val strokePx = 1.5.dp.toPx()
+                val dashEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 8f), 0f)
+                onDrawBehind {
+                    drawLine(
+                        color = color,
+                        start = Offset(0f, size.height / 2f),
+                        end = Offset(size.width, size.height / 2f),
+                        strokeWidth = strokePx,
+                        pathEffect = dashEffect
+                    )
+                }
+            }
+    )
 }
 
 data class TaskIconOption(

@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Inbox
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ViewTimeline
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -57,9 +58,12 @@ import com.example.ui.PlannerViewModel
 import com.example.ui.StruktDestination
 import com.example.ui.components.AntiParalysisFocusScreen
 import com.example.ui.components.DateAndWeekHeader
+import com.example.ui.components.DayThresholdMarkerRow
 import com.example.ui.components.DotGridBackground
 import com.example.ui.components.FlowStructureFilterBar
 import com.example.ui.components.FoldersAndSectionsScreen
+import com.example.ui.components.GlobalClockFormat
+import com.example.ui.components.GlobalSettingsPopupModal
 import com.example.ui.components.HybridSpineTaskRow
 import com.example.ui.components.NeoCard
 import com.example.ui.components.NeoDashedDivider
@@ -115,14 +119,20 @@ fun StruktPlannerApp(
     uiState: PlannerUiState,
     viewModel: PlannerViewModel
 ) {
+    GlobalClockFormat.use24Hour = uiState.use24HourFormat
+    GlobalClockFormat.startOfDayMinutes = uiState.startOfDayMinutes
+    GlobalClockFormat.endOfDayMinutes = uiState.endOfDayMinutes
+
     BackHandler(
-        enabled = uiState.isEditorVisible ||
+        enabled = uiState.isSettingsVisible ||
+            uiState.isEditorVisible ||
             uiState.inspectingTask != null ||
             uiState.schedulingInboxTask != null ||
             uiState.selectedFolderId != null ||
             uiState.activeDestination != StruktDestination.FLOW
     ) {
         when {
+            uiState.isSettingsVisible -> viewModel.closeSettingsModal()
             uiState.isEditorVisible -> viewModel.closeTaskSheet()
             uiState.inspectingTask != null -> viewModel.closeInspectTaskModal()
             uiState.schedulingInboxTask != null -> viewModel.closeScheduleInboxPopup()
@@ -182,13 +192,13 @@ fun StruktPlannerApp(
                 }
             }
 
-            // 1. Small Schedule Mini-Popup from Inbox "+"
+            // 1. Unified Schedule Popup from Inbox "+"
             uiState.schedulingInboxTask?.let { inboxTask ->
                 ScheduleInboxMiniPopup(
                     task = inboxTask,
                     onDismiss = { viewModel.closeScheduleInboxPopup() },
-                    onConfirmSchedule = { asTimed, startMin ->
-                        viewModel.confirmScheduleInboxTask(inboxTask, asTimed, startMin)
+                    onConfirmSchedule = { asTimed, startMin, durationMin ->
+                        viewModel.confirmScheduleInboxTask(inboxTask, asTimed, startMin, durationMin)
                     }
                 )
             }
@@ -215,7 +225,7 @@ fun StruktPlannerApp(
                 )
             }
 
-            // 3. Progressive Sub-Popup Task Editor Sheet
+            // 3. Single-Window In-Place Task Editor Sheet
             if (uiState.isEditorVisible) {
                 StructuredTaskEditorDialog(
                     selectedDate = uiState.selectedLocalDate,
@@ -245,6 +255,17 @@ fun StruktPlannerApp(
                     },
                     onMoveToInbox = { task -> viewModel.sendTaskBackToInbox(task) },
                     onDelete = { taskId -> viewModel.deleteTask(taskId) }
+                )
+            }
+
+            // 4. Global Settings Modal (12h/24h Clock Format + Start/End of Day Thresholds)
+            if (uiState.isSettingsVisible) {
+                GlobalSettingsPopupModal(
+                    use24HourFormat = uiState.use24HourFormat,
+                    startOfDayMinutes = uiState.startOfDayMinutes,
+                    endOfDayMinutes = uiState.endOfDayMinutes,
+                    onUpdateSettings = viewModel::updateGlobalSettings,
+                    onDismiss = viewModel::closeSettingsModal
                 )
             }
         }
@@ -308,28 +329,51 @@ private fun TabletLandscapeSplitLayout(
                 }
             }
 
-            // Bottom "+" Add Action inside the Permanent Rail
-            Box(
-                modifier = Modifier
-                    .size(48.sdp)
-                    .smoothPressClickable(role = Role.Button) {
-                        viewModel.openCreateTaskSheet(
-                            defaultMode = TaskMode.TIMELESS_STEP,
-                            forInbox = false
-                        )
-                    }
-                    .clip(RoundedCornerShape(14.sdp))
-                    .background(NeoCoral)
-                    .border(1.5.dp, PureWhiteSurface.copy(alpha = 0.25f), RoundedCornerShape(14.sdp))
-                    .testTag("tablet_new_step_button"),
-                contentAlignment = Alignment.Center
+            // Bottom Settings + "+" Add Action inside the Permanent Rail
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(14.sdp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = "Add Task",
-                    tint = PureWhiteSurface,
-                    modifier = Modifier.size(26.sdp)
-                )
+                Box(
+                    modifier = Modifier
+                        .size(44.sdp)
+                        .smoothPressClickable(role = Role.Button) { viewModel.openSettingsModal() }
+                        .clip(RoundedCornerShape(14.sdp))
+                        .background(NavRailDark)
+                        .border(1.2.dp, PureWhiteSurface.copy(alpha = 0.2f), RoundedCornerShape(14.sdp))
+                        .testTag("tablet_nav_settings"),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "Settings",
+                        tint = PureWhiteSurface,
+                        modifier = Modifier.size(22.sdp)
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .size(48.sdp)
+                        .smoothPressClickable(role = Role.Button) {
+                            viewModel.openCreateTaskSheet(
+                                defaultMode = TaskMode.TIMELESS_STEP,
+                                forInbox = false
+                            )
+                        }
+                        .clip(RoundedCornerShape(14.sdp))
+                        .background(NeoCoral)
+                        .border(1.5.dp, PureWhiteSurface.copy(alpha = 0.25f), RoundedCornerShape(14.sdp))
+                        .testTag("tablet_new_step_button"),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Add Task",
+                        tint = PureWhiteSurface,
+                        modifier = Modifier.size(26.sdp)
+                    )
+                }
             }
         }
 
@@ -352,12 +396,12 @@ private fun TabletLandscapeSplitLayout(
             )
         }
 
-        // Clean 1.5.dp Vertical Divider Line
+        // Crisp 1.5.dp Solid InkBlack Vertical Divider Line between Left Inbox and Right Workspace
         Box(
             modifier = Modifier
                 .width(1.5.dp)
                 .fillMaxHeight()
-                .background(InkBlack.copy(alpha = 0.12f))
+                .background(InkBlack)
         )
 
         // Right Main Workspace (centered within max 680.dp so single-column cards never over-stretch)
@@ -603,7 +647,8 @@ private fun DayFlowSheetContent(
         DateAndWeekHeader(
             selectedDate = uiState.selectedLocalDate,
             weekDotColorsByEpochDay = uiState.weekDotColorsByEpochDay,
-            onSelectDate = viewModel::selectDate
+            onSelectDate = viewModel::selectDate,
+            onOpenSettings = viewModel::openSettingsModal
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -621,7 +666,7 @@ private fun DayFlowSheetContent(
                 contentPadding = PaddingValues(bottom = 28.dp),
                 verticalArrangement = Arrangement.spacedBy(0.dp)
             ) {
-                item {
+                item(key = "flow_top_grab_handle", contentType = "handle") {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -639,7 +684,7 @@ private fun DayFlowSheetContent(
                 }
 
                 if (uiState.topBubbles.isNotEmpty()) {
-                    item {
+                    item(key = "flow_top_bubbles_row", contentType = "top_bubbles") {
                         TopAnytimeBubblesRow(
                             bubbles = uiState.topBubbles,
                             onToggleBubbleDone = { item ->
@@ -657,27 +702,41 @@ private fun DayFlowSheetContent(
                         )
                         Spacer(modifier = Modifier.height(10.dp))
                     }
-                    item {
+                    item(key = "flow_top_bubbles_divider", contentType = "divider") {
                         NeoDashedDivider()
                         Spacer(modifier = Modifier.height(10.dp))
                     }
                 }
 
-                item {
+                item(key = "flow_filter_bar", contentType = "filter_bar") {
                     FlowStructureFilterBar(
                         currentFilter = uiState.flowFilter,
                         onSelectFilter = viewModel::setFlowFilter
                     )
                     // Pushed downwards for clean breathing room before the vertical timeline spine begins
-                    Spacer(modifier = Modifier.height(22.dp))
+                    Spacer(modifier = Modifier.height(18.dp))
+                }
+
+                // Start-of-Day (Wake-Up) Threshold Marker
+                item(key = "flow_start_of_day_marker", contentType = "threshold_marker") {
+                    DayThresholdMarkerRow(
+                        timeMinutes = uiState.startOfDayMinutes,
+                        label = "Start of Day",
+                        isStartOfDay = true,
+                        onClick = viewModel::openSettingsModal
+                    )
+                    SpineConnectorSegment(
+                        isDottedBreak = false,
+                        height = 14.dp
+                    )
                 }
 
                 if (uiState.spineFlowTasks.isEmpty()) {
-                    item {
+                    item(key = "flow_empty_state", contentType = "empty_state") {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 36.dp),
+                                .padding(vertical = 28.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
@@ -702,7 +761,8 @@ private fun DayFlowSheetContent(
                 } else {
                     itemsIndexed(
                         items = uiState.spineFlowTasks,
-                        key = { _, item -> item.task.id }
+                        key = { _, item -> item.task.id },
+                        contentType = { _, _ -> "spine_task_row" }
                     ) { index, item ->
                         val isUpNext = uiState.upNextTask?.task?.id == item.task.id
 
@@ -735,6 +795,20 @@ private fun DayFlowSheetContent(
                             onOpenTaskDetail = { viewModel.openInspectTaskModal(item.task.id) }
                         )
                     }
+                }
+
+                // End-of-Day (Wind-Down) Threshold Marker
+                item(key = "flow_end_of_day_marker", contentType = "threshold_marker") {
+                    SpineConnectorSegment(
+                        isDottedBreak = true,
+                        height = 14.dp
+                    )
+                    DayThresholdMarkerRow(
+                        timeMinutes = uiState.endOfDayMinutes,
+                        label = "End of Day",
+                        isStartOfDay = false,
+                        onClick = viewModel::openSettingsModal
+                    )
                 }
             }
         }

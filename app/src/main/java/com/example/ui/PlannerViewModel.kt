@@ -1,6 +1,7 @@
 package com.example.ui
 
 import android.app.Application
+import android.content.Context
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -12,6 +13,7 @@ import com.example.data.SubtaskEntity
 import com.example.data.TaskEntity
 import com.example.data.TaskMode
 import com.example.data.TaskWithSubtasks
+import com.example.ui.components.GlobalClockFormat
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -70,7 +72,11 @@ data class PlannerUiState(
     val statusBannerMessage: String? = null,
     val totalDayTasksCount: Int = 0,
     val completedDayTasksCount: Int = 0,
-    val dayReadinessPercent: Int = 0
+    val dayReadinessPercent: Int = 0,
+    val isSettingsVisible: Boolean = false,
+    val use24HourFormat: Boolean = true,
+    val startOfDayMinutes: Int = 8 * 60,
+    val endOfDayMinutes: Int = 22 * 60
 ) {
     val activeFocusTask: TaskWithSubtasks?
         get() = allTasks.firstOrNull { it.task.id == focusedTaskId } ?: upNextTask
@@ -90,7 +96,11 @@ private data class LocalNavState(
     val schedulingInboxTask: TaskEntity? = null,
     val focusedTaskId: Long? = null,
     val forceSplitPreview: Boolean? = null,
-    val statusBannerMessage: String? = null
+    val statusBannerMessage: String? = null,
+    val isSettingsVisible: Boolean = false,
+    val use24HourFormat: Boolean = true,
+    val startOfDayMinutes: Int = 8 * 60,
+    val endOfDayMinutes: Int = 22 * 60
 )
 
 class PlannerViewModel(application: Application) : AndroidViewModel(application) {
@@ -99,9 +109,20 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
         PlannerDatabase.getInstance(application).plannerDao()
     )
 
-    private val navState = MutableStateFlow(LocalNavState())
+    private val prefs = application.getSharedPreferences("strukt_settings_prefs", Context.MODE_PRIVATE)
+
+    private val navState = MutableStateFlow(
+        LocalNavState(
+            use24HourFormat = prefs.getBoolean("use_24_hour", true),
+            startOfDayMinutes = prefs.getInt("start_of_day_min", 8 * 60),
+            endOfDayMinutes = prefs.getInt("end_of_day_min", 22 * 60)
+        )
+    )
 
     init {
+        GlobalClockFormat.use24Hour = navState.value.use24HourFormat
+        GlobalClockFormat.startOfDayMinutes = navState.value.startOfDayMinutes
+        GlobalClockFormat.endOfDayMinutes = navState.value.endOfDayMinutes
         viewModelScope.launch {
             repository.ensureSeedData(LocalDate.now().toEpochDay())
         }
@@ -233,7 +254,11 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
             statusBannerMessage = nav.statusBannerMessage,
             totalDayTasksCount = totalDayCount,
             completedDayTasksCount = completedDayCount,
-            dayReadinessPercent = readinessPct
+            dayReadinessPercent = readinessPct,
+            isSettingsVisible = nav.isSettingsVisible,
+            use24HourFormat = nav.use24HourFormat,
+            startOfDayMinutes = nav.startOfDayMinutes,
+            endOfDayMinutes = nav.endOfDayMinutes
         )
     }.stateIn(
         scope = viewModelScope,
@@ -331,6 +356,40 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
         navState.update { it.copy(inspectingTaskId = null) }
     }
 
+    fun openSettingsModal() {
+        navState.update { it.copy(isSettingsVisible = true) }
+    }
+
+    fun closeSettingsModal() {
+        navState.update { it.copy(isSettingsVisible = false) }
+    }
+
+    fun updateGlobalSettings(
+        use24Hour: Boolean,
+        startOfDayMin: Int,
+        endOfDayMin: Int
+    ) {
+        val safeStart = startOfDayMin.coerceIn(0, 22 * 60)
+        val safeEnd = endOfDayMin.coerceIn(safeStart + 60, 23 * 60 + 59)
+        prefs.edit()
+            .putBoolean("use_24_hour", use24Hour)
+            .putInt("start_of_day_min", safeStart)
+            .putInt("end_of_day_min", safeEnd)
+            .apply()
+        GlobalClockFormat.use24Hour = use24Hour
+        GlobalClockFormat.startOfDayMinutes = safeStart
+        GlobalClockFormat.endOfDayMinutes = safeEnd
+        navState.update {
+            it.copy(
+                use24HourFormat = use24Hour,
+                startOfDayMinutes = safeStart,
+                endOfDayMinutes = safeEnd,
+                isSettingsVisible = false,
+                statusBannerMessage = "Settings saved"
+            )
+        }
+    }
+
     fun openScheduleInboxPopup(task: TaskEntity) {
         navState.update { it.copy(schedulingInboxTask = task) }
     }
@@ -339,10 +398,15 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
         navState.update { it.copy(schedulingInboxTask = null) }
     }
 
-    fun confirmScheduleInboxTask(task: TaskEntity, asTimed: Boolean, startTimeMinutes: Int?) {
+    fun confirmScheduleInboxTask(
+        task: TaskEntity,
+        asTimed: Boolean,
+        startTimeMinutes: Int?,
+        durationMinutes: Int = task.durationMinutes
+    ) {
         val targetDay = navState.value.selectedDateEpochDay
         viewModelScope.launch {
-            repository.scheduleInboxTaskToDay(task, targetDay, asTimed, startTimeMinutes)
+            repository.scheduleInboxTaskToDay(task, targetDay, asTimed, startTimeMinutes, durationMinutes)
             navState.update {
                 it.copy(
                     schedulingInboxTask = null,
@@ -373,14 +437,19 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
         val currentEpoch = navState.value.selectedDateEpochDay
         val targetEpoch = if (toInbox) null else currentEpoch
         val prevTask = navState.value.editingTask?.task
+        val safeDuration = if (taskMode == TaskMode.TIMED_BLOCK) {
+            durationMinutes.coerceIn(5, 720)
+        } else {
+            durationMinutes.coerceIn(0, 720)
+        }
         val entity = TaskEntity(
             id = existingId,
             title = title.trim(),
             notes = notes.trim(),
             dateEpochDay = targetEpoch,
             taskMode = taskMode.name,
-            startTimeMinutes = if (taskMode == TaskMode.TIMED_BLOCK) (startTimeMinutes ?: 9 * 60) else prevTask?.startTimeMinutes,
-            durationMinutes = durationMinutes.coerceIn(1, 720),
+            startTimeMinutes = if (taskMode == TaskMode.TIMED_BLOCK) (startTimeMinutes ?: 9 * 60) else null,
+            durationMinutes = safeDuration,
             sortOrder = sortOrder,
             colorKey = colorKey,
             iconKey = iconKey,
@@ -412,7 +481,7 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
                     title = title.trim(),
                     dateEpochDay = null,
                     taskMode = TaskMode.TIMELESS_STEP.name,
-                    durationMinutes = 30,
+                    durationMinutes = 0,
                     colorKey = "SKY",
                     iconKey = "BOLT",
                     folderName = "General",

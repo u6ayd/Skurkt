@@ -1,9 +1,18 @@
 package com.example.ui.components
 
+import android.os.SystemClock
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -39,11 +48,13 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -58,12 +69,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import com.example.data.FolderEntity
 import com.example.data.RecurrenceRule
 import com.example.data.SubtaskEntity
@@ -99,10 +115,922 @@ private enum class EditorSubPopup {
     SUBTASKS
 }
 
+enum class TimedInputSubMode(val label: String) {
+    START_PLUS_DURATION("Start + Duration"),
+    START_TO_END("Start + End Time")
+}
+
+private enum class ActiveClockField {
+    START,
+    END
+}
+
 /**
- * De-Cramped Structured Task Editor (Inspired by Screenshot 7):
- * - Input placeholder is simply "Task".
- * - Tapping Duration, Color & Icon, Folder, Repeat, or Subtasks opens a dedicated clean Sub-Popup!
+ * Single-Window Global Settings Popup Modal:
+ * - Global Time Format: 24-Hour (14:30) vs 12-Hour (2:30 PM) applied across all timeline labels, pickers, and logs.
+ * - Start-of-Day (Wake-Up) & End-of-Day (Wind-Down) thresholds enforced when scheduling tasks.
+ */
+@Composable
+fun GlobalSettingsPopupModal(
+    use24HourFormat: Boolean,
+    startOfDayMinutes: Int,
+    endOfDayMinutes: Int,
+    onUpdateSettings: (use24Hour: Boolean, startOfDayMin: Int, endOfDayMin: Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var localUse24h by remember(use24HourFormat) { mutableStateOf(use24HourFormat) }
+    var localStartMin by remember(startOfDayMinutes) { mutableIntStateOf(startOfDayMinutes) }
+    var localEndMin by remember(endOfDayMinutes) { mutableIntStateOf(endOfDayMinutes) }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true
+        )
+    ) {
+        NeoCard(
+            modifier = Modifier
+                .widthIn(max = 420.dp)
+                .fillMaxWidth(),
+            backgroundColor = PureWhiteSurface,
+            cornerRadius = 24.dp,
+            contentPadding = PaddingValues(20.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(CircleShape)
+                                .background(NeoYellow, CircleShape)
+                                .border(1.5.dp, InkBlack, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Settings,
+                                contentDescription = null,
+                                tint = InkBlack,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Text(
+                            text = "Planner Settings",
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                            color = InkBlack
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .minimumInteractiveComponentSize()
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            .background(SoftSheetSurface, CircleShape)
+                            .border(1.5.dp, InkBlack, CircleShape)
+                            .smoothPressClickable(role = Role.Button, onClick = onDismiss),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close Settings",
+                            tint = InkBlack,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+
+                // 1. Global Clock Format (24-Hour vs 12-Hour AM/PM)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(SoftSheetSurface)
+                        .border(1.5.dp, InkBlack, RoundedCornerShape(16.dp))
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "Global Time Format",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = InkBlack
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        NeoPillButton(
+                            text = "24-Hour (14:30)",
+                            selected = localUse24h,
+                            activeColor = NeoYellow,
+                            onClick = { localUse24h = true },
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("settings_24h_button")
+                        )
+                        NeoPillButton(
+                            text = "12-Hour (2:30 PM)",
+                            selected = !localUse24h,
+                            activeColor = NeoYellow,
+                            onClick = { localUse24h = false },
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("settings_12h_button")
+                        )
+                    }
+                }
+
+                // 2. Start of Day (Wake-Up Threshold)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(SoftSheetSurface)
+                        .border(1.5.dp, InkBlack, RoundedCornerShape(16.dp))
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Start of Day (Wake-Up)",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = InkBlack
+                        )
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(NeoMintGreen)
+                                .border(1.5.dp, InkBlack, RoundedCornerShape(50))
+                                .padding(horizontal = 12.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = formatMinutesAsClock(localStartMin, localUse24h),
+                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                color = InkBlack
+                            )
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf(5 * 60, 6 * 60, 7 * 60, 8 * 60, 9 * 60, 10 * 60).forEach { presetMin ->
+                            NeoPillButton(
+                                text = formatMinutesAsClock(presetMin, localUse24h),
+                                selected = localStartMin == presetMin,
+                                activeColor = NeoMintGreen,
+                                onClick = {
+                                    localStartMin = presetMin
+                                    if (localEndMin <= localStartMin + 60) {
+                                        localEndMin = (localStartMin + 12 * 60).coerceAtMost(23 * 60 + 45)
+                                    }
+                                }
+                            )
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        NeoPillButton(
+                            text = "-15m",
+                            onClick = { localStartMin = (localStartMin - 15).coerceAtLeast(0) }
+                        )
+                        Text(
+                            text = "Wake-Up Threshold",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = InkMuted
+                        )
+                        NeoPillButton(
+                            text = "+15m",
+                            onClick = {
+                                localStartMin = (localStartMin + 15).coerceAtMost((localEndMin - 60).coerceAtLeast(0))
+                            }
+                        )
+                    }
+                }
+
+                // 3. End of Day (Wind-Down Threshold)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(SoftSheetSurface)
+                        .border(1.5.dp, InkBlack, RoundedCornerShape(16.dp))
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "End of Day (Wind-Down)",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = InkBlack
+                        )
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(NeoCoral)
+                                .border(1.5.dp, InkBlack, RoundedCornerShape(50))
+                                .padding(horizontal = 12.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = formatMinutesAsClock(localEndMin, localUse24h),
+                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                color = PureWhiteSurface
+                            )
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf(20 * 60, 21 * 60, 22 * 60, 23 * 60, 23 * 60 + 30, 23 * 60 + 59).forEach { presetMin ->
+                            NeoPillButton(
+                                text = formatMinutesAsClock(presetMin, localUse24h),
+                                selected = localEndMin == presetMin,
+                                activeColor = NeoCoral,
+                                onClick = {
+                                    if (presetMin > localStartMin + 30) {
+                                        localEndMin = presetMin
+                                    }
+                                }
+                            )
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        NeoPillButton(
+                            text = "-15m",
+                            onClick = {
+                                localEndMin = (localEndMin - 15).coerceAtLeast(localStartMin + 60)
+                            }
+                        )
+                        Text(
+                            text = "Blocks tasks past End of Day",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = InkMuted
+                        )
+                        NeoPillButton(
+                            text = "+15m",
+                            onClick = {
+                                localEndMin = (localEndMin + 15).coerceAtMost(23 * 60 + 59)
+                            }
+                        )
+                    }
+                }
+
+                NeoPillButton(
+                    text = "Save Settings",
+                    selected = true,
+                    activeColor = NeoMintGreen,
+                    onClick = {
+                        onUpdateSettings(localUse24h, localStartMin, localEndMin)
+                        onDismiss()
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("save_settings_button")
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Reusable Dual-Mode Time & Duration Picker Section:
+ * - Used across BOTH `StructuredTaskEditorDialog` (Flow red `+` / Edit) and `ScheduleInboxMiniPopup` (Inbox `+`).
+ * - Supports:
+ *   1. Timeless / Inbox mode with `0m` ("No duration • Counts UP") default + optional target duration (`1m..720m`).
+ *   2. Timed mode with Dual-Mode toggle:
+ *      - `Start + Duration`: Pick Start Time + Duration -> auto-calculates End Time.
+ *      - `Start + End Time`: Pick Start Time + End Time -> auto-calculates Duration (fixes "9:30 to 20" bug).
+ *   3. Direct Custom Time selection: Scrollable Hour (0..23) & Minute (00..55) quick-select strips + direct numeric inputs.
+ *   4. Start-of-Day / End-of-Day threshold validation with 1-tap "Fit Within Day" action.
+ */
+@Composable
+fun UnifiedTimeAndDurationPickerSection(
+    toInbox: Boolean,
+    taskMode: TaskMode,
+    stepOrder: Int,
+    startTimeMinutes: Int,
+    durationMinutes: Int,
+    showBubbleOption: Boolean = true,
+    onModeChange: (TaskMode) -> Unit,
+    onStepOrderChange: (Int) -> Unit = {},
+    onStartTimeChange: (Int) -> Unit,
+    onDurationChange: (Int) -> Unit
+) {
+    val startOfDayMin = GlobalClockFormat.startOfDayMinutes
+    val endOfDayMin = GlobalClockFormat.endOfDayMinutes
+    val use24h = GlobalClockFormat.use24Hour
+
+    var timedSubMode by remember { mutableStateOf(TimedInputSubMode.START_PLUS_DURATION) }
+    var activeClockField by remember { mutableStateOf(ActiveClockField.START) }
+
+    val effectiveTimedDuration = if (taskMode == TaskMode.TIMED_BLOCK) {
+        durationMinutes.coerceAtLeast(5)
+    } else {
+        durationMinutes.coerceAtLeast(0)
+    }
+    val calculatedEndMinutes = (startTimeMinutes + effectiveTimedDuration).coerceAtMost(23 * 60 + 59)
+
+    val selectedClockMinutes = if (timedSubMode == TimedInputSubMode.START_TO_END && activeClockField == ActiveClockField.END) {
+        calculatedEndMinutes
+    } else {
+        startTimeMinutes
+    }
+
+    var customHourText by remember(selectedClockMinutes) {
+        mutableStateOf(String.format(Locale.US, "%02d", (selectedClockMinutes / 60).coerceIn(0, 23)))
+    }
+    var customMinText by remember(selectedClockMinutes) {
+        mutableStateOf(String.format(Locale.US, "%02d", (selectedClockMinutes % 60).coerceIn(0, 59)))
+    }
+    var customDurationText by remember(durationMinutes) {
+        mutableStateOf(durationMinutes.coerceAtLeast(0).toString())
+    }
+
+    val applyClockUpdate: (Int) -> Unit = { newClockMin ->
+        val clampedClock = newClockMin.coerceIn(0, 23 * 60 + 59)
+        if (timedSubMode == TimedInputSubMode.START_TO_END && activeClockField == ActiveClockField.END) {
+            val newEnd = clampedClock.coerceAtLeast(startTimeMinutes + 5)
+            val newDur = (newEnd - startTimeMinutes).coerceIn(5, 720)
+            onDurationChange(newDur)
+        } else {
+            if (timedSubMode == TimedInputSubMode.START_TO_END) {
+                val prevEnd = calculatedEndMinutes
+                onStartTimeChange(clampedClock)
+                if (prevEnd > clampedClock + 5) {
+                    onDurationChange((prevEnd - clampedClock).coerceIn(5, 720))
+                }
+            } else {
+                onStartTimeChange(clampedClock)
+            }
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (!toInbox) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                NeoPillButton(
+                    text = "Timeless",
+                    selected = taskMode == TaskMode.TIMELESS_STEP,
+                    activeColor = NeoYellow,
+                    onClick = { onModeChange(TaskMode.TIMELESS_STEP) },
+                    modifier = Modifier.weight(1f)
+                )
+                NeoPillButton(
+                    text = "Timed",
+                    selected = taskMode == TaskMode.TIMED_BLOCK,
+                    activeColor = NeoCoral,
+                    onClick = {
+                        if (durationMinutes <= 0) {
+                            onDurationChange(45)
+                        }
+                        onModeChange(TaskMode.TIMED_BLOCK)
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+                if (showBubbleOption) {
+                    NeoPillButton(
+                        text = "Bubble",
+                        selected = taskMode == TaskMode.TOP_BUBBLE,
+                        activeColor = NeoSkyBlue,
+                        onClick = { onModeChange(TaskMode.TOP_BUBBLE) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+
+        // Sequence Step (#) stepper for Timeless tasks
+        if (!toInbox && taskMode == TaskMode.TIMELESS_STEP && showBubbleOption) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(SoftSheetSurface)
+                    .border(1.5.dp, InkBlack, RoundedCornerShape(16.dp))
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Sequence Step (#)",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = InkBlack
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .minimumInteractiveComponentSize()
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            .background(PureWhiteSurface, CircleShape)
+                            .border(1.5.dp, InkBlack, CircleShape)
+                            .smoothPressClickable { onStepOrderChange((stepOrder - 1).coerceAtLeast(1)) },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Remove,
+                            contentDescription = "Decrease Step #",
+                            tint = InkBlack,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(NeoYellow)
+                            .border(1.5.dp, InkBlack, RoundedCornerShape(10.dp))
+                            .padding(horizontal = 12.dp, vertical = 5.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "#$stepOrder",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = InkBlack
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .minimumInteractiveComponentSize()
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            .background(PureWhiteSurface, CircleShape)
+                            .border(1.5.dp, InkBlack, CircleShape)
+                            .smoothPressClickable { onStepOrderChange((stepOrder + 1).coerceAtMost(99)) },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Increase Step #",
+                            tint = InkBlack,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        // Timed Block Dual-Mode Time Picker (Start + Duration OR Start + End Time)
+        if (!toInbox && taskMode == TaskMode.TIMED_BLOCK) {
+            val isBeforeStartOfDay = startTimeMinutes < startOfDayMin
+            val isPastEndOfDay = (startTimeMinutes + effectiveTimedDuration) > endOfDayMin
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(SoftSheetSurface)
+                    .border(1.5.dp, InkBlack, RoundedCornerShape(18.dp))
+                    .padding(14.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Dual-Mode Switcher: Start + Duration vs Start + End Time
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    TimedInputSubMode.entries.forEach { modeOption ->
+                        NeoPillButton(
+                            text = modeOption.label,
+                            selected = timedSubMode == modeOption,
+                            activeColor = NeoYellow,
+                            onClick = {
+                                timedSubMode = modeOption
+                                if (modeOption == TimedInputSubMode.START_PLUS_DURATION) {
+                                    activeClockField = ActiveClockField.START
+                                }
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                // Interactive Start & End Time Header Cards
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val startSelected = timedSubMode == TimedInputSubMode.START_PLUS_DURATION ||
+                        activeClockField == ActiveClockField.START
+                    val endSelected = timedSubMode == TimedInputSubMode.START_TO_END &&
+                        activeClockField == ActiveClockField.END
+
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(if (startSelected) NeoCoral else PureWhiteSurface)
+                            .border(if (startSelected) 2.dp else 1.5.dp, InkBlack, RoundedCornerShape(14.dp))
+                            .smoothPressClickable { activeClockField = ActiveClockField.START }
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "START TIME",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = if (startSelected) PureWhiteSurface else InkMuted
+                        )
+                        Text(
+                            text = formatMinutesAsClock(startTimeMinutes, use24h),
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                            color = if (startSelected) PureWhiteSurface else InkBlack
+                        )
+                    }
+
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(if (endSelected) NeoCoral else PureWhiteSurface)
+                            .border(if (endSelected) 2.dp else 1.5.dp, InkBlack, RoundedCornerShape(14.dp))
+                            .smoothPressClickable {
+                                timedSubMode = TimedInputSubMode.START_TO_END
+                                activeClockField = ActiveClockField.END
+                            }
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "END (${formatDurationBadge(effectiveTimedDuration)})",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = if (endSelected) PureWhiteSurface else InkMuted
+                        )
+                        Text(
+                            text = formatMinutesAsClock(calculatedEndMinutes, use24h),
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                            color = if (endSelected) PureWhiteSurface else InkBlack
+                        )
+                    }
+                }
+
+                // Direct Scrollable Hour Quick-Select Strip (00..23)
+                Text(
+                    text = if (timedSubMode == TimedInputSubMode.START_TO_END && activeClockField == ActiveClockField.END) {
+                        "Tap End Hour & Minute"
+                    } else {
+                        "Tap Start Hour & Minute"
+                    },
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = InkCharcoal,
+                    modifier = Modifier.align(Alignment.Start)
+                )
+
+                val currentHour = (selectedClockMinutes / 60).coerceIn(0, 23)
+                val currentMinute = (selectedClockMinutes % 60).coerceIn(0, 59)
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    val orderedHours = remember(startOfDayMin) {
+                        val wakeHr = (startOfDayMin / 60).coerceIn(0, 23)
+                        (wakeHr..23).toList() + (0 until wakeHr).toList()
+                    }
+                    orderedHours.forEach { hr ->
+                        val isHrSelected = currentHour == hr
+                        val hrLabel = if (use24h) {
+                            String.format(Locale.US, "%02d:00", hr)
+                        } else {
+                            val p = if (hr < 12) "a" else "p"
+                            val h12 = when {
+                                hr == 0 -> 12
+                                hr > 12 -> hr - 12
+                                else -> hr
+                            }
+                            "${h12}$p"
+                        }
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (isHrSelected) NeoYellow else PureWhiteSurface)
+                                .border(1.2.dp, InkBlack, RoundedCornerShape(10.dp))
+                                .smoothPressClickable {
+                                    applyClockUpdate(hr * 60 + currentMinute)
+                                }
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = hrLabel,
+                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                                color = InkBlack
+                            )
+                        }
+                    }
+                }
+
+                // Direct Scrollable 5-Minute Quick-Select Strip (:00 .. :55)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    (0..55 step 5).forEach { minStep ->
+                        val isMinSelected = currentMinute == minStep
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (isMinSelected) NeoMintGreen else PureWhiteSurface)
+                                .border(1.2.dp, InkBlack, RoundedCornerShape(10.dp))
+                                .smoothPressClickable {
+                                    applyClockUpdate(currentHour * 60 + minStep)
+                                }
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = String.format(Locale.US, ":%02d", minStep),
+                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                                color = InkBlack
+                            )
+                        }
+                    }
+                }
+
+                // Direct Custom Hour : Minute Numeric Fields + Fine Steppers
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = customHourText,
+                        onValueChange = { txt ->
+                            val filtered = txt.filter { it.isDigit() }.take(2)
+                            customHourText = filtered
+                            val h = filtered.toIntOrNull()
+                            if (h != null && h in 0..23) {
+                                applyClockUpdate(h * 60 + currentMinute)
+                            }
+                        },
+                        label = { Text("Hour (0-23)") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        text = ":",
+                        style = MaterialTheme.typography.displaySmall,
+                        color = InkBlack
+                    )
+                    OutlinedTextField(
+                        value = customMinText,
+                        onValueChange = { txt ->
+                            val filtered = txt.filter { it.isDigit() }.take(2)
+                            customMinText = filtered
+                            val m = filtered.toIntOrNull()
+                            if (m != null && m in 0..59) {
+                                applyClockUpdate(currentHour * 60 + m)
+                            }
+                        },
+                        label = { Text("Min (0-59)") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    NeoPillButton(
+                        text = "-15m",
+                        onClick = { applyClockUpdate(selectedClockMinutes - 15) }
+                    )
+                    NeoPillButton(
+                        text = "-5m",
+                        onClick = { applyClockUpdate(selectedClockMinutes - 5) }
+                    )
+                    NeoPillButton(
+                        text = "+5m",
+                        onClick = { applyClockUpdate(selectedClockMinutes + 5) }
+                    )
+                    NeoPillButton(
+                        text = "+15m",
+                        onClick = { applyClockUpdate(selectedClockMinutes + 15) }
+                    )
+                }
+
+                // Start-of-Day / End-of-Day Threshold Inline Notice & 1-Tap Clamp
+                if (isBeforeStartOfDay || isPastEndOfDay) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(NeoYellow)
+                            .border(1.5.dp, InkBlack, RoundedCornerShape(12.dp))
+                            .padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = if (isPastEndOfDay) {
+                                "Exceeds End of Day (${formatMinutesAsClock(endOfDayMin, use24h)})"
+                            } else {
+                                "Before Start of Day (${formatMinutesAsClock(startOfDayMin, use24h)})"
+                            },
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                            color = InkBlack
+                        )
+                        NeoPillButton(
+                            text = "Fit Within Day (${formatMinutesAsClock(startOfDayMin, use24h)}–${formatMinutesAsClock(endOfDayMin, use24h)})",
+                            selected = true,
+                            activeColor = PureWhiteSurface,
+                            onClick = {
+                                val safeStart = startTimeMinutes.coerceIn(startOfDayMin, (endOfDayMin - 15).coerceAtLeast(startOfDayMin))
+                                val maxDur = (endOfDayMin - safeStart).coerceAtLeast(5)
+                                onStartTimeChange(safeStart)
+                                onDurationChange(effectiveTimedDuration.coerceAtMost(maxDur))
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            }
+        }
+
+        // Duration Picker Section:
+        // - Always shown for Timeless/Bubble/Inbox (with 0m "No Target • Stopwatch" option!)
+        // - Shown for Timed tasks when in "Start + Duration" mode
+        if (taskMode != TaskMode.TIMED_BLOCK || timedSubMode == TimedInputSubMode.START_PLUS_DURATION || toInbox) {
+            val isTimelessOrInbox = toInbox || taskMode != TaskMode.TIMED_BLOCK
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (isTimelessOrInbox) "Target Duration (Optional)" else "Duration",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = InkBlack
+                    )
+                    Text(
+                        text = if (durationMinutes <= 0) "0m (Stopwatch)" else formatDurationBadge(durationMinutes),
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                        color = InkCharcoal
+                    )
+                }
+
+                val presets = if (isTimelessOrInbox) {
+                    listOf(
+                        0 to "0m (None)",
+                        15 to "15m",
+                        25 to "25m",
+                        30 to "30m",
+                        45 to "45m",
+                        60 to "1h",
+                        90 to "1.5h",
+                        120 to "2h",
+                        180 to "3h"
+                    )
+                } else {
+                    listOf(
+                        15 to "15m",
+                        25 to "25m",
+                        30 to "30m",
+                        45 to "45m",
+                        60 to "1h",
+                        90 to "1.5h",
+                        120 to "2h",
+                        180 to "3h",
+                        240 to "4h"
+                    )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(50))
+                        .background(SoftSheetSurface)
+                        .border(1.5.dp, InkBlack, RoundedCornerShape(50))
+                        .padding(6.dp)
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    presets.forEach { (mins, label) ->
+                        val selected = durationMinutes == mins
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(if (selected) NeoCoral else PureWhiteSurface)
+                                .smoothPressClickable {
+                                    onDurationChange(mins)
+                                    customDurationText = mins.toString()
+                                }
+                                .padding(horizontal = 14.dp, vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = if (selected) PureWhiteSurface else InkBlack
+                            )
+                        }
+                    }
+                }
+
+                // Direct Custom Minutes Input (Supports 0m for Timeless without coercing 0 -> 3m!)
+                val minAllowedDuration = if (isTimelessOrInbox) 0 else 1
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = customDurationText,
+                        onValueChange = { txt ->
+                            val filtered = txt.filter { it.isDigit() }.take(3)
+                            customDurationText = filtered
+                            val parsed = filtered.toIntOrNull()
+                            if (parsed != null) {
+                                onDurationChange(parsed.coerceIn(minAllowedDuration, 720))
+                            } else if (filtered.isEmpty() && isTimelessOrInbox) {
+                                onDurationChange(0)
+                            }
+                        },
+                        label = {
+                            Text(
+                                if (isTimelessOrInbox) "Custom mins (0 = Stopwatch, 1-720)"
+                                else "Custom mins (1-720)"
+                            )
+                        },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    NeoPillButton(
+                        text = "-5m",
+                        onClick = {
+                            val next = (durationMinutes - 5).coerceAtLeast(minAllowedDuration)
+                            onDurationChange(next)
+                            customDurationText = next.toString()
+                        }
+                    )
+                    NeoPillButton(
+                        text = "+5m",
+                        onClick = {
+                            val next = (durationMinutes + 5).coerceAtMost(720)
+                            onDurationChange(next)
+                            customDurationText = next.toString()
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Single-Window Structured Task Editor Dialog:
+ * - Zero nested sub-dialogs ("popup within a popup" eliminated): tapping Time & Duration, Color & Icon,
+ *   Folder, Repeat, or Subtasks transitions smoothly in-place inside the same NeoCard via AnimatedContent!
+ * - Clicking outside the dialog card dismisses it immediately.
+ * - Top-right Move to Inbox & Delete buttons have generous spacing and zero overlap.
  */
 @Composable
 fun StructuredTaskEditorDialog(
@@ -142,10 +1070,17 @@ fun StructuredTaskEditorDialog(
         mutableStateOf(existingTask?.modeEnum ?: defaultMode)
     }
     var startTimeMinutes by remember(existingTask) {
-        mutableIntStateOf(existingTask?.startTimeMinutes ?: (18 * 60))
+        val defaultStart = (GlobalClockFormat.startOfDayMinutes + 60).coerceIn(0, 22 * 60)
+        mutableIntStateOf(existingTask?.startTimeMinutes ?: defaultStart)
     }
-    var durationMinutes by remember(existingTask) {
-        mutableIntStateOf(existingTask?.durationMinutes ?: 45)
+    // Timeless tasks default to 0m ("No duration • Stopwatch") when newly created; Timed tasks default to 45m
+    var durationMinutes by remember(existingTask, defaultMode) {
+        val initialDur = when {
+            existingTask != null -> existingTask.durationMinutes
+            defaultMode == TaskMode.TIMED_BLOCK -> 45
+            else -> 0
+        }
+        mutableIntStateOf(initialDur)
     }
     var colorKey by remember(existingTask) { mutableStateOf(existingTask?.colorKey ?: "SAGE") }
     var iconKey by remember(existingTask) { mutableStateOf(existingTask?.iconKey ?: "BOOK") }
@@ -164,7 +1099,7 @@ fun StructuredTaskEditorDialog(
         mutableIntStateOf(existingTask?.recurrenceDayOfMonth ?: selectedDate.dayOfMonth)
     }
     var stepOrder by remember(existingTask) {
-        mutableIntStateOf(existingTask?.let { effectiveTaskStepNumber(it) } ?: 4)
+        mutableIntStateOf(existingTask?.let { effectiveTaskStepNumber(it) } ?: 1)
     }
 
     val subtasksList = remember(editingItem) {
@@ -174,356 +1109,499 @@ fun StructuredTaskEditorDialog(
     }
 
     var activeSubPopup by remember { mutableStateOf(EditorSubPopup.NONE) }
+    var endOfDayErrorText by remember { mutableStateOf<String?>(null) }
 
     val headerColor = neoColorForKey(colorKey)
     val dateFormatter = remember { DateTimeFormatter.ofPattern("EEE dd. MMM yyyy", Locale.ENGLISH) }
 
     Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        onDismissRequest = {
+            if (activeSubPopup != EditorSubPopup.NONE) {
+                activeSubPopup = EditorSubPopup.NONE
+            } else {
+                onDismiss()
+            }
+        },
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true
+        )
     ) {
+        BackHandler(enabled = activeSubPopup != EditorSubPopup.NONE) {
+            activeSubPopup = EditorSubPopup.NONE
+        }
+
+        // Full-screen backdrop: clicking outside the NeoCard dismisses the dialog immediately
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) { onDismiss() }
                 .padding(16.dp),
             contentAlignment = Alignment.Center
         ) {
             NeoCard(
                 modifier = Modifier
                     .widthIn(max = 460.dp)
-                    .fillMaxWidth(),
+                    .fillMaxWidth()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { /* Consume inside clicks so backdrop doesn't dismiss */ },
                 backgroundColor = PaperCanvas,
                 cornerRadius = 28.dp,
                 shadowOffset = 5.dp,
                 contentPadding = PaddingValues(0.dp)
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .verticalScroll(rememberScrollState())
-                ) {
-                    // 1. Clean Colored Top Header (Matches Screenshot 7: green banner, circular icon, "Task" input)
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(headerColor)
-                            .padding(20.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            IconButton(
-                                onClick = onDismiss,
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(CircleShape)
-                                    .background(PureWhiteSurface.copy(alpha = 0.85f))
-                                    .border(1.5.dp, InkBlack, CircleShape)
-                                    .testTag("close_editor_button")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = "Close",
-                                    tint = InkBlack,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                if (existingTask != null && existingTask.dateEpochDay != null && onMoveToInbox != null) {
-                                    IconButton(
-                                        onClick = { onMoveToInbox(existingTask) },
-                                        modifier = Modifier
-                                            .size(36.dp)
-                                            .clip(CircleShape)
-                                            .background(PureWhiteSurface.copy(alpha = 0.85f))
-                                            .border(1.5.dp, InkBlack, CircleShape)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Inbox,
-                                            contentDescription = "Move to Inbox",
-                                            tint = InkBlack,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-                                }
-                                if (existingTask != null && onDelete != null) {
-                                    IconButton(
-                                        onClick = { onDelete(existingTask.id) },
-                                        modifier = Modifier
-                                            .size(36.dp)
-                                            .clip(CircleShape)
-                                            .background(PureWhiteSurface.copy(alpha = 0.85f))
-                                            .border(1.5.dp, InkBlack, CircleShape)
-                                            .testTag("delete_task_button")
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Delete,
-                                            contentDescription = "Delete Task",
-                                            tint = InkBlack,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-                                }
-                            }
+                AnimatedContent(
+                    targetState = activeSubPopup,
+                    transitionSpec = {
+                        if (targetState != EditorSubPopup.NONE) {
+                            (slideInHorizontally { it / 3 } + fadeIn()) togetherWith
+                                (slideOutHorizontally { -it / 3 } + fadeOut())
+                        } else {
+                            (slideInHorizontally { -it / 3 } + fadeIn()) togetherWith
+                                (slideOutHorizontally { it / 3 } + fadeOut())
                         }
-
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // Tapping the large circular icon opens the Color & Icon popup
-                            Box(
+                    },
+                    label = "single_window_editor_transition"
+                ) { subScreen ->
+                    when (subScreen) {
+                        EditorSubPopup.NONE -> {
+                            Column(
                                 modifier = Modifier
-                                    .size(62.dp)
-                                    .clip(CircleShape)
-                                    .background(PureWhiteSurface)
-                                    .border(2.dp, InkBlack, CircleShape)
-                                    .clickable { activeSubPopup = EditorSubPopup.COLOR_ICON },
-                                contentAlignment = Alignment.Center
+                                    .fillMaxWidth()
+                                    .verticalScroll(rememberScrollState())
                             ) {
-                                Icon(
-                                    imageVector = iconForKey(iconKey),
-                                    contentDescription = "Change Icon & Color",
-                                    tint = InkBlack,
-                                    modifier = Modifier.size(28.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(14.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = when {
-                                        toInbox -> "Inbox"
-                                        taskMode == TaskMode.TIMED_BLOCK ->
-                                            "${formatMinutesAsClock(startTimeMinutes)}–${formatMinutesAsClock(startTimeMinutes + durationMinutes)} (${formatDurationBadge(durationMinutes)})"
-                                        else -> formatDurationBadge(durationMinutes)
-                                    },
-                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Normal),
-                                    color = InkCharcoal
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                OutlinedTextField(
-                                    value = title,
-                                    onValueChange = { title = it },
-                                    placeholder = {
-                                        Text(
-                                            "Task",
-                                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Normal),
-                                            color = InkMuted
-                                        )
-                                    },
-                                    singleLine = true,
-                                    textStyle = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
-                                    shape = RoundedCornerShape(14.dp),
+                                // 1. Colored Top Header with non-overlapping Close, Move to Inbox, and Delete controls
+                                Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .background(PureWhiteSurface, RoundedCornerShape(14.dp))
-                                        .testTag("editor_title_input")
-                                )
-                            }
-                        }
-                    }
+                                        .background(headerColor)
+                                        .padding(20.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        IconButton(
+                                            onClick = onDismiss,
+                                            modifier = Modifier
+                                                .minimumInteractiveComponentSize()
+                                                .size(40.dp)
+                                                .clip(CircleShape)
+                                                .background(PureWhiteSurface.copy(alpha = 0.9f), CircleShape)
+                                                .border(1.5.dp, InkBlack, CircleShape)
+                                                .testTag("close_editor_button")
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Close,
+                                                contentDescription = "Close",
+                                                tint = InkBlack,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
 
-                    // 2. Clean Summary Rows (Each opens a dedicated Sub-Popup so nothing is cramped!)
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(18.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        // Destination Toggle Row (Date Flow vs Inbox)
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(PureWhiteSurface)
-                                .border(1.5.dp, InkBlack, RoundedCornerShape(16.dp))
-                                .padding(horizontal = 14.dp, vertical = 10.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = if (toInbox) "Inbox" else selectedDate.format(dateFormatter),
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                                color = InkBlack
-                            )
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                NeoPillButton(
-                                    text = "Timeline",
-                                    selected = !toInbox,
-                                    activeColor = NeoYellow,
-                                    onClick = { toInbox = false }
-                                )
-                                NeoPillButton(
-                                    text = "Inbox",
-                                    selected = toInbox,
-                                    activeColor = NeoCoral,
-                                    onClick = { toInbox = true }
-                                )
-                            }
-                        }
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            if (existingTask != null && existingTask.dateEpochDay != null && onMoveToInbox != null) {
+                                                NeoPillButton(
+                                                    text = "To Inbox",
+                                                    icon = Icons.Default.Inbox,
+                                                    selected = false,
+                                                    onClick = { onMoveToInbox(existingTask) }
+                                                )
+                                            }
+                                            if (existingTask != null && onDelete != null) {
+                                                IconButton(
+                                                    onClick = { onDelete(existingTask.id) },
+                                                    modifier = Modifier
+                                                        .minimumInteractiveComponentSize()
+                                                        .size(40.dp)
+                                                        .clip(CircleShape)
+                                                        .background(NeoCoral, CircleShape)
+                                                        .border(1.5.dp, InkBlack, CircleShape)
+                                                        .testTag("delete_task_button")
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Delete,
+                                                        contentDescription = "Delete Task",
+                                                        tint = PureWhiteSurface,
+                                                        modifier = Modifier.size(18.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
 
-                        // Row 1: Time & Duration Popup Trigger
-                        EditorSummaryRow(
-                            icon = Icons.Default.Schedule,
-                            label = "Time & Duration",
-                            valueText = when {
-                                toInbox -> formatDurationBadge(durationMinutes)
-                                taskMode == TaskMode.TIMED_BLOCK ->
-                                    "${formatMinutesAsClock(startTimeMinutes)} • ${formatDurationBadge(durationMinutes)}"
-                                taskMode == TaskMode.TOP_BUBBLE ->
-                                    "Top Bubble • ${formatDurationBadge(durationMinutes)}"
-                                else ->
-                                    "Timeless (#$stepOrder) • ${formatDurationBadge(durationMinutes)}"
-                            },
-                            onClick = { activeSubPopup = EditorSubPopup.DURATION_TIME }
-                        )
+                                    Spacer(modifier = Modifier.height(14.dp))
 
-                        // Row 2: Color & Category Icon Popup Trigger
-                        EditorSummaryRow(
-                            icon = Icons.Default.Palette,
-                            label = "Color & Icon",
-                            valueText = NeoPalette.firstOrNull { it.key == colorKey }?.label ?: "Color",
-                            onClick = { activeSubPopup = EditorSubPopup.COLOR_ICON }
-                        )
-
-                        // Row 3: Folder & Section Popup Trigger
-                        EditorSummaryRow(
-                            icon = Icons.Default.Folder,
-                            label = "Folder",
-                            valueText = "$folderName • $sectionName",
-                            onClick = { activeSubPopup = EditorSubPopup.FOLDER_SECTION }
-                        )
-
-                        // Row 4: Repeat / Recurrence Popup Trigger
-                        EditorSummaryRow(
-                            icon = Icons.Default.Repeat,
-                            label = "Repeat",
-                            valueText = if (recurrence == RecurrenceRule.MONTHLY) {
-                                "Monthly (Day $recurrenceDayOfMonth)"
-                            } else {
-                                recurrence.label
-                            },
-                            onClick = { activeSubPopup = EditorSubPopup.RECURRENCE }
-                        )
-
-                        // Row 5: Subtasks Popup Trigger
-                        EditorSummaryRow(
-                            icon = Icons.Default.Checklist,
-                            label = "Subtasks",
-                            valueText = if (subtasksList.isEmpty()) "None" else "${subtasksList.size} steps",
-                            onClick = { activeSubPopup = EditorSubPopup.SUBTASKS }
-                        )
-
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        // Bottom Full-Width Coral "Continue" Button (Matches Screenshot 7)
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(52.dp)
-                                .clip(RoundedCornerShape(50))
-                                .background(NeoCoral)
-                                .border(2.dp, InkBlack, RoundedCornerShape(50))
-                                .clickable {
-                                    val finalTitle = title.ifBlank { "Task" }
-                                    onSave(
-                                        existingTask?.id ?: 0L,
-                                        finalTitle,
-                                        notes,
-                                        toInbox,
-                                        taskMode,
-                                        startTimeMinutes,
-                                        durationMinutes,
-                                        colorKey,
-                                        iconKey,
-                                        folderName,
-                                        sectionName,
-                                        recurrence,
-                                        recurrenceDayOfMonth,
-                                        subtasksList.toList(),
-                                        if (taskMode == TaskMode.TIMELESS_STEP) stepOrder else (existingTask?.sortOrder ?: 0)
-                                    )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        // Tapping the large circular icon opens the in-place Color & Icon view
+                                        Box(
+                                            modifier = Modifier
+                                                .size(62.dp)
+                                                .clip(CircleShape)
+                                                .background(PureWhiteSurface, CircleShape)
+                                                .border(2.dp, InkBlack, CircleShape)
+                                                .smoothPressClickable { activeSubPopup = EditorSubPopup.COLOR_ICON },
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = iconForKey(iconKey),
+                                                contentDescription = "Change Icon & Color",
+                                                tint = InkBlack,
+                                                modifier = Modifier.size(28.dp)
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(14.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = when {
+                                                    toInbox -> "Inbox • ${formatDurationBadge(durationMinutes)}"
+                                                    taskMode == TaskMode.TIMED_BLOCK -> {
+                                                        val safeDur = durationMinutes.coerceAtLeast(5)
+                                                        "${formatMinutesAsClock(startTimeMinutes)}–${formatMinutesAsClock(startTimeMinutes + safeDur)} (${formatDurationBadge(safeDur)})"
+                                                    }
+                                                    else -> formatDurationBadge(durationMinutes)
+                                                },
+                                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Normal),
+                                                color = InkCharcoal
+                                            )
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            OutlinedTextField(
+                                                value = title,
+                                                onValueChange = { title = it },
+                                                placeholder = {
+                                                    Text(
+                                                        "Task",
+                                                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Normal),
+                                                        color = InkMuted
+                                                    )
+                                                },
+                                                singleLine = true,
+                                                textStyle = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+                                                shape = RoundedCornerShape(14.dp),
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .background(PureWhiteSurface, RoundedCornerShape(14.dp))
+                                                    .testTag("editor_title_input")
+                                            )
+                                        }
+                                    }
                                 }
-                                .testTag("save_task_continue_button"),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "Continue",
-                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
-                                color = PureWhiteSurface
-                            )
+
+                                // 2. Clean Summary Rows (Each transitions in-place inside this same window!)
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(18.dp),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    // Destination Toggle Row (Date Flow vs Inbox)
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(16.dp))
+                                            .background(PureWhiteSurface)
+                                            .border(1.5.dp, InkBlack, RoundedCornerShape(16.dp))
+                                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = if (toInbox) "Inbox" else selectedDate.format(dateFormatter),
+                                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                                            color = InkBlack
+                                        )
+                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            NeoPillButton(
+                                                text = "Timeline",
+                                                selected = !toInbox,
+                                                activeColor = NeoYellow,
+                                                onClick = { toInbox = false }
+                                            )
+                                            NeoPillButton(
+                                                text = "Inbox",
+                                                selected = toInbox,
+                                                activeColor = NeoCoral,
+                                                onClick = { toInbox = true }
+                                            )
+                                        }
+                                    }
+
+                                    // Row 1: Time & Duration In-Place Trigger
+                                    EditorSummaryRow(
+                                        icon = Icons.Default.Schedule,
+                                        label = "Time & Duration",
+                                        valueText = when {
+                                            toInbox -> formatDurationBadge(durationMinutes)
+                                            taskMode == TaskMode.TIMED_BLOCK -> {
+                                                val safeDur = durationMinutes.coerceAtLeast(5)
+                                                "${formatMinutesAsClock(startTimeMinutes)}–${formatMinutesAsClock(startTimeMinutes + safeDur)} • ${formatDurationBadge(safeDur)}"
+                                            }
+                                            taskMode == TaskMode.TOP_BUBBLE ->
+                                                "Top Bubble • ${formatDurationBadge(durationMinutes)}"
+                                            else ->
+                                                "Timeless (#$stepOrder) • ${formatDurationBadge(durationMinutes)}"
+                                        },
+                                        onClick = {
+                                            endOfDayErrorText = null
+                                            activeSubPopup = EditorSubPopup.DURATION_TIME
+                                        }
+                                    )
+
+                                    // Row 2: Color & Category Icon In-Place Trigger
+                                    EditorSummaryRow(
+                                        icon = Icons.Default.Palette,
+                                        label = "Color & Icon",
+                                        valueText = NeoPalette.firstOrNull { it.key == colorKey }?.label ?: "Color",
+                                        onClick = { activeSubPopup = EditorSubPopup.COLOR_ICON }
+                                    )
+
+                                    // Row 3: Folder & Section In-Place Trigger
+                                    EditorSummaryRow(
+                                        icon = Icons.Default.Folder,
+                                        label = "Folder",
+                                        valueText = "$folderName • $sectionName",
+                                        onClick = { activeSubPopup = EditorSubPopup.FOLDER_SECTION }
+                                    )
+
+                                    // Row 4: Repeat / Recurrence In-Place Trigger
+                                    EditorSummaryRow(
+                                        icon = Icons.Default.Repeat,
+                                        label = "Repeat",
+                                        valueText = if (recurrence == RecurrenceRule.MONTHLY) {
+                                            "Monthly (Day $recurrenceDayOfMonth)"
+                                        } else {
+                                            recurrence.label
+                                        },
+                                        onClick = { activeSubPopup = EditorSubPopup.RECURRENCE }
+                                    )
+
+                                    // Row 5: Subtasks In-Place Trigger
+                                    EditorSummaryRow(
+                                        icon = Icons.Default.Checklist,
+                                        label = "Subtasks",
+                                        valueText = if (subtasksList.isEmpty()) "None" else "${subtasksList.size} steps",
+                                        onClick = { activeSubPopup = EditorSubPopup.SUBTASKS }
+                                    )
+
+                                    endOfDayErrorText?.let { errMsg ->
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(NeoYellow)
+                                                .border(1.5.dp, InkBlack, RoundedCornerShape(12.dp))
+                                                .padding(10.dp)
+                                        ) {
+                                            Text(
+                                                text = errMsg,
+                                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                                                color = InkBlack
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(6.dp))
+
+                                    // Bottom Full-Width Coral "Continue" Button
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(52.dp)
+                                            .clip(RoundedCornerShape(50))
+                                            .background(NeoCoral)
+                                            .border(2.dp, InkBlack, RoundedCornerShape(50))
+                                            .clickable {
+                                                val finalDur = if (taskMode == TaskMode.TIMED_BLOCK) {
+                                                    durationMinutes.coerceIn(5, 720)
+                                                } else {
+                                                    durationMinutes.coerceIn(0, 720)
+                                                }
+                                                if (!toInbox && taskMode == TaskMode.TIMED_BLOCK) {
+                                                    val endMin = startTimeMinutes + finalDur
+                                                    if (endMin > GlobalClockFormat.endOfDayMinutes) {
+                                                        endOfDayErrorText =
+                                                            "Task ends at ${formatMinutesAsClock(endMin)}, past End of Day (${formatMinutesAsClock(GlobalClockFormat.endOfDayMinutes)}). Adjust time or End-of-Day in Settings."
+                                                        return@clickable
+                                                    }
+                                                }
+                                                val finalTitle = title.ifBlank { "Task" }
+                                                onSave(
+                                                    existingTask?.id ?: 0L,
+                                                    finalTitle,
+                                                    notes,
+                                                    toInbox,
+                                                    taskMode,
+                                                    if (taskMode == TaskMode.TIMED_BLOCK) startTimeMinutes else null,
+                                                    finalDur,
+                                                    colorKey,
+                                                    iconKey,
+                                                    folderName,
+                                                    sectionName,
+                                                    recurrence,
+                                                    recurrenceDayOfMonth,
+                                                    subtasksList.toList(),
+                                                    if (taskMode == TaskMode.TIMELESS_STEP) stepOrder else (existingTask?.sortOrder ?: 0)
+                                                )
+                                            }
+                                            .testTag("save_task_continue_button"),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "Continue",
+                                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+                                            color = PureWhiteSurface
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        EditorSubPopup.DURATION_TIME -> {
+                            InPlaceSubScreenContainer(
+                                title = "Time & Duration",
+                                onBack = { activeSubPopup = EditorSubPopup.NONE }
+                            ) {
+                                UnifiedTimeAndDurationPickerSection(
+                                    toInbox = toInbox,
+                                    taskMode = taskMode,
+                                    stepOrder = stepOrder,
+                                    startTimeMinutes = startTimeMinutes,
+                                    durationMinutes = durationMinutes,
+                                    showBubbleOption = true,
+                                    onModeChange = { taskMode = it },
+                                    onStepOrderChange = { stepOrder = it },
+                                    onStartTimeChange = { startTimeMinutes = it },
+                                    onDurationChange = { durationMinutes = it }
+                                )
+                            }
+                        }
+
+                        EditorSubPopup.COLOR_ICON -> {
+                            InPlaceSubScreenContainer(
+                                title = "Color & Icon",
+                                onBack = { activeSubPopup = EditorSubPopup.NONE }
+                            ) {
+                                ColorAndIconInPlaceContent(
+                                    selectedColorKey = colorKey,
+                                    selectedIconKey = iconKey,
+                                    onSelectColor = { colorKey = it },
+                                    onSelectIcon = { iconKey = it }
+                                )
+                            }
+                        }
+
+                        EditorSubPopup.FOLDER_SECTION -> {
+                            InPlaceSubScreenContainer(
+                                title = "Folder & Section",
+                                onBack = { activeSubPopup = EditorSubPopup.NONE }
+                            ) {
+                                FolderAndSectionInPlaceContent(
+                                    folders = folders,
+                                    selectedFolder = folderName,
+                                    selectedSection = sectionName,
+                                    onSelectFolderAndSection = { f, s ->
+                                        folderName = f
+                                        sectionName = s
+                                    }
+                                )
+                            }
+                        }
+
+                        EditorSubPopup.RECURRENCE -> {
+                            InPlaceSubScreenContainer(
+                                title = "Repeat",
+                                onBack = { activeSubPopup = EditorSubPopup.NONE }
+                            ) {
+                                RecurrenceInPlaceContent(
+                                    selectedRule = recurrence,
+                                    dayOfMonth = recurrenceDayOfMonth,
+                                    onSelectRule = { recurrence = it },
+                                    onSelectDayOfMonth = { recurrenceDayOfMonth = it }
+                                )
+                            }
+                        }
+
+                        EditorSubPopup.SUBTASKS -> {
+                            var draftSubtask by remember { mutableStateOf("") }
+                            InPlaceSubScreenContainer(
+                                title = "Subtasks & Notes",
+                                onBack = {
+                                    if (draftSubtask.isNotBlank()) {
+                                        subtasksList.add(draftSubtask.trim() to "STEP")
+                                    }
+                                    activeSubPopup = EditorSubPopup.NONE
+                                }
+                            ) {
+                                SubtasksInPlaceContent(
+                                    subtasks = subtasksList,
+                                    notes = notes,
+                                    draftSubtask = draftSubtask,
+                                    onDraftSubtaskChange = { draftSubtask = it },
+                                    onNotesChange = { notes = it }
+                                )
+                            }
                         }
                     }
                 }
             }
         }
     }
+}
 
-    // Dedicated Sub-Popups so each setting has generous breathing room!
-    when (activeSubPopup) {
-        EditorSubPopup.DURATION_TIME -> {
-            TimeAndDurationSubPopup(
-                toInbox = toInbox,
-                taskMode = taskMode,
-                stepOrder = stepOrder,
-                startTimeMinutes = startTimeMinutes,
-                durationMinutes = durationMinutes,
-                onModeChange = { taskMode = it },
-                onStepOrderChange = { stepOrder = it },
-                onStartTimeChange = { startTimeMinutes = it },
-                onDurationChange = { durationMinutes = it },
-                onDismiss = { activeSubPopup = EditorSubPopup.NONE }
+@Composable
+private fun InPlaceSubScreenContainer(
+    title: String,
+    onBack: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(PureWhiteSurface)
+            .verticalScroll(rememberScrollState())
+            .padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            NeoPillButton(
+                text = "Back",
+                icon = Icons.AutoMirrored.Filled.ArrowBack,
+                onClick = onBack
             )
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                color = InkBlack
+            )
+            Spacer(modifier = Modifier.width(48.dp))
         }
 
-        EditorSubPopup.COLOR_ICON -> {
-            ColorAndIconSubPopup(
-                selectedColorKey = colorKey,
-                selectedIconKey = iconKey,
-                onSelectColor = { colorKey = it },
-                onSelectIcon = { iconKey = it },
-                onDismiss = { activeSubPopup = EditorSubPopup.NONE }
-            )
-        }
+        content()
 
-        EditorSubPopup.FOLDER_SECTION -> {
-            FolderAndSectionSubPopup(
-                folders = folders,
-                selectedFolder = folderName,
-                selectedSection = sectionName,
-                onSelectFolderAndSection = { f, s ->
-                    folderName = f
-                    sectionName = s
-                },
-                onDismiss = { activeSubPopup = EditorSubPopup.NONE }
-            )
-        }
-
-        EditorSubPopup.RECURRENCE -> {
-            RecurrenceSubPopup(
-                selectedRule = recurrence,
-                dayOfMonth = recurrenceDayOfMonth,
-                onSelectRule = { recurrence = it },
-                onSelectDayOfMonth = { recurrenceDayOfMonth = it },
-                onDismiss = { activeSubPopup = EditorSubPopup.NONE }
-            )
-        }
-
-        EditorSubPopup.SUBTASKS -> {
-            SubtasksSubPopup(
-                subtasks = subtasksList,
-                notes = notes,
-                onNotesChange = { notes = it },
-                onDismiss = { activeSubPopup = EditorSubPopup.NONE }
-            )
-        }
-
-        EditorSubPopup.NONE -> Unit
+        NeoPillButton(
+            text = "Done",
+            selected = true,
+            activeColor = NeoMintGreen,
+            onClick = onBack,
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 
@@ -569,7 +1647,9 @@ private fun EditorSummaryRow(
             Text(
                 text = valueText,
                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-                color = InkMuted
+                color = InkMuted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
@@ -581,761 +1661,312 @@ private fun EditorSummaryRow(
     }
 }
 
-/**
- * Sub-Popup 1: Time & Duration (Matches Screenshot 7's Time & Duration pickers!).
- */
 @Composable
-private fun TimeAndDurationSubPopup(
-    toInbox: Boolean,
-    taskMode: TaskMode,
-    stepOrder: Int,
-    startTimeMinutes: Int,
-    durationMinutes: Int,
-    onModeChange: (TaskMode) -> Unit,
-    onStepOrderChange: (Int) -> Unit,
-    onStartTimeChange: (Int) -> Unit,
-    onDurationChange: (Int) -> Unit,
-    onDismiss: () -> Unit
-) {
-    var customHourText by remember(startTimeMinutes) {
-        mutableStateOf(String.format(Locale.US, "%02d", (startTimeMinutes / 60).coerceIn(0, 23)))
-    }
-    var customMinText by remember(startTimeMinutes) {
-        mutableStateOf(String.format(Locale.US, "%02d", (startTimeMinutes % 60).coerceIn(0, 59)))
-    }
-    var customDurationText by remember(durationMinutes) {
-        mutableStateOf(durationMinutes.toString())
-    }
-
-    Dialog(onDismissRequest = onDismiss) {
-        NeoCard(
-            modifier = Modifier
-                .widthIn(max = 400.dp)
-                .fillMaxWidth(),
-            backgroundColor = PureWhiteSurface,
-            cornerRadius = 24.dp,
-            contentPadding = PaddingValues(20.dp)
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Text(
-                    text = "Time & Duration",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = InkBlack
-                )
-
-                if (!toInbox) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        NeoPillButton(
-                            text = "Timeless",
-                            selected = taskMode == TaskMode.TIMELESS_STEP,
-                            activeColor = NeoYellow,
-                            onClick = { onModeChange(TaskMode.TIMELESS_STEP) },
-                            modifier = Modifier.weight(1f)
-                        )
-                        NeoPillButton(
-                            text = "Timed",
-                            selected = taskMode == TaskMode.TIMED_BLOCK,
-                            activeColor = NeoCoral,
-                            onClick = { onModeChange(TaskMode.TIMED_BLOCK) },
-                            modifier = Modifier.weight(1f)
-                        )
-                        NeoPillButton(
-                            text = "Bubble",
-                            selected = taskMode == TaskMode.TOP_BUBBLE,
-                            activeColor = NeoSkyBlue,
-                            onClick = { onModeChange(TaskMode.TOP_BUBBLE) },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-
-                if (!toInbox && taskMode == TaskMode.TIMELESS_STEP) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(SoftSheetSurface)
-                            .border(1.5.dp, InkBlack, RoundedCornerShape(16.dp))
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Sequence Step (#)",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                            color = InkBlack
-                        )
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(CircleShape)
-                                    .background(PureWhiteSurface)
-                                    .border(1.5.dp, InkBlack, CircleShape)
-                                    .clickable { onStepOrderChange((stepOrder - 1).coerceAtLeast(1)) },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Remove,
-                                    contentDescription = "Decrease Step #",
-                                    tint = InkBlack,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(NeoYellow)
-                                    .border(1.5.dp, InkBlack, RoundedCornerShape(10.dp))
-                                    .padding(horizontal = 12.dp, vertical = 5.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "#$stepOrder",
-                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                                    color = InkBlack
-                                )
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(CircleShape)
-                                    .background(PureWhiteSurface)
-                                    .border(1.5.dp, InkBlack, CircleShape)
-                                    .clickable { onStepOrderChange((stepOrder + 1).coerceAtMost(99)) },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Add,
-                                    contentDescription = "Increase Step #",
-                                    tint = InkBlack,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-
-                if (!toInbox && taskMode == TaskMode.TIMED_BLOCK) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(18.dp))
-                            .background(SoftSheetSurface)
-                            .border(1.5.dp, InkBlack, RoundedCornerShape(18.dp))
-                            .padding(14.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(50))
-                                .background(NeoCoral)
-                                .border(1.5.dp, InkBlack, RoundedCornerShape(50))
-                                .padding(horizontal = 20.dp, vertical = 8.dp)
-                        ) {
-                            Text(
-                                text = "${formatMinutesAsClock(startTimeMinutes)} – ${formatMinutesAsClock((startTimeMinutes + durationMinutes).coerceAtMost(23 * 60 + 59))}",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = PureWhiteSurface
-                            )
-                        }
-
-                        // Custom Hour : Minute direct inputs + fine steppers
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            OutlinedTextField(
-                                value = customHourText,
-                                onValueChange = { txt ->
-                                    val filtered = txt.filter { it.isDigit() }.take(2)
-                                    customHourText = filtered
-                                    val h = filtered.toIntOrNull()?.coerceIn(0, 23) ?: 0
-                                    val m = (startTimeMinutes % 60).coerceIn(0, 59)
-                                    onStartTimeChange(h * 60 + m)
-                                },
-                                label = { Text("Hour (0-23)") },
-                                singleLine = true,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Text(
-                                text = ":",
-                                style = MaterialTheme.typography.displaySmall,
-                                color = InkBlack
-                            )
-                            OutlinedTextField(
-                                value = customMinText,
-                                onValueChange = { txt ->
-                                    val filtered = txt.filter { it.isDigit() }.take(2)
-                                    customMinText = filtered
-                                    val h = (startTimeMinutes / 60).coerceIn(0, 23)
-                                    val m = filtered.toIntOrNull()?.coerceIn(0, 59) ?: 0
-                                    onStartTimeChange(h * 60 + m)
-                                },
-                                label = { Text("Min (0-59)") },
-                                singleLine = true,
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceEvenly
-                        ) {
-                            NeoPillButton(
-                                text = "-15m",
-                                onClick = { onStartTimeChange((startTimeMinutes - 15).coerceAtLeast(0)) }
-                            )
-                            NeoPillButton(
-                                text = "-1m",
-                                onClick = { onStartTimeChange((startTimeMinutes - 1).coerceAtLeast(0)) }
-                            )
-                            NeoPillButton(
-                                text = "+1m",
-                                onClick = { onStartTimeChange((startTimeMinutes + 1).coerceAtMost(23 * 60 + 59)) }
-                            )
-                            NeoPillButton(
-                                text = "+15m",
-                                onClick = { onStartTimeChange((startTimeMinutes + 15).coerceAtMost(23 * 60 + 59)) }
-                            )
-                        }
-                    }
-                }
-
-                // Duration Presets + Custom Minutes Input (any duration from 1m to 720m / 12h)
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "Duration",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = InkBlack
-                    )
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(50))
-                            .background(SoftSheetSurface)
-                            .border(1.5.dp, InkBlack, RoundedCornerShape(50))
-                            .padding(6.dp)
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        listOf(
-                            15 to "15m",
-                            30 to "30m",
-                            45 to "45m",
-                            60 to "1h",
-                            90 to "1.5h",
-                            120 to "2h",
-                            180 to "3h",
-                            240 to "4h"
-                        ).forEach { (mins, label) ->
-                            val selected = durationMinutes == mins
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(50))
-                                    .background(if (selected) NeoCoral else PureWhiteSurface)
-                                    .clickable {
-                                        onDurationChange(mins)
-                                        customDurationText = mins.toString()
-                                    }
-                                    .padding(horizontal = 14.dp, vertical = 8.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = label,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = if (selected) PureWhiteSurface else InkBlack
-                                )
-                            }
-                        }
-                    }
-
-                    // Custom Duration Field (Minutes + Quick -5m / +5m / +30m)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OutlinedTextField(
-                            value = customDurationText,
-                            onValueChange = { txt ->
-                                val filtered = txt.filter { it.isDigit() }.take(3)
-                                customDurationText = filtered
-                                val parsed = filtered.toIntOrNull()
-                                if (parsed != null && parsed >= 1) {
-                                    onDurationChange(parsed.coerceIn(1, 720))
-                                }
-                            },
-                            label = { Text("Custom minutes (e.g. 25, 150)") },
-                            singleLine = true,
-                            modifier = Modifier.weight(1f)
-                        )
-                        NeoPillButton(
-                            text = "-5m",
-                            onClick = {
-                                val next = (durationMinutes - 5).coerceAtLeast(1)
-                                onDurationChange(next)
-                                customDurationText = next.toString()
-                            }
-                        )
-                        NeoPillButton(
-                            text = "+5m",
-                            onClick = {
-                                val next = (durationMinutes + 5).coerceAtMost(720)
-                                onDurationChange(next)
-                                customDurationText = next.toString()
-                            }
-                        )
-                    }
-                }
-
-                NeoPillButton(
-                    text = "Done",
-                    selected = true,
-                    activeColor = NeoMintGreen,
-                    onClick = onDismiss,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        }
-    }
-}
-
-/**
- * Sub-Popup 2: Color & Category Icon Picker.
- */
-@Composable
-private fun ColorAndIconSubPopup(
+private fun ColorAndIconInPlaceContent(
     selectedColorKey: String,
     selectedIconKey: String,
     onSelectColor: (String) -> Unit,
-    onSelectIcon: (String) -> Unit,
-    onDismiss: () -> Unit
+    onSelectIcon: (String) -> Unit
 ) {
     val activeColor = neoColorForKey(selectedColorKey)
-    Dialog(onDismissRequest = onDismiss) {
-        NeoCard(
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Row(
             modifier = Modifier
-                .widthIn(max = 380.dp)
-                .fillMaxWidth(),
-            backgroundColor = PureWhiteSurface,
-            cornerRadius = 24.dp,
-            shadowOffset = 4.dp,
-            contentPadding = PaddingValues(20.dp)
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text(
-                    text = "Color & Icon",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = InkBlack
-                )
-
-                Row(
+            NeoPalette.forEach { option ->
+                val selected = selectedColorKey == option.key
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        .minimumInteractiveComponentSize()
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(option.fill, CircleShape)
+                        .border(if (selected) 2.5.dp else 1.dp, InkBlack, CircleShape)
+                        .smoothPressClickable { onSelectColor(option.key) },
+                    contentAlignment = Alignment.Center
                 ) {
-                    NeoPalette.forEach { option ->
-                        val selected = selectedColorKey == option.key
-                        Box(
+                    if (selected) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = option.label,
+                            tint = InkBlack,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            TaskIconCatalog.chunked(4).forEach { rowItems ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    rowItems.forEach { item ->
+                        val selected = selectedIconKey == item.key
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier
-                                .size(38.dp)
-                                .clip(CircleShape)
-                                .background(option.fill)
-                                .border(if (selected) 2.5.dp else 1.dp, InkBlack, CircleShape)
-                                .clickable { onSelectColor(option.key) },
-                            contentAlignment = Alignment.Center
+                                .width(68.dp)
+                                .smoothPressClickable { onSelectIcon(item.key) }
                         ) {
-                            if (selected) {
+                            Box(
+                                modifier = Modifier
+                                    .minimumInteractiveComponentSize()
+                                    .size(44.dp)
+                                    .clip(CircleShape)
+                                    .background(if (selected) activeColor else SoftSheetSurface, CircleShape)
+                                    .border(if (selected) 2.dp else 1.dp, InkBlack, CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
                                 Icon(
-                                    imageVector = Icons.Default.Check,
-                                    contentDescription = option.label,
+                                    imageVector = item.icon,
+                                    contentDescription = item.label,
                                     tint = InkBlack,
-                                    modifier = Modifier.size(18.dp)
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = item.label,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = InkBlack
+                            )
                         }
                     }
                 }
-
-                // Clean 4-column rows of icons
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    TaskIconCatalog.chunked(4).forEach { rowItems ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceEvenly
-                        ) {
-                            rowItems.forEach { item ->
-                                val selected = selectedIconKey == item.key
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    modifier = Modifier
-                                        .width(68.dp)
-                                        .clickable { onSelectIcon(item.key) }
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(44.dp)
-                                            .clip(CircleShape)
-                                            .background(if (selected) activeColor else SoftSheetSurface)
-                                            .border(if (selected) 2.dp else 1.dp, InkBlack, CircleShape),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = item.icon,
-                                            contentDescription = item.label,
-                                            tint = InkBlack,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = item.label,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = InkBlack
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                NeoPillButton(
-                    text = "Done",
-                    selected = true,
-                    activeColor = NeoMintGreen,
-                    onClick = onDismiss,
-                    modifier = Modifier.fillMaxWidth()
-                )
             }
         }
     }
 }
 
-/**
- * Sub-Popup 3: Folder & Section Selector.
- */
 @Composable
-private fun FolderAndSectionSubPopup(
+private fun FolderAndSectionInPlaceContent(
     folders: List<FolderEntity>,
     selectedFolder: String,
     selectedSection: String,
-    onSelectFolderAndSection: (String, String) -> Unit,
-    onDismiss: () -> Unit
+    onSelectFolderAndSection: (String, String) -> Unit
 ) {
     val activeFolderObj = folders.firstOrNull { it.name.equals(selectedFolder, ignoreCase = true) }
         ?: folders.firstOrNull()
     val sections = activeFolderObj?.sections?.ifEmpty { listOf("Core") } ?: listOf("Core")
 
-    Dialog(onDismissRequest = onDismiss) {
-        NeoCard(
-            modifier = Modifier
-                .widthIn(max = 380.dp)
-                .fillMaxWidth(),
-            backgroundColor = PureWhiteSurface,
-            cornerRadius = 24.dp,
-            shadowOffset = 4.dp,
-            contentPadding = PaddingValues(20.dp)
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Text(
-                    text = "Folder & Section",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = InkBlack
-                )
-
-                Text(
-                    text = "Folder",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = InkMuted
-                )
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    folders.forEach { folder ->
-                        val isSelected = folder.name.equals(selectedFolder, ignoreCase = true)
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(if (isSelected) neoColorForKey(folder.colorKey) else SoftSheetSurface)
-                                .border(if (isSelected) 1.8.dp else 1.dp, InkBlack, RoundedCornerShape(12.dp))
-                                .clickable {
-                                    val firstSec = folder.sections.firstOrNull() ?: "Core"
-                                    onSelectFolderAndSection(folder.name, firstSec)
-                                }
-                                .padding(horizontal = 14.dp, vertical = 10.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = folder.name,
-                                style = MaterialTheme.typography.titleMedium,
-                                color = InkBlack
-                            )
-                            Text(
-                                text = folder.codeTag,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = InkCharcoal
-                            )
-                        }
-                    }
-                }
-
-                Text(
-                    text = "Section",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = InkMuted
-                )
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Text(
+            text = "Folder",
+            style = MaterialTheme.typography.labelLarge,
+            color = InkMuted
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            folders.forEach { folder ->
+                val isSelected = folder.name.equals(selectedFolder, ignoreCase = true)
                 Row(
-                    modifier = Modifier.horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (isSelected) neoColorForKey(folder.colorKey) else SoftSheetSurface)
+                        .border(if (isSelected) 1.8.dp else 1.dp, InkBlack, RoundedCornerShape(12.dp))
+                        .clickable {
+                            val firstSec = folder.sections.firstOrNull() ?: "Core"
+                            onSelectFolderAndSection(folder.name, firstSec)
+                        }
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    sections.forEach { sec ->
-                        NeoPillButton(
-                            text = sec,
-                            selected = sec.equals(selectedSection, ignoreCase = true),
-                            activeColor = NeoYellow,
-                            onClick = {
-                                onSelectFolderAndSection(activeFolderObj?.name ?: selectedFolder, sec)
-                            }
-                        )
-                    }
+                    Text(
+                        text = folder.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = InkBlack
+                    )
+                    Text(
+                        text = folder.codeTag,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = InkCharcoal
+                    )
                 }
+            }
+        }
 
+        Text(
+            text = "Section",
+            style = MaterialTheme.typography.labelLarge,
+            color = InkMuted
+        )
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            sections.forEach { sec ->
                 NeoPillButton(
-                    text = "Done",
-                    selected = true,
-                    activeColor = NeoMintGreen,
-                    onClick = onDismiss,
-                    modifier = Modifier.fillMaxWidth()
+                    text = sec,
+                    selected = sec.equals(selectedSection, ignoreCase = true),
+                    activeColor = NeoYellow,
+                    onClick = {
+                        onSelectFolderAndSection(activeFolderObj?.name ?: selectedFolder, sec)
+                    }
                 )
             }
         }
     }
 }
 
-/**
- * Sub-Popup 4: Repeat / Recurrence Picker (Supports Daily, Weekdays, Weekly, and Monthly on Day 1..31).
- */
 @Composable
-private fun RecurrenceSubPopup(
+private fun RecurrenceInPlaceContent(
     selectedRule: RecurrenceRule,
     dayOfMonth: Int,
     onSelectRule: (RecurrenceRule) -> Unit,
-    onSelectDayOfMonth: (Int) -> Unit,
-    onDismiss: () -> Unit
+    onSelectDayOfMonth: (Int) -> Unit
 ) {
-    Dialog(onDismissRequest = onDismiss) {
-        NeoCard(
-            modifier = Modifier
-                .widthIn(max = 360.dp)
-                .fillMaxWidth(),
-            backgroundColor = PureWhiteSurface,
-            cornerRadius = 24.dp,
-            shadowOffset = 4.dp,
-            contentPadding = PaddingValues(20.dp)
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        RecurrenceRule.entries.forEach { rule ->
+            val selected = selectedRule == rule
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(if (selected) NeoYellow else SoftSheetSurface)
+                    .border(if (selected) 1.8.dp else 1.dp, InkBlack, RoundedCornerShape(12.dp))
+                    .clickable { onSelectRule(rule) }
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
-                    text = "Repeat",
-                    style = MaterialTheme.typography.titleLarge,
+                    text = rule.label,
+                    style = MaterialTheme.typography.titleMedium,
                     color = InkBlack
                 )
-
-                RecurrenceRule.entries.forEach { rule ->
-                    val selected = selectedRule == rule
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(if (selected) NeoYellow else SoftSheetSurface)
-                            .border(if (selected) 1.8.dp else 1.dp, InkBlack, RoundedCornerShape(12.dp))
-                            .clickable { onSelectRule(rule) }
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = rule.label,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = InkBlack
-                        )
-                        if (selected) {
-                            Icon(
-                                imageVector = Icons.Default.Check,
-                                contentDescription = null,
-                                tint = InkBlack,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    }
+                if (selected) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        tint = InkBlack,
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
+            }
+        }
 
-                if (selectedRule == RecurrenceRule.MONTHLY) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Day of Month",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = InkBlack
-                        )
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            NeoPillButton(
-                                text = "-",
-                                onClick = { onSelectDayOfMonth((dayOfMonth - 1).coerceAtLeast(1)) }
-                            )
-                            Text(
-                                text = "$dayOfMonth",
-                                style = MaterialTheme.typography.titleLarge,
-                                color = InkBlack
-                            )
-                            NeoPillButton(
-                                text = "+",
-                                onClick = { onSelectDayOfMonth((dayOfMonth + 1).coerceAtMost(31)) }
-                            )
-                        }
-                    }
-                }
-
-                NeoPillButton(
-                    text = "Done",
-                    selected = true,
-                    activeColor = NeoMintGreen,
-                    onClick = onDismiss,
-                    modifier = Modifier.fillMaxWidth()
+        if (selectedRule == RecurrenceRule.MONTHLY) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Day of Month",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = InkBlack
                 )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    NeoPillButton(
+                        text = "-",
+                        onClick = { onSelectDayOfMonth((dayOfMonth - 1).coerceAtLeast(1)) }
+                    )
+                    Text(
+                        text = "$dayOfMonth",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = InkBlack
+                    )
+                    NeoPillButton(
+                        text = "+",
+                        onClick = { onSelectDayOfMonth((dayOfMonth + 1).coerceAtMost(31)) }
+                    )
+                }
             }
         }
     }
 }
 
-/**
- * Sub-Popup 5: Subtasks & Notes Builder.
- */
 @Composable
-private fun SubtasksSubPopup(
+private fun SubtasksInPlaceContent(
     subtasks: MutableList<Pair<String, String>>,
     notes: String,
-    onNotesChange: (String) -> Unit,
-    onDismiss: () -> Unit
+    draftSubtask: String,
+    onDraftSubtaskChange: (String) -> Unit,
+    onNotesChange: (String) -> Unit
 ) {
-    var draftSubtask by remember { mutableStateOf("") }
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        OutlinedTextField(
+            value = notes,
+            onValueChange = onNotesChange,
+            placeholder = { Text("Notes") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
 
-    Dialog(onDismissRequest = onDismiss) {
-        NeoCard(
-            modifier = Modifier
-                .widthIn(max = 380.dp)
-                .fillMaxWidth(),
-            backgroundColor = PureWhiteSurface,
-            cornerRadius = 24.dp,
-            shadowOffset = 4.dp,
-            contentPadding = PaddingValues(20.dp)
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        subtasks.forEachIndexed { idx, (subTitle, _) ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(SoftSheetSurface)
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
-                    text = "Subtasks & Notes",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = InkBlack
+                    text = "${idx + 1}. $subTitle",
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = InkBlack,
+                    modifier = Modifier.weight(1f)
                 )
-
-                OutlinedTextField(
-                    value = notes,
-                    onValueChange = onNotesChange,
-                    placeholder = { Text("Notes") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Remove",
+                    tint = InkBlack,
+                    modifier = Modifier
+                        .minimumInteractiveComponentSize()
+                        .size(18.dp)
+                        .clickable { subtasks.removeAt(idx) }
                 )
+            }
+        }
 
-                subtasks.forEachIndexed { idx, (subTitle, _) ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(SoftSheetSurface)
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "${idx + 1}. $subTitle",
-                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                            color = InkBlack,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Remove",
-                            tint = InkBlack,
-                            modifier = Modifier
-                                .size(18.dp)
-                                .clickable { subtasks.removeAt(idx) }
-                        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedTextField(
+                value = draftSubtask,
+                onValueChange = onDraftSubtaskChange,
+                placeholder = { Text("Subtask") },
+                singleLine = true,
+                modifier = Modifier.weight(1f)
+            )
+            IconButton(
+                onClick = {
+                    if (draftSubtask.isNotBlank()) {
+                        subtasks.add(draftSubtask.trim() to "STEP")
+                        onDraftSubtaskChange("")
                     }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = draftSubtask,
-                        onValueChange = { draftSubtask = it },
-                        placeholder = { Text("Subtask") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f)
-                    )
-                    IconButton(
-                        onClick = {
-                            if (draftSubtask.isNotBlank()) {
-                                subtasks.add(draftSubtask.trim() to "STEP")
-                                draftSubtask = ""
-                            }
-                        },
-                        modifier = Modifier
-                            .size(44.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(NeoMintGreen)
-                            .border(1.8.dp, InkBlack, RoundedCornerShape(12.dp))
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = "Add",
-                            tint = InkBlack
-                        )
-                    }
-                }
-
-                NeoPillButton(
-                    text = "Done",
-                    selected = true,
-                    activeColor = NeoMintGreen,
-                    onClick = {
-                        if (draftSubtask.isNotBlank()) {
-                            subtasks.add(draftSubtask.trim() to "STEP")
-                        }
-                        onDismiss()
-                    },
-                    modifier = Modifier.fillMaxWidth()
+                },
+                modifier = Modifier
+                    .minimumInteractiveComponentSize()
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(NeoMintGreen)
+                    .border(1.8.dp, InkBlack, RoundedCornerShape(12.dp))
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Add",
+                    tint = InkBlack
                 )
             }
         }
     }
 }
+
 
 /**
  * Clean Focus Screen with Live Session Recording:
@@ -1388,22 +2019,9 @@ fun AntiParalysisFocusScreen(
 
     val task = focusItem.task
     val accent = neoColorForKey(task.colorKey)
-    val targetSeconds = (task.durationMinutes * 60).coerceAtLeast(60)
+    val targetSeconds = (task.durationMinutes * 60L).coerceAtLeast(60L)
     var isRunning by remember(task.id) { mutableStateOf(task.activeSessionStartMin != null) }
-    var elapsedSeconds by remember(task.id) { mutableLongStateOf(0L) }
     var newStepTitle by remember { mutableStateOf("") }
-
-    LaunchedEffect(task.id, isRunning) {
-        while (isRunning) {
-            delay(1000L)
-            elapsedSeconds += 1L
-        }
-    }
-
-    val remainingSeconds = (targetSeconds - elapsedSeconds).coerceAtLeast(0L)
-    val mins = remainingSeconds / 60
-    val secs = remainingSeconds % 60
-    val progress = (elapsedSeconds.toFloat() / targetSeconds.toFloat()).coerceIn(0f, 1f)
 
     val recordedIntervals = remember(task.parsedSessionSegments, task.activeSessionStartMin) {
         buildList {
@@ -1479,9 +2097,7 @@ fun AntiParalysisFocusScreen(
                         FocusHeroAndTimerCard(
                             task = task,
                             accent = accent,
-                            mins = mins,
-                            secs = secs,
-                            progress = progress,
+                            targetSeconds = targetSeconds,
                             isRunning = isRunning,
                             onTogglePlayPause = {
                                 if (isRunning) {
@@ -1492,7 +2108,6 @@ fun AntiParalysisFocusScreen(
                                     onStartOrResumeSession(task)
                                 }
                             },
-                            onResetTimer = { elapsedSeconds = 0L },
                             onCompleteAndAdvance = onCompleteAndAdvance
                         )
                     }
@@ -1528,9 +2143,7 @@ fun AntiParalysisFocusScreen(
                     FocusHeroAndTimerCard(
                         task = task,
                         accent = accent,
-                        mins = mins,
-                        secs = secs,
-                        progress = progress,
+                        targetSeconds = targetSeconds,
                         isRunning = isRunning,
                         onTogglePlayPause = {
                             if (isRunning) {
@@ -1541,7 +2154,6 @@ fun AntiParalysisFocusScreen(
                                 onStartOrResumeSession(task)
                             }
                         },
-                        onResetTimer = { elapsedSeconds = 0L },
                         onCompleteAndAdvance = onCompleteAndAdvance
                     )
 
@@ -1568,12 +2180,9 @@ fun AntiParalysisFocusScreen(
 private fun FocusHeroAndTimerCard(
     task: TaskEntity,
     accent: androidx.compose.ui.graphics.Color,
-    mins: Long,
-    secs: Long,
-    progress: Float,
+    targetSeconds: Long,
     isRunning: Boolean,
     onTogglePlayPause: () -> Unit,
-    onResetTimer: () -> Unit,
     onCompleteAndAdvance: () -> Unit
 ) {
     NeoCard(
@@ -1616,48 +2225,13 @@ private fun FocusHeroAndTimerCard(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Symmetrical Timer Card
-            NeoCard(
-                modifier = Modifier.fillMaxWidth(),
-                backgroundColor = PureWhiteSurface,
-                cornerRadius = 20.dp,
-                contentPadding = PaddingValues(18.dp)
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = String.format(Locale.US, "%02d:%02d", mins, secs),
-                        style = MaterialTheme.typography.displayLarge.copy(
-                            fontSize = 46.ssp,
-                            fontWeight = FontWeight.Bold,
-                            fontFeatureSettings = "tnum"
-                        ),
-                        color = InkBlack
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    NeoProgressBar(progress = progress, fillColor = InkBlack, height = 10.sdp)
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        NeoPillButton(
-                            text = when {
-                                isRunning -> "Pause (Break)"
-                                task.parsedSessionSegments.isNotEmpty() -> "Resume"
-                                else -> "Play Timer"
-                            },
-                            icon = if (isRunning) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            selected = true,
-                            activeColor = if (isRunning) NeoYellow else NeoMintGreen,
-                            onClick = onTogglePlayPause,
-                            modifier = Modifier.testTag("focus_play_pause_button")
-                        )
-                        NeoPillButton(
-                            text = "Reset",
-                            icon = Icons.Default.Refresh,
-                            onClick = onResetTimer
-                        )
-                    }
-                }
-            }
+            // Isolated Leaf Composable for 1-second Timer Ticking (0 parent recompositions, 0 background CPU)
+            FocusLiveTimerReadoutCard(
+                task = task,
+                targetSeconds = targetSeconds,
+                isRunning = isRunning,
+                onTogglePlayPause = onTogglePlayPause
+            )
 
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -1690,6 +2264,101 @@ private fun FocusHeroAndTimerCard(
     }
 }
 
+/**
+ * Dedicated leaf composable that isolates the 1-second Focus Timer state:
+ * - Only this inner card recomposes once per second when the timer is running.
+ * - Uses `SystemClock.elapsedRealtime()` delta timestamps + `repeatOnLifecycle(Lifecycle.State.STARTED)`
+ *   so 0 coroutine ticks occur when the app is minimized or the screen is off (<1% background battery),
+ *   and elapsed time is immediately recalculated upon returning to the foreground.
+ */
+@Composable
+private fun FocusLiveTimerReadoutCard(
+    task: TaskEntity,
+    targetSeconds: Long,
+    isRunning: Boolean,
+    onTogglePlayPause: () -> Unit
+) {
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var accumulatedElapsedSeconds by remember(task.id) { mutableLongStateOf(0L) }
+    var activeRunAnchorRealtimeMs by remember(task.id) {
+        mutableLongStateOf(if (isRunning) SystemClock.elapsedRealtime() else 0L)
+    }
+    var displayElapsedSeconds by remember(task.id) { mutableLongStateOf(0L) }
+
+    LaunchedEffect(task.id, isRunning, lifecycleOwner) {
+        if (isRunning) {
+            if (activeRunAnchorRealtimeMs == 0L) {
+                activeRunAnchorRealtimeMs = SystemClock.elapsedRealtime()
+            }
+            lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (true) {
+                    val deltaSec = ((SystemClock.elapsedRealtime() - activeRunAnchorRealtimeMs) / 1000L).coerceAtLeast(0L)
+                    displayElapsedSeconds = accumulatedElapsedSeconds + deltaSec
+                    delay(1000L)
+                }
+            }
+        } else {
+            if (activeRunAnchorRealtimeMs != 0L) {
+                val deltaSec = ((SystemClock.elapsedRealtime() - activeRunAnchorRealtimeMs) / 1000L).coerceAtLeast(0L)
+                accumulatedElapsedSeconds += deltaSec
+                activeRunAnchorRealtimeMs = 0L
+            }
+            displayElapsedSeconds = accumulatedElapsedSeconds
+        }
+    }
+
+    val remainingSeconds = (targetSeconds - displayElapsedSeconds).coerceAtLeast(0L)
+    val mins = remainingSeconds / 60L
+    val secs = remainingSeconds % 60L
+    val progress = (displayElapsedSeconds.toFloat() / targetSeconds.toFloat()).coerceIn(0f, 1f)
+
+    NeoCard(
+        modifier = Modifier.fillMaxWidth(),
+        backgroundColor = PureWhiteSurface,
+        cornerRadius = 20.dp,
+        contentPadding = PaddingValues(18.dp)
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = String.format(Locale.US, "%02d:%02d", mins, secs),
+                style = MaterialTheme.typography.displayLarge.copy(
+                    fontSize = 46.ssp,
+                    fontWeight = FontWeight.Bold,
+                    fontFeatureSettings = "tnum"
+                ),
+                color = InkBlack
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            NeoProgressBar(progress = progress, fillColor = InkBlack, height = 10.sdp)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                NeoPillButton(
+                    text = when {
+                        isRunning -> "Pause (Break)"
+                        task.parsedSessionSegments.isNotEmpty() -> "Resume"
+                        else -> "Play Timer"
+                    },
+                    icon = if (isRunning) Icons.Default.Pause else Icons.Default.PlayArrow,
+                    selected = true,
+                    activeColor = if (isRunning) NeoYellow else NeoMintGreen,
+                    onClick = onTogglePlayPause,
+                    modifier = Modifier.testTag("focus_play_pause_button")
+                )
+                NeoPillButton(
+                    text = "Reset",
+                    icon = Icons.Default.Refresh,
+                    onClick = {
+                        accumulatedElapsedSeconds = 0L
+                        activeRunAnchorRealtimeMs = if (isRunning) SystemClock.elapsedRealtime() else 0L
+                        displayElapsedSeconds = 0L
+                    }
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun FocusSubtasksAndSessionCard(
     focusItem: TaskWithSubtasks,
@@ -1709,7 +2378,7 @@ private fun FocusSubtasksAndSessionCard(
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    text = "Subtasks (${focusItem.subtasks.count { it.isCompleted }}/${focusItem.subtasks.size})",
+                    text = "Subtasks (${focusItem.completedSubtasksCount}/${focusItem.subtasks.size})",
                     style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
                     color = InkBlack
                 )

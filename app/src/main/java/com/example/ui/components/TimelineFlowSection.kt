@@ -1,8 +1,12 @@
 package com.example.ui.components
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -37,11 +41,14 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -52,6 +59,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -69,6 +77,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.example.data.RecurrenceRule
 import com.example.data.SubtaskEntity
 import com.example.data.TaskMode
@@ -94,14 +103,35 @@ import java.time.format.TextStyle as JavaTextStyle
 import java.time.temporal.ChronoUnit
 import java.util.Locale
 
-fun formatMinutesAsClock(minutes: Int): String {
-    val hrs24 = (minutes / 60).coerceIn(0, 23)
-    val mins = (minutes % 60).coerceIn(0, 59)
-    return String.format(Locale.US, "%02d:%02d", hrs24, mins)
+object GlobalClockFormat {
+    var use24Hour by mutableStateOf(true)
+    var startOfDayMinutes by mutableStateOf(8 * 60)
+    var endOfDayMinutes by mutableStateOf(22 * 60)
+}
+
+fun formatMinutesAsClock(
+    minutes: Int,
+    use24Hour: Boolean = GlobalClockFormat.use24Hour
+): String {
+    val normalized = ((minutes % 1440) + 1440) % 1440
+    val hrs24 = (normalized / 60).coerceIn(0, 23)
+    val mins = (normalized % 60).coerceIn(0, 59)
+    return if (use24Hour) {
+        String.format(Locale.US, "%02d:%02d", hrs24, mins)
+    } else {
+        val period = if (hrs24 < 12) "AM" else "PM"
+        val hrs12 = when {
+            hrs24 == 0 -> 12
+            hrs24 > 12 -> hrs24 - 12
+            else -> hrs24
+        }
+        String.format(Locale.US, "%d:%02d %s", hrs12, mins, period)
+    }
 }
 
 fun formatDurationBadge(minutes: Int): String {
     return when {
+        minutes <= 0 -> "No duration"
         minutes >= 60 && minutes % 60 == 0 -> "${minutes / 60}h"
         minutes > 60 -> "${minutes / 60}h ${minutes % 60}m"
         else -> "${minutes}m"
@@ -114,7 +144,7 @@ private val SHORT_WEEKDAY_LABELS = arrayOf("Mon", "Tue", "Wed", "Thu", "Fri", "S
 
 // Shared geometry constants so the timeline spine sits shifted toward the left edge and scales proportionally on tablet
 private val TIME_COLUMN_WIDTH: Dp
-    @Composable get() = 38.sdp
+    @Composable get() = if (GlobalClockFormat.use24Hour) 38.sdp else 52.sdp
 private val TIME_TO_CAPSULE_GAP: Dp
     @Composable get() = 6.sdp
 private val CAPSULE_COLUMN_WIDTH: Dp
@@ -130,6 +160,7 @@ fun DateAndWeekHeader(
     selectedDate: LocalDate,
     weekDotColorsByEpochDay: Map<Long, List<String>>,
     onSelectDate: (Long) -> Unit,
+    onOpenSettings: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val today = remember { LocalDate.now() }
@@ -163,13 +194,39 @@ fun DateAndWeekHeader(
     }
 
     Column(modifier = modifier.fillMaxWidth()) {
-        Text(
-            text = monthName,
-            style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.Bold),
-            color = InkBlack,
-            maxLines = 1,
-            modifier = Modifier.padding(horizontal = 4.dp)
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = monthName,
+                style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.Bold),
+                color = InkBlack,
+                maxLines = 1
+            )
+
+            Box(
+                modifier = Modifier
+                    .minimumInteractiveComponentSize()
+                    .size(40.sdp)
+                    .clip(CircleShape)
+                    .background(PureWhiteSurface, CircleShape)
+                    .border(1.5.dp, InkBlack, CircleShape)
+                    .smoothPressClickable(role = Role.Button, onClick = onOpenSettings)
+                    .testTag("open_settings_button"),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Settings,
+                    contentDescription = "Settings",
+                    tint = InkBlack,
+                    modifier = Modifier.size(20.sdp)
+                )
+            }
+        }
 
         Spacer(modifier = Modifier.height(10.dp))
 
@@ -388,29 +445,35 @@ fun SpineConnectorSegment(
                 .height(height),
             contentAlignment = Alignment.Center
         ) {
-            Canvas(
+            Spacer(
                 modifier = Modifier
                     .width(2.dp)
                     .fillMaxHeight()
-            ) {
-                drawLine(
-                    color = if (isDottedBreak) InkMuted else InkBlack,
-                    start = Offset(size.width / 2f, 0f),
-                    end = Offset(size.width / 2f, size.height),
-                    strokeWidth = 2.dp.toPx(),
-                    pathEffect = if (isDottedBreak) {
-                        PathEffect.dashPathEffect(floatArrayOf(6f, 6f), 0f)
-                    } else {
-                        null
+                    .drawWithCache {
+                        val strokePx = 2.dp.toPx()
+                        val dashEffect = if (isDottedBreak) {
+                            PathEffect.dashPathEffect(floatArrayOf(6f, 6f), 0f)
+                        } else {
+                            null
+                        }
+                        val lineColor = if (isDottedBreak) InkMuted else InkBlack
+                        onDrawBehind {
+                            drawLine(
+                                color = lineColor,
+                                start = Offset(size.width / 2f, 0f),
+                                end = Offset(size.width / 2f, size.height),
+                                strokeWidth = strokePx,
+                                pathEffect = dashEffect
+                            )
+                        }
                     }
-                )
-            }
+            )
         }
     }
 }
 
 /**
- * Smooth Aesthetic Roller-Coaster Dotted Loop Canvas:
+ * Smooth Aesthetic Roller-Coaster Dotted Loop Canvas (cached via drawWithCache for 60fps scrolling):
  * - Starts directly at (cx, 0f) touching the bottom of the top half-oval (zero gap!).
  * - Flows straight down briefly, sweeps smoothly out to the right, loops gracefully over the top,
  *   and flows straight down into (cx, height) touching the top of the bottom half-oval!
@@ -422,49 +485,48 @@ fun DottedBreakLoopCanvas(
     color: Color = InkBlack
 ) {
     val loopRightOffset = 16.sdp
-    Canvas(
+    Spacer(
         modifier = modifier
             .width(CAPSULE_COLUMN_WIDTH)
             .height(height)
-    ) {
-        val cx = size.width / 2f
-        val h = size.height
-        val loopExtentRight = cx + loopRightOffset.toPx()
+            .drawWithCache {
+                val cx = size.width / 2f
+                val h = size.height
+                val loopExtentRight = cx + loopRightOffset.toPx()
 
-        val path = Path().apply {
-            // 1. Start flush against the top half-oval bottom edge and glide straight down
-            moveTo(cx, 0f)
-            lineTo(cx, h * 0.14f)
+                val cachedPath = Path().apply {
+                    moveTo(cx, 0f)
+                    lineTo(cx, h * 0.14f)
+                    cubicTo(
+                        cx, h * 0.56f,
+                        loopExtentRight, h * 0.78f,
+                        loopExtentRight, h * 0.46f
+                    )
+                    cubicTo(
+                        loopExtentRight, h * 0.14f,
+                        cx, h * 0.28f,
+                        cx, h * 0.84f
+                    )
+                    lineTo(cx, h)
+                }
 
-            // 2. Smoothly sweep down and out to the right into the bottom of the loop
-            cubicTo(
-                cx, h * 0.56f,
-                loopExtentRight, h * 0.78f,
-                loopExtentRight, h * 0.46f
-            )
+                val dashPx = 4.5.dp.toPx()
+                val cachedStroke = Stroke(
+                    width = 2.dp.toPx(),
+                    cap = StrokeCap.Round,
+                    join = StrokeJoin.Round,
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(dashPx, dashPx), 0f)
+                )
 
-            // 3. Gracefully loop over the top crest and curve back to the center spine
-            cubicTo(
-                loopExtentRight, h * 0.14f,
-                cx, h * 0.28f,
-                cx, h * 0.84f
-            )
-
-            // 4. Glide straight down flush into the top edge of the bottom half-oval
-            lineTo(cx, h)
-        }
-
-        drawPath(
-            path = path,
-            color = color,
-            style = Stroke(
-                width = 2.dp.toPx(),
-                cap = StrokeCap.Round,
-                join = StrokeJoin.Round,
-                pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.5.dp.toPx(), 4.5.dp.toPx()), 0f)
-            )
-        )
-    }
+                onDrawBehind {
+                    drawPath(
+                        path = cachedPath,
+                        color = color,
+                        style = cachedStroke
+                    )
+                }
+            }
+    )
 }
 
 /**
@@ -816,24 +878,52 @@ private fun TaskRightTitleAndCheckRow(
                 }
             }
 
-            if (item.subtasks.isNotEmpty()) {
-                val done = item.subtasks.count { it.isCompleted }
+            val hasDurationBadge = task.durationMinutes > 0
+            val hasSubtasks = item.subtasks.isNotEmpty()
+            if (hasDurationBadge || hasSubtasks) {
                 Spacer(modifier = Modifier.height(2.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Checklist,
-                        contentDescription = null,
-                        tint = InkMuted,
-                        modifier = Modifier.size(13.dp)
-                    )
-                    Text(
-                        text = "$done/${item.subtasks.size}",
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Normal),
-                        color = InkMuted
-                    )
+                    if (hasDurationBadge) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Schedule,
+                                contentDescription = null,
+                                tint = InkMuted,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Text(
+                                text = formatDurationBadge(task.durationMinutes),
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Normal),
+                                color = InkMuted
+                            )
+                        }
+                    }
+
+                    if (hasSubtasks) {
+                        val done = item.completedSubtasksCount
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Checklist,
+                                contentDescription = null,
+                                tint = InkMuted,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Text(
+                                text = "$done/${item.subtasks.size}",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Normal),
+                                color = InkMuted
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -882,90 +972,13 @@ fun TaskDetailPopupModal(
     val hasBreakLoop = task.parsedSessionSegments.size > 1 ||
         (task.parsedSessionSegments.size == 1 && task.activeSessionStartMin != null)
 
-    if (showDeleteConfirmPopup) {
-        // Dedicated Delete Confirmation Popup so deleting is immediate and separate from Edit!
-        Dialog(onDismissRequest = { showDeleteConfirmPopup = false }) {
-            NeoCard(
-                modifier = Modifier
-                    .widthIn(max = 340.dp)
-                    .fillMaxWidth(),
-                backgroundColor = PureWhiteSurface,
-                cornerRadius = 22.dp,
-                contentPadding = PaddingValues(20.dp)
-            ) {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(42.dp)
-                                .clip(CircleShape)
-                                .background(NeoCoral)
-                                .border(1.5.dp, InkBlack, CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Delete,
-                                contentDescription = null,
-                                tint = PureWhiteSurface,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Delete Task?",
-                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                                color = InkBlack
-                            )
-                            Text(
-                                text = task.title,
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    fontWeight = FontWeight.Medium,
-                                    lineHeight = 18.ssp
-                                ),
-                                color = InkMuted,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        NeoPillButton(
-                            text = "Cancel",
-                            selected = false,
-                            onClick = { showDeleteConfirmPopup = false },
-                            modifier = Modifier.weight(1f)
-                        )
-                        NeoPillButton(
-                            text = "Delete",
-                            icon = Icons.Default.Delete,
-                            selected = true,
-                            activeColor = NeoCoral,
-                            onClick = {
-                                showDeleteConfirmPopup = false
-                                onDeleteTask()
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("confirm_delete_task_button")
-                        )
-                    }
-                }
-            }
-        }
-        return
-    }
-
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true
+        )
+    ) {
         NeoCard(
             modifier = Modifier
                 .widthIn(max = 430.dp)
@@ -974,11 +987,85 @@ fun TaskDetailPopupModal(
             cornerRadius = 22.dp,
             contentPadding = PaddingValues(18.dp)
         ) {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // 1. Clean Header Row: Icon + Metadata + Title on Left, Close (X) on Right
+            AnimatedContent(
+                targetState = showDeleteConfirmPopup,
+                transitionSpec = { fadeIn() togetherWith fadeOut() },
+                label = "task_detail_delete_switch"
+            ) { isDeleting ->
+                if (isDeleting) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(42.dp)
+                                    .clip(CircleShape)
+                                    .background(NeoCoral)
+                                    .border(1.5.dp, InkBlack, CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = null,
+                                    tint = PureWhiteSurface,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Delete Task?",
+                                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                                    color = InkBlack
+                                )
+                                Text(
+                                    text = task.title,
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontWeight = FontWeight.Medium,
+                                        lineHeight = 18.ssp
+                                    ),
+                                    color = InkMuted,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            NeoPillButton(
+                                text = "Cancel",
+                                selected = false,
+                                onClick = { showDeleteConfirmPopup = false },
+                                modifier = Modifier.weight(1f)
+                            )
+                            NeoPillButton(
+                                text = "Delete",
+                                icon = Icons.Default.Delete,
+                                selected = true,
+                                activeColor = NeoCoral,
+                                onClick = {
+                                    showDeleteConfirmPopup = false
+                                    onDeleteTask()
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("confirm_delete_task_button")
+                            )
+                        }
+                    }
+                } else {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        // 1. Clean Header Row: Icon + Metadata + Title on Left, Close (X) on Right
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -1034,19 +1121,25 @@ fun TaskDetailPopupModal(
 
                     Box(
                         modifier = Modifier
-                            .size(34.dp)
-                            .smoothPressClickable(role = Role.Button, onClick = onDismiss)
-                            .clip(CircleShape)
-                            .background(SoftSheetSurface)
-                            .border(1.5.dp, InkBlack, CircleShape),
+                            .minimumInteractiveComponentSize()
+                            .smoothPressClickable(role = Role.Button, onClick = onDismiss),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Close",
-                            tint = InkBlack,
-                            modifier = Modifier.size(16.dp)
-                        )
+                        Box(
+                            modifier = Modifier
+                                .size(34.sdp)
+                                .clip(CircleShape)
+                                .background(SoftSheetSurface)
+                                .border(1.5.dp, InkBlack, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Close",
+                                tint = InkBlack,
+                                modifier = Modifier.size(16.sdp)
+                            )
+                        }
                     }
                 }
 
@@ -1168,7 +1261,7 @@ fun TaskDetailPopupModal(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Subtasks (${item.subtasks.count { it.isCompleted }}/${item.subtasks.size})",
+                                text = "Subtasks (${item.completedSubtasksCount}/${item.subtasks.size})",
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                                 color = InkBlack
                             )
@@ -1309,6 +1402,58 @@ fun TaskDetailPopupModal(
                     )
                 }
             }
+                }
+            }
         }
     }
 }
+
+@Composable
+fun DayThresholdMarkerRow(
+    timeMinutes: Int,
+    label: String,
+    isStartOfDay: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .smoothPressClickable(role = Role.Button, onClick = onClick)
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = formatMinutesAsClock(timeMinutes),
+            style = MaterialTheme.typography.labelMedium.copy(
+                fontSize = 10.5.ssp,
+                fontWeight = FontWeight.Medium
+            ),
+            color = InkMuted,
+            modifier = Modifier.width(TIME_COLUMN_WIDTH)
+        )
+        Spacer(modifier = Modifier.width(TIME_TO_CAPSULE_GAP))
+        Box(
+            modifier = Modifier.width(CAPSULE_COLUMN_WIDTH),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(12.sdp)
+                    .clip(CircleShape)
+                    .background(if (isStartOfDay) NeoYellow else SoftSheetSurface, CircleShape)
+                    .border(1.5.dp, InkBlack, CircleShape)
+            )
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium.copy(
+                fontSize = 11.ssp,
+                fontWeight = FontWeight.Medium
+            ),
+            color = InkMuted
+        )
+    }
+}
+

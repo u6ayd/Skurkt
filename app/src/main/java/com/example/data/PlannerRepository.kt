@@ -318,9 +318,10 @@ class PlannerRepository(private val dao: PlannerDao) {
         task: TaskEntity,
         targetEpochDay: Long,
         asTimed: Boolean = false,
-        startTimeMinutes: Int? = null
+        startTimeMinutes: Int? = null,
+        durationMinutes: Int = task.durationMinutes
     ) {
-        val nextOrder = (dao.getMaxSortOrderForDay(targetEpochDay) ?: 0) + 10
+        val nextOrder = (dao.getMaxSortOrderForDay(targetEpochDay) ?: 0) + 1
         dao.updateTask(
             task.copy(
                 dateEpochDay = targetEpochDay,
@@ -330,6 +331,7 @@ class PlannerRepository(private val dao: PlannerDao) {
                     TaskMode.TIMELESS_STEP.name
                 },
                 startTimeMinutes = if (asTimed) startTimeMinutes else null,
+                durationMinutes = if (asTimed) durationMinutes.coerceIn(5, 720) else durationMinutes.coerceIn(0, 720),
                 sortOrder = nextOrder
             )
         )

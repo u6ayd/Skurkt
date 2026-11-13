@@ -1,8 +1,10 @@
 package com.example.data
 
+import androidx.compose.runtime.Immutable
 import androidx.room.Embedded
 import androidx.room.Entity
 import androidx.room.ForeignKey
+import androidx.room.Ignore
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import androidx.room.Relation
@@ -13,9 +15,6 @@ enum class TaskMode {
     TOP_BUBBLE
 }
 
-/**
- * Supports One-Time, Daily (e.g. Pray, Read), Weekdays, Weekly, and Monthly (e.g. 1st of month File Taxes).
- */
 enum class RecurrenceRule(val label: String) {
     NONE("One-Time"),
     DAILY("Every Day"),
@@ -24,6 +23,7 @@ enum class RecurrenceRule(val label: String) {
     MONTHLY("Monthly")
 }
 
+@Immutable
 @Entity(
     tableName = "tasks",
     indices = [Index(value = ["dateEpochDay"]), Index(value = ["sortOrder"])]
@@ -42,41 +42,38 @@ data class TaskEntity(
     val folderName: String = "General",
     val sectionName: String = "Core",
     val recurrence: String = RecurrenceRule.NONE.name,
-    /**
-     * Day of month (1..31) when recurrence == MONTHLY (e.g. 1 for "1st of every month: File Taxes").
-     */
     val recurrenceDayOfMonth: Int = 1,
     val isCompleted: Boolean = false,
-    /**
-     * Stores recorded Focus timer segments ("14:00-14:37||14:47-15:15") so pausing & resuming
-     * shows a dotted "Continued" line on the timeline without creating a separate Break task.
-     */
     val sessionSegments: String = "",
-    /**
-     * Non-null when a live Focus timer segment is currently running (stores start minutes from midnight).
-     */
     val activeSessionStartMin: Int? = null
 ) {
-    val modeEnum: TaskMode
-        get() = runCatching { TaskMode.valueOf(taskMode) }.getOrDefault(TaskMode.TIMELESS_STEP)
+    @Ignore
+    val modeEnum: TaskMode =
+        runCatching { TaskMode.valueOf(taskMode) }.getOrDefault(TaskMode.TIMELESS_STEP)
 
-    val recurrenceEnum: RecurrenceRule
-        get() = runCatching { RecurrenceRule.valueOf(recurrence) }.getOrDefault(RecurrenceRule.NONE)
+    @Ignore
+    val recurrenceEnum: RecurrenceRule =
+        runCatching { RecurrenceRule.valueOf(recurrence) }.getOrDefault(RecurrenceRule.NONE)
 
-    val parsedSessionSegments: List<Pair<Int, Int>>
-        get() {
-            if (sessionSegments.isBlank()) return emptyList()
-            return sessionSegments.split("||").mapNotNull { seg ->
-                val parts = seg.split("-")
-                if (parts.size == 2) {
-                    val s = parts[0].toIntOrNull()
-                    val e = parts[1].toIntOrNull()
+    @Ignore
+    val parsedSessionSegments: List<Pair<Int, Int>> =
+        if (sessionSegments.isBlank()) {
+            emptyList()
+        } else {
+            sessionSegments.split("||").mapNotNull { seg ->
+                val dashIdx = seg.indexOf('-')
+                if (dashIdx > 0 && dashIdx < seg.length - 1) {
+                    val s = seg.substring(0, dashIdx).toIntOrNull()
+                    val e = seg.substring(dashIdx + 1).toIntOrNull()
                     if (s != null && e != null) s to e else null
-                } else null
+                } else {
+                    null
+                }
             }
         }
 }
 
+@Immutable
 @Entity(
     tableName = "subtasks",
     foreignKeys = [
@@ -98,6 +95,7 @@ data class SubtaskEntity(
     val sortOrder: Int = 0
 )
 
+@Immutable
 data class TaskWithSubtasks(
     @Embedded val task: TaskEntity,
     @Relation(
@@ -106,14 +104,15 @@ data class TaskWithSubtasks(
     )
     val subtasks: List<SubtaskEntity>
 ) {
-    val sortedSubtasks: List<SubtaskEntity>
-        get() = subtasks.sortedBy { it.sortOrder }
+    @Ignore
+    val sortedSubtasks: List<SubtaskEntity> =
+        if (subtasks.size <= 1) subtasks else subtasks.sortedBy { it.sortOrder }
+
+    @Ignore
+    val completedSubtasksCount: Int = subtasks.count { it.isCompleted }
 }
 
-/**
- * Folder Entity with customizable Sections inside each Folder (replaces static Templates per user feedback).
- * Examples: Physics (Sections: Electrostatics, Optics, Modern Physics), Reading, Extracurriculars & Sport.
- */
+@Immutable
 @Entity(tableName = "folders")
 data class FolderEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -121,11 +120,16 @@ data class FolderEntity(
     val name: String,
     val colorKey: String,
     val iconKey: String,
-    /**
-     * Semicolon-separated list of sections inside this folder (e.g. "Electrostatics;;Optics;;Practice").
-     */
     val sectionsCsv: String
 ) {
-    val sections: List<String>
-        get() = sectionsCsv.split(";;").map { it.trim() }.filter { it.isNotEmpty() }
+    @Ignore
+    val sections: List<String> =
+        if (sectionsCsv.isBlank()) {
+            emptyList()
+        } else {
+            sectionsCsv.split(";;").mapNotNull { raw ->
+                val trimmed = raw.trim()
+                trimmed.ifEmpty { null }
+            }
+        }
 }
