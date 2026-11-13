@@ -2275,23 +2275,26 @@ private fun SubtasksInPlaceContent(
 
 
 /**
- * Clean Focus Screen with Live Session Recording:
- * - Play notes the current device time and feeds it to the timeline.
- * - Pause notes a break segment ("14:00-14:37") without creating a separate Break task.
- * - Resume starts a new segment ("14:47-...") and draws a dotted "Continued" line on the timeline!
+ * Clean Focus Screen with Live Session Recording, Count-Up Stopwatch (for 0m tasks),
+ * Countdown Timer with +1m / +5m live extensions, and Detailed Session Interval Log:
  */
 @Composable
 fun AntiParalysisFocusScreen(
     focusItem: TaskWithSubtasks?,
+    totalDayTasksCount: Int = 0,
+    completedDayTasksCount: Int = 0,
     onBackToFlow: () -> Unit,
+    onAddTaskToFlow: () -> Unit = {},
     onStartOrResumeSession: (TaskEntity) -> Unit,
     onPauseSession: (TaskEntity) -> Unit,
+    onExtendDurationMinutes: (TaskEntity, Int) -> Unit = { _, _ -> },
     onToggleSubtask: (SubtaskEntity) -> Unit,
     onAddQuickSubtask: (Long, String) -> Unit,
     onCompleteAndAdvance: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     if (focusItem == null) {
+        val hasNoTasksAtAll = totalDayTasksCount == 0
         Box(
             modifier = modifier
                 .fillMaxSize()
@@ -2300,23 +2303,43 @@ fun AntiParalysisFocusScreen(
         ) {
             NeoCard(
                 modifier = Modifier.widthIn(max = 420.dp),
-                backgroundColor = NeoMintGreen,
+                backgroundColor = if (hasNoTasksAtAll) NeoYellow else NeoMintGreen,
                 cornerRadius = 22.dp,
                 contentPadding = PaddingValues(24.dp)
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = "All Done",
-                        style = MaterialTheme.typography.displayMedium,
+                        text = if (hasNoTasksAtAll) "No Tasks Scheduled" else "All Done",
+                        style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.Bold),
                         color = InkBlack
                     )
-                    Spacer(modifier = Modifier.height(14.dp))
-                    NeoPillButton(
-                        text = "Timeline",
-                        selected = true,
-                        activeColor = PureWhiteSurface,
-                        onClick = onBackToFlow
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = if (hasNoTasksAtAll) {
+                            "Schedule a task on the timeline to begin focusing."
+                        } else {
+                            "$completedDayTasksCount of $totalDayTasksCount tasks completed for this day."
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = InkBlack.copy(alpha = 0.8f)
                     )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        if (hasNoTasksAtAll) {
+                            NeoPillButton(
+                                text = "+ Add Task",
+                                selected = true,
+                                activeColor = NeoCoral,
+                                onClick = onAddTaskToFlow
+                            )
+                        }
+                        NeoPillButton(
+                            text = "Timeline",
+                            selected = true,
+                            activeColor = PureWhiteSurface,
+                            onClick = onBackToFlow
+                        )
+                    }
                 }
             }
         }
@@ -2325,18 +2348,33 @@ fun AntiParalysisFocusScreen(
 
     val task = focusItem.task
     val accent = neoColorForKey(task.colorKey)
+    val isStopwatch = task.durationMinutes <= 0
     val targetSeconds = (task.durationMinutes * 60L).coerceAtLeast(60L)
-    var isRunning by remember(task.id) { mutableStateOf(task.activeSessionStartMin != null) }
+    var isRunning by remember(task.id, task.activeSessionStartMin) {
+        mutableStateOf(task.activeSessionStartMin != null)
+    }
     var newStepTitle by remember { mutableStateOf("") }
 
     val recordedIntervals = remember(task.parsedSessionSegments, task.activeSessionStartMin) {
         buildList {
-            task.parsedSessionSegments.forEachIndexed { idx, (s, e) ->
+            val segs = task.parsedSessionSegments
+            segs.forEachIndexed { idx, (s, e) ->
+                if (idx > 0) {
+                    val prevEnd = segs[idx - 1].second
+                    val breakMins = (s - prevEnd).coerceAtLeast(1)
+                    add("Break • ${formatDurationBadge(breakMins)} (${formatMinutesAsClock(prevEnd)} – ${formatMinutesAsClock(s)})")
+                }
+                val workMins = (e - s).coerceAtLeast(1)
                 val label = if (idx == 0) "Started" else "Resumed"
-                add("$label  ${formatMinutesAsClock(s)} – ${formatMinutesAsClock(e)}")
+                add("$label  ${formatMinutesAsClock(s)} – ${formatMinutesAsClock(e)} (${formatDurationBadge(workMins)})")
             }
             task.activeSessionStartMin?.let { activeStart ->
-                val label = if (task.parsedSessionSegments.isEmpty()) "Started" else "Resumed"
+                if (segs.isNotEmpty()) {
+                    val prevEnd = segs.last().second
+                    val breakMins = (activeStart - prevEnd).coerceAtLeast(1)
+                    add("Break • ${formatDurationBadge(breakMins)} (${formatMinutesAsClock(prevEnd)} – ${formatMinutesAsClock(activeStart)})")
+                }
+                val label = if (segs.isEmpty()) "Started" else "Resumed"
                 add("$label  ${formatMinutesAsClock(activeStart)} – Active")
             }
         }
@@ -2347,9 +2385,6 @@ fun AntiParalysisFocusScreen(
             .fillMaxSize()
             .padding(horizontal = 16.dp)
     ) {
-        // Keep the single-column Focus card layout intact and centered within 680.dp across devices
-        val isWideFocusLayout = false
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -2388,95 +2423,47 @@ fun AntiParalysisFocusScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            if (isWideFocusLayout) {
-                // Redmi Pad Pro 5G Two-Column Focus Workspace
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(18.dp),
-                    verticalAlignment = Alignment.Top
-                ) {
-                    // Left Column: Task Hero + Timer + Complete CTA
-                    Column(
-                        modifier = Modifier.weight(1.05f),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        FocusHeroAndTimerCard(
-                            task = task,
-                            accent = accent,
-                            targetSeconds = targetSeconds,
-                            isRunning = isRunning,
-                            onTogglePlayPause = {
-                                if (isRunning) {
-                                    isRunning = false
-                                    onPauseSession(task)
-                                } else {
-                                    isRunning = true
-                                    onStartOrResumeSession(task)
-                                }
-                            },
-                            onCompleteAndAdvance = onCompleteAndAdvance
-                        )
-                    }
-
-                    // Right Column: Subtasks Checklist + Live Session Break Log
-                    Column(
-                        modifier = Modifier.weight(0.95f),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        FocusSubtasksAndSessionCard(
-                            focusItem = focusItem,
-                            recordedIntervals = recordedIntervals,
-                            newStepTitle = newStepTitle,
-                            onNewStepTitleChange = { newStepTitle = it },
-                            onToggleSubtask = onToggleSubtask,
-                            onAddQuickSubtask = {
-                                if (newStepTitle.isNotBlank()) {
-                                    onAddQuickSubtask(task.id, newStepTitle)
-                                    newStepTitle = ""
-                                }
-                            }
-                        )
-                    }
-                }
-            } else {
-                // Single-Column Focus Workspace centered within max 680.dp
-                Column(
-                    modifier = Modifier
-                        .widthIn(max = 680.dp)
-                        .fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    FocusHeroAndTimerCard(
-                        task = task,
-                        accent = accent,
-                        targetSeconds = targetSeconds,
-                        isRunning = isRunning,
-                        onTogglePlayPause = {
-                            if (isRunning) {
-                                isRunning = false
-                                onPauseSession(task)
-                            } else {
-                                isRunning = true
-                                onStartOrResumeSession(task)
-                            }
-                        },
-                        onCompleteAndAdvance = onCompleteAndAdvance
-                    )
-
-                    FocusSubtasksAndSessionCard(
-                        focusItem = focusItem,
-                        recordedIntervals = recordedIntervals,
-                        newStepTitle = newStepTitle,
-                        onNewStepTitleChange = { newStepTitle = it },
-                        onToggleSubtask = onToggleSubtask,
-                        onAddQuickSubtask = {
-                            if (newStepTitle.isNotBlank()) {
-                                onAddQuickSubtask(task.id, newStepTitle)
-                                newStepTitle = ""
-                            }
+            // Single-Column Focus Workspace centered within max 680.dp
+            Column(
+                modifier = Modifier
+                    .widthIn(max = 680.dp)
+                    .fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                FocusHeroAndTimerCard(
+                    task = task,
+                    accent = accent,
+                    isStopwatch = isStopwatch,
+                    targetSeconds = targetSeconds,
+                    isRunning = isRunning,
+                    onTogglePlayPause = {
+                        if (isRunning) {
+                            isRunning = false
+                            onPauseSession(task)
+                        } else {
+                            isRunning = true
+                            onStartOrResumeSession(task)
                         }
-                    )
-                }
+                    },
+                    onExtendDurationMinutes = { deltaMins ->
+                        onExtendDurationMinutes(task, deltaMins)
+                    },
+                    onCompleteAndAdvance = onCompleteAndAdvance
+                )
+
+                FocusSubtasksAndSessionCard(
+                    focusItem = focusItem,
+                    recordedIntervals = recordedIntervals,
+                    newStepTitle = newStepTitle,
+                    onNewStepTitleChange = { newStepTitle = it },
+                    onToggleSubtask = onToggleSubtask,
+                    onAddQuickSubtask = {
+                        if (newStepTitle.isNotBlank()) {
+                            onAddQuickSubtask(task.id, newStepTitle)
+                            newStepTitle = ""
+                        }
+                    }
+                )
             }
         }
     }
@@ -2486,9 +2473,11 @@ fun AntiParalysisFocusScreen(
 private fun FocusHeroAndTimerCard(
     task: TaskEntity,
     accent: androidx.compose.ui.graphics.Color,
+    isStopwatch: Boolean,
     targetSeconds: Long,
     isRunning: Boolean,
     onTogglePlayPause: () -> Unit,
+    onExtendDurationMinutes: (Int) -> Unit,
     onCompleteAndAdvance: () -> Unit
 ) {
     NeoCard(
@@ -2534,9 +2523,11 @@ private fun FocusHeroAndTimerCard(
             // Isolated Leaf Composable for 1-second Timer Ticking (0 parent recompositions, 0 background CPU)
             FocusLiveTimerReadoutCard(
                 task = task,
+                isStopwatch = isStopwatch,
                 targetSeconds = targetSeconds,
                 isRunning = isRunning,
-                onTogglePlayPause = onTogglePlayPause
+                onTogglePlayPause = onTogglePlayPause,
+                onExtendDurationMinutes = onExtendDurationMinutes
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -2573,6 +2564,8 @@ private fun FocusHeroAndTimerCard(
 /**
  * Dedicated leaf composable that isolates the 1-second Focus Timer state:
  * - Only this inner card recomposes once per second when the timer is running.
+ * - Supports Count-Up Stopwatch mode (when durationMinutes == 0) and Countdown mode (durationMinutes > 0)
+ *   with Google Clock-style +1m and +5m live extension buttons.
  * - Uses `SystemClock.elapsedRealtime()` delta timestamps + `repeatOnLifecycle(Lifecycle.State.STARTED)`
  *   so 0 coroutine ticks occur when the app is minimized or the screen is off (<1% background battery),
  *   and elapsed time is immediately recalculated upon returning to the foreground.
@@ -2580,9 +2573,11 @@ private fun FocusHeroAndTimerCard(
 @Composable
 private fun FocusLiveTimerReadoutCard(
     task: TaskEntity,
+    isStopwatch: Boolean,
     targetSeconds: Long,
     isRunning: Boolean,
-    onTogglePlayPause: () -> Unit
+    onTogglePlayPause: () -> Unit,
+    onExtendDurationMinutes: (Int) -> Unit
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
     var accumulatedElapsedSeconds by remember(task.id) { mutableLongStateOf(0L) }
@@ -2613,10 +2608,18 @@ private fun FocusLiveTimerReadoutCard(
         }
     }
 
-    val remainingSeconds = (targetSeconds - displayElapsedSeconds).coerceAtLeast(0L)
-    val mins = remainingSeconds / 60L
-    val secs = remainingSeconds % 60L
-    val progress = (displayElapsedSeconds.toFloat() / targetSeconds.toFloat()).coerceIn(0f, 1f)
+    val shownSeconds = if (isStopwatch) {
+        displayElapsedSeconds
+    } else {
+        (targetSeconds - displayElapsedSeconds).coerceAtLeast(0L)
+    }
+    val mins = shownSeconds / 60L
+    val secs = shownSeconds % 60L
+    val progress = if (isStopwatch) {
+        ((displayElapsedSeconds % 1500L).toFloat() / 1500f).coerceIn(0f, 1f)
+    } else {
+        (displayElapsedSeconds.toFloat() / targetSeconds.toFloat()).coerceIn(0f, 1f)
+    }
 
     NeoCard(
         modifier = Modifier.fillMaxWidth(),
@@ -2625,6 +2628,26 @@ private fun FocusLiveTimerReadoutCard(
         contentPadding = PaddingValues(18.dp)
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(SoftSheetSurface)
+                    .border(1.dp, InkBlack.copy(alpha = 0.25f), RoundedCornerShape(50))
+                    .padding(horizontal = 10.dp, vertical = 3.dp)
+            ) {
+                Text(
+                    text = if (isStopwatch) {
+                        "STOPWATCH • COUNTING UP"
+                    } else {
+                        "COUNTDOWN • TARGET ${formatDurationBadge(task.durationMinutes).uppercase()}"
+                    },
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                    color = InkMuted
+                )
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
             Text(
                 text = String.format(Locale.US, "%02d:%02d", mins, secs),
                 style = MaterialTheme.typography.displayLarge.copy(
@@ -2636,7 +2659,29 @@ private fun FocusLiveTimerReadoutCard(
             )
             Spacer(modifier = Modifier.height(10.dp))
             NeoProgressBar(progress = progress, fillColor = InkBlack, height = 10.sdp)
-            Spacer(modifier = Modifier.height(16.dp))
+
+            if (!isStopwatch) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    NeoPillButton(
+                        text = "+1m",
+                        selected = false,
+                        onClick = { onExtendDurationMinutes(1) },
+                        modifier = Modifier.testTag("focus_extend_1m_button")
+                    )
+                    NeoPillButton(
+                        text = "+5m",
+                        selected = false,
+                        onClick = { onExtendDurationMinutes(5) },
+                        modifier = Modifier.testTag("focus_extend_5m_button")
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
 
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 NeoPillButton(
@@ -2674,6 +2719,7 @@ private fun FocusSubtasksAndSessionCard(
     onToggleSubtask: (SubtaskEntity) -> Unit,
     onAddQuickSubtask: () -> Unit
 ) {
+    val task = focusItem.task
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         // Subtasks Card
         NeoCard(
@@ -2745,7 +2791,7 @@ private fun FocusSubtasksAndSessionCard(
             }
         }
 
-        // Live Session Activity Log Card (with visual dotted break line when paused/resumed)
+        // Live Session Interval Log Card (preserves every individual work and break interval)
         if (recordedIntervals.isNotEmpty()) {
             NeoCard(
                 modifier = Modifier.fillMaxWidth(),
@@ -2754,20 +2800,48 @@ private fun FocusSubtasksAndSessionCard(
                 contentPadding = PaddingValues(18.dp)
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
-                        text = "Session Timeline",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = InkBlack
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Session Interval Log",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = InkBlack
+                        )
+                        if (task.parsedSessionSegments.isNotEmpty()) {
+                            val workedLabel = formatDurationBadge(task.totalWorkedMinutes.coerceAtLeast(1))
+                            val breakLabel = formatDurationBadge(task.totalBreakMinutes)
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(50))
+                                    .background(NeoYellow)
+                                    .border(1.dp, InkBlack, RoundedCornerShape(50))
+                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = if (task.totalBreakMinutes > 0) {
+                                        "Worked $workedLabel • Break $breakLabel"
+                                    } else {
+                                        "Worked $workedLabel"
+                                    },
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = InkBlack
+                                )
+                            }
+                        }
+                    }
                     recordedIntervals.forEachIndexed { idx, intervalText ->
-                        if (idx > 0) {
+                        val isBreakRow = intervalText.startsWith("Break")
+                        if (idx > 0 && !isBreakRow) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier.padding(start = 10.dp)
                             ) {
                                 SpineConnectorSegment(
                                     isDottedBreak = true,
-                                    height = 18.dp
+                                    height = 14.dp
                                 )
                             }
                         }
@@ -2775,13 +2849,20 @@ private fun FocusSubtasksAndSessionCard(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(SoftSheetSurface)
+                                .background(if (isBreakRow) NeoYellow.copy(alpha = 0.35f) else SoftSheetSurface)
+                                .border(
+                                    width = if (isBreakRow) 1.dp else 0.dp,
+                                    color = if (isBreakRow) InkBlack.copy(alpha = 0.3f) else androidx.compose.ui.graphics.Color.Transparent,
+                                    shape = RoundedCornerShape(12.dp)
+                                )
                                 .padding(horizontal = 12.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
                                 text = intervalText,
-                                style = MaterialTheme.typography.titleMedium,
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = if (isBreakRow) FontWeight.SemiBold else FontWeight.Medium
+                                ),
                                 color = InkBlack
                             )
                         }

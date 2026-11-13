@@ -336,8 +336,36 @@ class PlannerRepository(private val dao: PlannerDao) {
         dao.updateTask(task.copy(excludedEpochDaysCsv = updatedCsv))
     }
 
-    suspend fun toggleTaskCompleted(task: TaskEntity) {
-        dao.updateTask(task.copy(isCompleted = !task.isCompleted))
+    private val lastPauseRealtimeByTaskId = mutableMapOf<Long, Long>()
+    private val lastStartRealtimeByTaskId = mutableMapOf<Long, Long>()
+
+    suspend fun toggleTaskCompleted(
+        task: TaskEntity,
+        todayEpochDay: Long = LocalDate.now().toEpochDay()
+    ): Boolean {
+        val markingDone = !task.isCompleted
+        val isFutureDated = task.dateEpochDay != null && task.dateEpochDay > todayEpochDay
+        val targetDateEpoch = if (markingDone && isFutureDated) todayEpochDay else task.dateEpochDay
+        val updatedOrder = if (markingDone && isFutureDated) {
+            val currentMax = dao.getMaxSortOrderForDay(todayEpochDay) ?: 0
+            val normalizedMax = if (currentMax >= 10 && currentMax % 10 == 0) currentMax / 10 else currentMax
+            (normalizedMax + 1).coerceIn(1, 99)
+        } else {
+            task.sortOrder
+        }
+        dao.updateTask(
+            task.copy(
+                dateEpochDay = targetDateEpoch,
+                sortOrder = updatedOrder,
+                isCompleted = markingDone
+            )
+        )
+        return markingDone && isFutureDated
+    }
+
+    suspend fun extendTaskDurationMinutes(task: TaskEntity, deltaMinutes: Int) {
+        val nextDuration = (task.durationMinutes + deltaMinutes).coerceIn(1, 720)
+        dao.updateTask(task.copy(durationMinutes = nextDuration))
     }
 
     suspend fun toggleSubtaskCompleted(subtask: SubtaskEntity) {
@@ -385,6 +413,8 @@ class PlannerRepository(private val dao: PlannerDao) {
     }
 
     suspend fun moveTaskToInbox(task: TaskEntity) {
+        lastPauseRealtimeByTaskId.remove(task.id)
+        lastStartRealtimeByTaskId.remove(task.id)
         dao.updateTask(
             task.copy(
                 dateEpochDay = null,
@@ -397,33 +427,103 @@ class PlannerRepository(private val dao: PlannerDao) {
     }
 
     suspend fun deleteTask(taskId: Long) {
+        lastPauseRealtimeByTaskId.remove(taskId)
+        lastStartRealtimeByTaskId.remove(taskId)
         dao.deleteTaskById(taskId)
     }
 
     /**
-     * Live Focus Session Logging:
+     * Live Focus Session Logging with <60s Micro-Pause Filtering and Future-Date Pull-to-Today:
      * - When Play is tapped, notes current device clock time and feeds it to the timeline.
-     * - For Timeless tasks, preserves startTimeMinutes = null so fake clock timestamps are never injected.
-     * - When Pause is tapped, saves the segment ("start-pause") so a break is implicitly noted.
-     * - When Resume is tapped, starts a new segment so the timeline displays a dotted "Continued" line!
+     * - If resuming after a pause that lasted < 60 seconds, merges back into the previous segment
+     *   so accidental micro-pauses never split the timeline capsule.
+     * - If the task is scheduled on a future date, automatically pulls it into Today's Flow.
+     * - Returns pair of (mergedMicroPause, pulledFromFuture).
      */
-    suspend fun startOrResumeTaskSession(task: TaskEntity, currentClockMin: Int = currentMinutesFromMidnight()) {
-        if (task.activeSessionStartMin != null) return
+    suspend fun startOrResumeTaskSession(
+        task: TaskEntity,
+        currentClockMin: Int = currentMinutesFromMidnight(),
+        todayEpochDay: Long = LocalDate.now().toEpochDay()
+    ): Pair<Boolean, Boolean> {
+        if (task.activeSessionStartMin != null) return false to false
+        val nowRealtime = android.os.SystemClock.elapsedRealtime()
+        val isFutureDated = task.dateEpochDay != null && task.dateEpochDay > todayEpochDay
+        val targetDateEpoch = if (isFutureDated) todayEpochDay else task.dateEpochDay
+        val updatedOrder = if (isFutureDated) {
+            val currentMax = dao.getMaxSortOrderForDay(todayEpochDay) ?: 0
+            val normalizedMax = if (currentMax >= 10 && currentMax % 10 == 0) currentMax / 10 else currentMax
+            (normalizedMax + 1).coerceIn(1, 99)
+        } else {
+            task.sortOrder
+        }
+
         val updatedStartMin = if (task.modeEnum == TaskMode.TIMED_BLOCK) {
             task.startTimeMinutes ?: currentClockMin
         } else {
             null
         }
+
+        val lastPauseMs = lastPauseRealtimeByTaskId[task.id]
+        val existingSegs = task.parsedSessionSegments
+        val isMicroPause = lastPauseMs != null &&
+            (nowRealtime - lastPauseMs) < 60_000L &&
+            existingSegs.isNotEmpty()
+
+        lastStartRealtimeByTaskId[task.id] = nowRealtime
+        lastPauseRealtimeByTaskId.remove(task.id)
+
+        if (isMicroPause) {
+            val lastSegStart = existingSegs.last().first
+            val remainingSegs = existingSegs.dropLast(1).joinToString("||") { "${it.first}-${it.second}" }
+            dao.updateTask(
+                task.copy(
+                    dateEpochDay = targetDateEpoch,
+                    sortOrder = updatedOrder,
+                    startTimeMinutes = updatedStartMin,
+                    sessionSegments = remainingSegs,
+                    activeSessionStartMin = lastSegStart
+                )
+            )
+            return true to isFutureDated
+        }
+
         dao.updateTask(
             task.copy(
+                dateEpochDay = targetDateEpoch,
+                sortOrder = updatedOrder,
                 startTimeMinutes = updatedStartMin,
                 activeSessionStartMin = currentClockMin
             )
         )
+        return false to isFutureDated
     }
 
-    suspend fun pauseTaskSession(task: TaskEntity, currentClockMin: Int = currentMinutesFromMidnight()) {
-        val startMin = task.activeSessionStartMin ?: return
+    suspend fun pauseTaskSession(
+        task: TaskEntity,
+        currentClockMin: Int = currentMinutesFromMidnight()
+    ): Boolean {
+        val startMin = task.activeSessionStartMin ?: return false
+        val nowRealtime = android.os.SystemClock.elapsedRealtime()
+        val lastStartMs = lastStartRealtimeByTaskId[task.id]
+        val existingSegs = task.parsedSessionSegments
+
+        lastPauseRealtimeByTaskId[task.id] = nowRealtime
+
+        // If user already had a segment and tapped Resume -> Pause within < 60s, merge into previous segment
+        if (existingSegs.isNotEmpty() && lastStartMs != null && (nowRealtime - lastStartMs) < 60_000L) {
+            val prevSegStart = existingSegs.last().first
+            val prevSegEnd = maxOf(existingSegs.last().second, currentClockMin.coerceAtLeast(prevSegStart + 1))
+            val mergedList = existingSegs.dropLast(1) + (prevSegStart to prevSegEnd)
+            val updatedSegments = mergedList.joinToString("||") { "${it.first}-${it.second}" }
+            dao.updateTask(
+                task.copy(
+                    sessionSegments = updatedSegments,
+                    activeSessionStartMin = null
+                )
+            )
+            return true
+        }
+
         val endMin = currentClockMin.coerceAtLeast(startMin + 1)
         val newSeg = "$startMin-$endMin"
         val updatedSegments = if (task.sessionSegments.isBlank()) {
@@ -437,9 +537,25 @@ class PlannerRepository(private val dao: PlannerDao) {
                 activeSessionStartMin = null
             )
         )
+        return false
     }
 
-    suspend fun finishTaskSessionAndComplete(task: TaskEntity, currentClockMin: Int = currentMinutesFromMidnight()) {
+    suspend fun finishTaskSessionAndComplete(
+        task: TaskEntity,
+        currentClockMin: Int = currentMinutesFromMidnight(),
+        todayEpochDay: Long = LocalDate.now().toEpochDay()
+    ): Boolean {
+        lastPauseRealtimeByTaskId.remove(task.id)
+        lastStartRealtimeByTaskId.remove(task.id)
+        val isFutureDated = task.dateEpochDay != null && task.dateEpochDay > todayEpochDay
+        val targetDateEpoch = if (isFutureDated) todayEpochDay else task.dateEpochDay
+        val updatedOrder = if (isFutureDated) {
+            val currentMax = dao.getMaxSortOrderForDay(todayEpochDay) ?: 0
+            val normalizedMax = if (currentMax >= 10 && currentMax % 10 == 0) currentMax / 10 else currentMax
+            (normalizedMax + 1).coerceIn(1, 99)
+        } else {
+            task.sortOrder
+        }
         val startMin = task.activeSessionStartMin
         val updatedSegments = if (startMin != null) {
             val endMin = currentClockMin.coerceAtLeast(startMin + 1)
@@ -450,11 +566,14 @@ class PlannerRepository(private val dao: PlannerDao) {
         }
         dao.updateTask(
             task.copy(
+                dateEpochDay = targetDateEpoch,
+                sortOrder = updatedOrder,
                 sessionSegments = updatedSegments,
                 activeSessionStartMin = null,
                 isCompleted = true
             )
         )
+        return isFutureDated
     }
 
     /**

@@ -94,7 +94,12 @@ data class PlannerUiState(
     val endOfDayMinutes: Int = 22 * 60
 ) {
     val activeFocusTask: TaskWithSubtasks?
-        get() = allTasks.firstOrNull { it.task.id == focusedTaskId } ?: upNextTask
+        get() = allTasks.firstOrNull {
+            it.task.id == focusedTaskId &&
+                !it.task.isCompleted &&
+                it.task.dateEpochDay != null &&
+                selectedDateEpochDay !in it.task.excludedEpochDays
+        } ?: upNextTask
 }
 
 private data class LocalNavState(
@@ -743,6 +748,7 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
                     isEditorVisible = false,
                     editingTask = null,
                     inspectingTaskId = null,
+                    focusedTaskId = if (it.focusedTaskId == task.id) null else it.focusedTaskId,
                     statusBannerMessage = "Moved to Inbox"
                 )
             }
@@ -750,8 +756,19 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun toggleTaskDone(task: TaskEntity) {
+        val todayEpoch = LocalDate.now().toEpochDay()
         viewModelScope.launch {
-            repository.toggleTaskCompleted(task)
+            val pulledFromFuture = repository.toggleTaskCompleted(task, todayEpoch)
+            navState.update {
+                it.copy(
+                    focusedTaskId = if (it.focusedTaskId == task.id) null else it.focusedTaskId,
+                    statusBannerMessage = if (pulledFromFuture) {
+                        "Completed & pulled into Today's Flow"
+                    } else {
+                        it.statusBannerMessage
+                    }
+                )
+            }
         }
     }
 
@@ -775,6 +792,7 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
                     isEditorVisible = false,
                     editingTask = null,
                     inspectingTaskId = null,
+                    focusedTaskId = if (it.focusedTaskId == taskId) null else it.focusedTaskId,
                     statusBannerMessage = "Removed"
                 )
             }
@@ -790,6 +808,7 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
                     isEditorVisible = false,
                     editingTask = null,
                     inspectingTaskId = null,
+                    focusedTaskId = if (it.focusedTaskId == task.id) null else it.focusedTaskId,
                     statusBannerMessage = "Removed for today only"
                 )
             }
@@ -797,26 +816,64 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun enterFocusForTask(taskId: Long?) {
+        val currentUpNext = uiState.value.upNextTask?.task
+        val lockedTaskId = currentUpNext?.id ?: taskId
+        val jumpedOutOfOrder = taskId != null && currentUpNext != null && taskId != currentUpNext.id
         navState.update {
             it.copy(
-                focusedTaskId = taskId,
+                focusedTaskId = lockedTaskId,
                 inspectingTaskId = null,
-                activeDestination = StruktDestination.FOCUS
+                activeDestination = StruktDestination.FOCUS,
+                statusBannerMessage = if (jumpedOutOfOrder) {
+                    "Following flow order • Up Next: ${currentUpNext?.title}"
+                } else {
+                    it.statusBannerMessage
+                }
             )
         }
     }
 
     fun startOrResumeFocusTimer(task: TaskEntity) {
+        val todayEpoch = LocalDate.now().toEpochDay()
         viewModelScope.launch {
-            repository.startOrResumeTaskSession(task)
+            val (mergedMicroPause, pulledFromFuture) = repository.startOrResumeTaskSession(
+                task = task,
+                todayEpochDay = todayEpoch
+            )
+            navState.update {
+                it.copy(
+                    selectedDateEpochDay = if (pulledFromFuture) todayEpoch else it.selectedDateEpochDay,
+                    focusedTaskId = task.id,
+                    statusBannerMessage = when {
+                        pulledFromFuture -> "Pulled into Today's Flow • Timer started"
+                        mergedMicroPause -> "Resumed • Micro-pause (<60s) merged"
+                        else -> it.statusBannerMessage
+                    }
+                )
+            }
         }
     }
 
     fun pauseFocusTimer(task: TaskEntity) {
         viewModelScope.launch {
-            repository.pauseTaskSession(task)
+            val mergedShortBurst = repository.pauseTaskSession(task)
             navState.update {
-                it.copy(statusBannerMessage = "Paused • Break loop noted on timeline")
+                it.copy(
+                    statusBannerMessage = if (mergedShortBurst) {
+                        "Paused"
+                    } else {
+                        "Paused • Break loop noted on timeline"
+                    }
+                )
+            }
+        }
+    }
+
+    fun extendFocusTaskDuration(task: TaskEntity, deltaMinutes: Int) {
+        viewModelScope.launch {
+            repository.extendTaskDurationMinutes(task, deltaMinutes)
+            navState.update {
+                it.copy(statusBannerMessage = "+${deltaMinutes}m added to timer")
             }
         }
     }
@@ -848,12 +905,21 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
 
     fun completeFocusedTaskAndAdvance() {
         val currentFocus = uiState.value.activeFocusTask ?: return
+        val todayEpoch = LocalDate.now().toEpochDay()
         viewModelScope.launch {
-            repository.finishTaskSessionAndComplete(currentFocus.task)
+            val pulledFromFuture = repository.finishTaskSessionAndComplete(
+                task = currentFocus.task,
+                todayEpochDay = todayEpoch
+            )
             navState.update {
                 it.copy(
+                    selectedDateEpochDay = if (pulledFromFuture) todayEpoch else it.selectedDateEpochDay,
                     focusedTaskId = null,
-                    statusBannerMessage = "Completed • Advancing to next"
+                    statusBannerMessage = if (pulledFromFuture) {
+                        "Completed & pulled into Today's Flow"
+                    } else {
+                        "Completed • Advancing to next"
+                    }
                 )
             }
         }

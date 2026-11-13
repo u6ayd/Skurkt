@@ -467,9 +467,18 @@ private fun TabletLandscapeSplitLayout(
                     StruktDestination.FOCUS -> {
                         AntiParalysisFocusScreen(
                             focusItem = uiState.activeFocusTask,
+                            totalDayTasksCount = uiState.totalDayTasksCount,
+                            completedDayTasksCount = uiState.completedDayTasksCount,
                             onBackToFlow = { viewModel.setDestination(StruktDestination.FLOW) },
+                            onAddTaskToFlow = {
+                                viewModel.openCreateTaskSheet(
+                                    defaultMode = TaskMode.TIMELESS_STEP,
+                                    forInbox = false
+                                )
+                            },
                             onStartOrResumeSession = viewModel::startOrResumeFocusTimer,
                             onPauseSession = viewModel::pauseFocusTimer,
+                            onExtendDurationMinutes = viewModel::extendFocusTaskDuration,
                             onToggleSubtask = viewModel::toggleSubtaskDone,
                             onAddQuickSubtask = viewModel::addQuickSubtask,
                             onCompleteAndAdvance = viewModel::completeFocusedTaskAndAdvance
@@ -543,9 +552,18 @@ private fun PortraitHandheldLayout(
                     StruktDestination.FOCUS -> {
                         AntiParalysisFocusScreen(
                             focusItem = uiState.activeFocusTask,
+                            totalDayTasksCount = uiState.totalDayTasksCount,
+                            completedDayTasksCount = uiState.completedDayTasksCount,
                             onBackToFlow = { viewModel.setDestination(StruktDestination.FLOW) },
+                            onAddTaskToFlow = {
+                                viewModel.openCreateTaskSheet(
+                                    defaultMode = TaskMode.TIMELESS_STEP,
+                                    forInbox = false
+                                )
+                            },
                             onStartOrResumeSession = viewModel::startOrResumeFocusTimer,
                             onPauseSession = viewModel::pauseFocusTimer,
+                            onExtendDurationMinutes = viewModel::extendFocusTaskDuration,
                             onToggleSubtask = viewModel::toggleSubtaskDone,
                             onAddQuickSubtask = viewModel::addQuickSubtask,
                             onCompleteAndAdvance = viewModel::completeFocusedTaskAndAdvance

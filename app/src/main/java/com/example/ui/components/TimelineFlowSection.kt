@@ -678,13 +678,18 @@ fun HybridSpineTaskRow(
         }
     } else {
         // =========================================================================
-        // CASE B: Task WITH a Break -> Single Unified Row where the Center Spine Column
-        // stacks Top Half-Oval + Smooth Dotted Loop + Bottom Half-Oval with ZERO gaps!
+        // CASE B: Task WITH 1 or More Breaks -> Condenses onto 1 Unified Split Break Loop
+        // on the Center Spine Column (Top Half-Oval + Dotted Loop + Bottom Half-Oval)
+        // and extends Timed task end time by totalBreakMinutes!
         // =========================================================================
         val firstSegStart = segments.firstOrNull()?.first ?: startMin
         val firstSegEnd = segments.firstOrNull()?.second ?: (startMin + task.durationMinutes / 2)
         val secondSegStart = task.activeSessionStartMin ?: segments.lastOrNull()?.first ?: (firstSegEnd + 10)
-        val secondSegEnd = segments.lastOrNull()?.second ?: endMin
+        val extendedTimedEnd = maxOf(
+            segments.lastOrNull()?.second ?: 0,
+            startMin + task.durationMinutes.coerceAtLeast(5) + task.totalBreakMinutes
+        ).coerceAtMost(23 * 60 + 59)
+        val secondSegEnd = if (isTimed) extendedTimedEnd else (segments.lastOrNull()?.second ?: endMin)
 
         val topHalfHeight = 52.sdp
         val loopHeight = 54.sdp
@@ -717,64 +722,99 @@ fun HybridSpineTaskRow(
                 ),
             verticalAlignment = Alignment.Top
         ) {
-            // 1. Left Time Column aligned with Top Half-Oval and Bottom Half-Oval
+            // 1. Left Time / Sequence Column aligned with Top Half-Oval and Bottom Half-Oval
             Column(
                 modifier = Modifier
                     .width(TIME_COLUMN_WIDTH)
                     .fillMaxHeight()
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(topHalfHeight)
-                        .padding(top = 4.dp, bottom = 2.dp),
-                    horizontalAlignment = Alignment.Start,
-                    verticalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = formatMinutesAsClock(firstSegStart),
-                        style = MaterialTheme.typography.labelMedium.copy(
-                            fontSize = 10.5.ssp,
-                            fontWeight = FontWeight.Normal,
+                if (isTimed) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(topHalfHeight)
+                            .padding(top = 4.dp, bottom = 2.dp),
+                        horizontalAlignment = Alignment.Start,
+                        verticalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = formatMinutesAsClock(firstSegStart),
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontSize = 10.5.ssp,
+                                fontWeight = FontWeight.Normal,
+                                color = if (isUpNext) InkBlack else InkMuted
+                            )
+                        )
+                        Text(
+                            text = formatMinutesAsClock(firstSegEnd),
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontSize = 9.5.ssp,
+                                fontWeight = FontWeight.Normal
+                            ),
+                            color = InkMuted
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(loopHeight))
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(bottomHalfHeight)
+                            .padding(top = 2.dp, bottom = 4.dp),
+                        horizontalAlignment = Alignment.Start,
+                        verticalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = formatMinutesAsClock(secondSegStart),
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontSize = 9.5.ssp,
+                                fontWeight = FontWeight.Normal
+                            ),
+                            color = InkMuted
+                        )
+                        Text(
+                            text = formatMinutesAsClock(secondSegEnd),
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontSize = 10.ssp,
+                                fontWeight = FontWeight.Normal
+                            ),
+                            color = InkMuted
+                        )
+                    }
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(topHalfHeight),
+                        horizontalAlignment = Alignment.Start,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = "#$sequenceNumber",
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
                             color = if (isUpNext) InkBlack else InkMuted
                         )
-                    )
-                    Text(
-                        text = formatMinutesAsClock(firstSegEnd),
-                        style = MaterialTheme.typography.labelMedium.copy(
-                            fontSize = 9.5.ssp,
-                            fontWeight = FontWeight.Normal
-                        ),
-                        color = InkMuted
-                    )
-                }
+                    }
 
-                Spacer(modifier = Modifier.height(loopHeight))
+                    Spacer(modifier = Modifier.height(loopHeight))
 
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(bottomHalfHeight)
-                        .padding(top = 2.dp, bottom = 4.dp),
-                    horizontalAlignment = Alignment.Start,
-                    verticalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = formatMinutesAsClock(secondSegStart),
-                        style = MaterialTheme.typography.labelMedium.copy(
-                            fontSize = 9.5.ssp,
-                            fontWeight = FontWeight.Normal
-                        ),
-                        color = InkMuted
-                    )
-                    Text(
-                        text = formatMinutesAsClock(secondSegEnd),
-                        style = MaterialTheme.typography.labelMedium.copy(
-                            fontSize = 10.ssp,
-                            fontWeight = FontWeight.Normal
-                        ),
-                        color = InkMuted
-                    )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(bottomHalfHeight),
+                        horizontalAlignment = Alignment.Start,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = "Cont.",
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontSize = 10.ssp,
+                                fontWeight = FontWeight.Medium
+                            ),
+                            color = InkMuted
+                        )
+                    }
                 }
             }
 
@@ -862,6 +902,9 @@ private fun TaskRightTitleAndCheckRow(
     modifier: Modifier = Modifier
 ) {
     val task = item.task
+    val hasPauseBreak = task.parsedSessionSegments.size > 1 ||
+        (task.parsedSessionSegments.size == 1 && task.activeSessionStartMin != null)
+
     Row(
         modifier = modifier
             .then(
@@ -908,8 +951,8 @@ private fun TaskRightTitleAndCheckRow(
 
             val hasDurationBadge = task.durationMinutes > 0
             val hasSubtasks = item.subtasks.isNotEmpty()
-            if (hasDurationBadge || hasSubtasks || isSimultaneous) {
-                Spacer(modifier = Modifier.height(2.dp))
+            if (hasDurationBadge || hasSubtasks || isSimultaneous || hasPauseBreak) {
+                Spacer(modifier = Modifier.height(3.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -970,6 +1013,28 @@ private fun TaskRightTitleAndCheckRow(
                                 color = InkBlack
                             )
                         }
+                    }
+                }
+
+                if (hasPauseBreak) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    val workedMin = task.totalWorkedMinutes.coerceAtLeast(1)
+                    val breakMin = task.totalBreakMinutes.coerceAtLeast(1)
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(PureWhiteSurface)
+                            .border(1.dp, InkBlack.copy(alpha = 0.6f), RoundedCornerShape(50))
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "Worked ${formatDurationBadge(workedMin)} • Break ${formatDurationBadge(breakMin)}",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 9.5.ssp,
+                                fontWeight = FontWeight.SemiBold
+                            ),
+                            color = InkBlack
+                        )
                     }
                 }
             }

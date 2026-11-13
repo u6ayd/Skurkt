@@ -96,6 +96,20 @@ data class TaskEntity(
             }
         }
 
+    @Ignore
+    val totalWorkedMinutes: Int =
+        parsedSessionSegments.sumOf { (s, e) -> (e - s).coerceAtLeast(1) }
+
+    @Ignore
+    val totalBreakMinutes: Int =
+        if (parsedSessionSegments.size < 2) {
+            0
+        } else {
+            parsedSessionSegments.zipWithNext().sumOf { (prev, next) ->
+                (next.first - prev.second).coerceAtLeast(1)
+            }
+        }
+
     fun recurrenceSummaryLabel(): String = when (recurrenceEnum) {
         RecurrenceRule.NONE -> RecurrenceRule.NONE.label
         RecurrenceRule.DAILY -> RecurrenceRule.DAILY.label
