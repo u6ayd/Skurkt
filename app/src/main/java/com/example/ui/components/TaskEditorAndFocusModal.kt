@@ -65,6 +65,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -393,9 +394,10 @@ fun UnifiedTimeAndDurationPickerSection(
     onStartTimeChange: (Int) -> Unit,
     onDurationChange: (Int) -> Unit
 ) {
-    val startOfDayMin = GlobalClockFormat.startOfDayMinutes
-    val endOfDayMin = GlobalClockFormat.endOfDayMinutes
-    val use24h = GlobalClockFormat.use24Hour
+    val clockConfig = LocalClockFormat.current
+    val startOfDayMin = clockConfig.startOfDayMinutes
+    val endOfDayMin = clockConfig.endOfDayMinutes
+    val use24h = clockConfig.use24Hour
 
     var activeTimedTab by remember { mutableStateOf(TimedSelectorTab.START) }
 
@@ -766,8 +768,9 @@ fun StructuredTaskEditorDialog(
     var taskMode by remember(existingTask, defaultMode) {
         mutableStateOf(existingTask?.modeEnum ?: defaultMode)
     }
+    val clockConfig = LocalClockFormat.current
     var startTimeMinutes by remember(existingTask) {
-        val defaultStart = (GlobalClockFormat.startOfDayMinutes + 60).coerceIn(0, 22 * 60)
+        val defaultStart = (clockConfig.startOfDayMinutes + 60).coerceIn(0, 22 * 60)
         mutableIntStateOf(existingTask?.startTimeMinutes ?: defaultStart)
     }
     var durationMinutes by remember(existingTask, defaultMode) {
@@ -985,7 +988,7 @@ fun StructuredTaskEditorDialog(
                                                     toInbox -> "Inbox • ${formatDurationBadge(durationMinutes)}"
                                                     taskMode == TaskMode.TIMED_BLOCK -> {
                                                         val safeDur = durationMinutes.coerceAtLeast(5)
-                                                        "${formatMinutesAsClock(startTimeMinutes)}–${formatMinutesAsClock(startTimeMinutes + safeDur)} (${formatDurationBadge(safeDur)})"
+                                                        "${formatMinutesAsClock(startTimeMinutes, clockConfig.use24Hour)}–${formatMinutesAsClock(startTimeMinutes + safeDur, clockConfig.use24Hour)} (${formatDurationBadge(safeDur)})"
                                                     }
                                                     else -> formatDurationBadge(durationMinutes)
                                                 },
@@ -1059,7 +1062,7 @@ fun StructuredTaskEditorDialog(
                                             toInbox -> formatDurationBadge(durationMinutes)
                                             taskMode == TaskMode.TIMED_BLOCK -> {
                                                 val safeDur = durationMinutes.coerceAtLeast(5)
-                                                "${formatMinutesAsClock(startTimeMinutes)}–${formatMinutesAsClock(startTimeMinutes + safeDur)} • ${formatDurationBadge(safeDur)}"
+                                                "${formatMinutesAsClock(startTimeMinutes, clockConfig.use24Hour)}–${formatMinutesAsClock(startTimeMinutes + safeDur, clockConfig.use24Hour)} • ${formatDurationBadge(safeDur)}"
                                             }
                                             taskMode == TaskMode.TOP_BUBBLE ->
                                                 "Top Bubble • ${formatDurationBadge(durationMinutes)}"
@@ -1127,10 +1130,7 @@ fun StructuredTaskEditorDialog(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .height(52.dp)
-                                            .clip(RoundedCornerShape(50))
-                                            .background(NeoCoral)
-                                            .border(2.dp, InkBlack, RoundedCornerShape(50))
-                                            .clickable {
+                                            .smoothPressClickable(role = Role.Button) {
                                                 val finalDur = if (taskMode == TaskMode.TIMED_BLOCK) {
                                                     durationMinutes.coerceIn(5, 720)
                                                 } else {
@@ -1138,10 +1138,10 @@ fun StructuredTaskEditorDialog(
                                                 }
                                                 if (!toInbox && taskMode == TaskMode.TIMED_BLOCK) {
                                                     val endMin = startTimeMinutes + finalDur
-                                                    if (endMin > GlobalClockFormat.endOfDayMinutes) {
+                                                    if (endMin > clockConfig.endOfDayMinutes) {
                                                         endOfDayErrorText =
-                                                            "Task ends at ${formatMinutesAsClock(endMin)}, past End of Day (${formatMinutesAsClock(GlobalClockFormat.endOfDayMinutes)}). Adjust time or End-of-Day in Settings."
-                                                        return@clickable
+                                                            "Task ends at ${formatMinutesAsClock(endMin, clockConfig.use24Hour)}, past End of Day (${formatMinutesAsClock(clockConfig.endOfDayMinutes, clockConfig.use24Hour)}). Adjust time or End-of-Day in Settings."
+                                                        return@smoothPressClickable
                                                     }
                                                 }
                                                 val finalTitle = title.ifBlank { "Task" }
@@ -1164,6 +1164,9 @@ fun StructuredTaskEditorDialog(
                                                     if (taskMode == TaskMode.TIMELESS_STEP) stepOrder else (existingTask?.sortOrder ?: 0)
                                                 )
                                             }
+                                            .clip(RoundedCornerShape(50))
+                                            .background(NeoCoral)
+                                            .border(2.dp, InkBlack, RoundedCornerShape(50))
                                             .testTag("save_task_continue_button"),
                                         contentAlignment = Alignment.Center
                                     ) {

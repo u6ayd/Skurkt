@@ -444,6 +444,7 @@ fun OverlapConflictModal(
                     }
                 }
 
+                val use24h = LocalClockFormat.current.use24Hour
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -453,14 +454,14 @@ fun OverlapConflictModal(
                         .padding(12.dp)
                 ) {
                     Text(
-                        text = "\"$newTaskTitle\" (${formatMinutesAsClock(requestedStartMin)}–${formatMinutesAsClock(requestedEndMin)}) overlaps with \"$conflictingTaskTitle\".",
+                        text = "\"$newTaskTitle\" (${formatMinutesAsClock(requestedStartMin, use24h)}–${formatMinutesAsClock(requestedEndMin, use24h)}) overlaps with \"$conflictingTaskTitle\".",
                         style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
                         color = InkBlack
                     )
                 }
 
                 NeoPillButton(
-                    text = "Auto-Shift (${formatMinutesAsClock(suggestedShiftStartMin)}–${formatMinutesAsClock(suggestedShiftEndMin)})",
+                    text = "Auto-Shift (${formatMinutesAsClock(suggestedShiftStartMin, use24h)}–${formatMinutesAsClock(suggestedShiftEndMin, use24h)})",
                     selected = true,
                     activeColor = NeoMintGreen,
                     onClick = onAutoShift,
@@ -569,27 +570,28 @@ fun AntiParalysisFocusScreen(
     }
     var newStepTitle by remember { mutableStateOf("") }
 
-    val recordedIntervals = remember(task.parsedSessionSegments, task.activeSessionStartMin) {
+    val use24h = LocalClockFormat.current.use24Hour
+    val recordedIntervals = remember(task.parsedSessionSegments, task.activeSessionStartMin, use24h) {
         buildList {
             val segs = task.parsedSessionSegments
             segs.forEachIndexed { idx, (s, e) ->
                 if (idx > 0) {
                     val prevEnd = segs[idx - 1].second
                     val breakMins = (s - prevEnd).coerceAtLeast(1)
-                    add("Break • ${formatDurationBadge(breakMins)} (${formatMinutesAsClock(prevEnd)} – ${formatMinutesAsClock(s)})")
+                    add("Break • ${formatDurationBadge(breakMins)} (${formatMinutesAsClock(prevEnd, use24h)} – ${formatMinutesAsClock(s, use24h)})")
                 }
                 val workMins = (e - s).coerceAtLeast(1)
                 val label = if (idx == 0) "Started" else "Resumed"
-                add("$label  ${formatMinutesAsClock(s)} – ${formatMinutesAsClock(e)} (${formatDurationBadge(workMins)})")
+                add("$label  ${formatMinutesAsClock(s, use24h)} – ${formatMinutesAsClock(e, use24h)} (${formatDurationBadge(workMins)})")
             }
             task.activeSessionStartMin?.let { activeStart ->
                 if (segs.isNotEmpty()) {
                     val prevEnd = segs.last().second
                     val breakMins = (activeStart - prevEnd).coerceAtLeast(1)
-                    add("Break • ${formatDurationBadge(breakMins)} (${formatMinutesAsClock(prevEnd)} – ${formatMinutesAsClock(activeStart)})")
+                    add("Break • ${formatDurationBadge(breakMins)} (${formatMinutesAsClock(prevEnd, use24h)} – ${formatMinutesAsClock(activeStart, use24h)})")
                 }
                 val label = if (segs.isEmpty()) "Started" else "Resumed"
-                add("$label  ${formatMinutesAsClock(activeStart)} – Active")
+                add("$label  ${formatMinutesAsClock(activeStart, use24h)} – Active")
             }
         }
     }

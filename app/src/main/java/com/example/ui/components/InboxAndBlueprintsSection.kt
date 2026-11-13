@@ -389,9 +389,10 @@ fun ScheduleInboxMiniPopup(
     onDismiss: () -> Unit,
     onConfirmSchedule: (asTimed: Boolean, startTimeMinutes: Int?, durationMinutes: Int) -> Unit
 ) {
+    val clockConfig = LocalClockFormat.current
     var selectedMode by remember(task.id) { mutableStateOf(TaskMode.TIMELESS_STEP) }
     var startTimeMin by remember(task.id) {
-        val defaultStart = (GlobalClockFormat.startOfDayMinutes + 60).coerceIn(0, 22 * 60)
+        val defaultStart = (clockConfig.startOfDayMinutes + 60).coerceIn(0, 22 * 60)
         mutableIntStateOf(task.startTimeMinutes ?: defaultStart)
     }
     var durationMin by remember(task.id) {
@@ -446,7 +447,7 @@ fun ScheduleInboxMiniPopup(
                         modifier = Modifier
                             .minimumInteractiveComponentSize()
                             .size(20.dp)
-                            .clickable(onClick = onDismiss)
+                            .smoothPressClickable(role = Role.Button, onClick = onDismiss)
                     )
                 }
 
@@ -499,9 +500,9 @@ fun ScheduleInboxMiniPopup(
                     onClick = {
                         val isTimed = selectedMode == TaskMode.TIMED_BLOCK
                         val finalDur = if (isTimed) durationMin.coerceIn(5, 720) else durationMin.coerceIn(0, 720)
-                        if (isTimed && (startTimeMin + finalDur) > GlobalClockFormat.endOfDayMinutes) {
+                        if (isTimed && (startTimeMin + finalDur) > clockConfig.endOfDayMinutes) {
                             errorBanner =
-                                "Task ends past End of Day (${formatMinutesAsClock(GlobalClockFormat.endOfDayMinutes)}). Adjust time or Settings."
+                                "Task ends past End of Day (${formatMinutesAsClock(clockConfig.endOfDayMinutes, clockConfig.use24Hour)}). Adjust time or Settings."
                             return@NeoPillButton
                         }
                         onConfirmSchedule(

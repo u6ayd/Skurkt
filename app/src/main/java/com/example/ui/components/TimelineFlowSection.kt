@@ -48,7 +48,9 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -100,15 +102,18 @@ import java.time.format.TextStyle as JavaTextStyle
 import java.time.temporal.ChronoUnit
 import java.util.Locale
 
-object GlobalClockFormat {
-    var use24Hour by mutableStateOf(true)
-    var startOfDayMinutes by mutableStateOf(8 * 60)
-    var endOfDayMinutes by mutableStateOf(22 * 60)
-}
+@Immutable
+data class ClockFormatConfig(
+    val use24Hour: Boolean = true,
+    val startOfDayMinutes: Int = 8 * 60,
+    val endOfDayMinutes: Int = 22 * 60
+)
+
+val LocalClockFormat = compositionLocalOf { ClockFormatConfig() }
 
 fun formatMinutesAsClock(
     minutes: Int,
-    use24Hour: Boolean = GlobalClockFormat.use24Hour
+    use24Hour: Boolean = true
 ): String {
     val normalized = ((minutes % 1440) + 1440) % 1440
     val hrs24 = (normalized / 60).coerceIn(0, 23)
@@ -149,7 +154,7 @@ private const val WEEK_PAGER_COUNT = 1000
 private val SHORT_WEEKDAY_LABELS = arrayOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
 private val TIME_COLUMN_WIDTH: Dp
-    @Composable get() = if (GlobalClockFormat.use24Hour) 38.sdp else 52.sdp
+    @Composable get() = if (LocalClockFormat.current.use24Hour) 38.sdp else 52.sdp
 private val TIME_TO_CAPSULE_GAP: Dp
     @Composable get() = 6.sdp
 private val CAPSULE_COLUMN_WIDTH: Dp
@@ -588,6 +593,7 @@ fun HybridSpineTaskRow(
     )
 
     val isTimed = task.modeEnum == TaskMode.TIMED_BLOCK
+    val use24Hour = LocalClockFormat.current.use24Hour
     val startMin = task.startTimeMinutes ?: (9 * 60)
     val endMin = (startMin + task.durationMinutes.coerceAtLeast(5)).coerceAtMost(23 * 60 + 59)
     val segments = task.parsedSessionSegments
@@ -630,7 +636,7 @@ fun HybridSpineTaskRow(
             ) {
                 if (isTimed) {
                     Text(
-                        text = formatMinutesAsClock(startMin),
+                        text = formatMinutesAsClock(startMin, use24Hour),
                         style = MaterialTheme.typography.labelMedium.copy(
                             fontSize = 10.5.ssp,
                             fontWeight = FontWeight.Normal,
@@ -638,7 +644,7 @@ fun HybridSpineTaskRow(
                         )
                     )
                     Text(
-                        text = formatMinutesAsClock(endMin),
+                        text = formatMinutesAsClock(endMin, use24Hour),
                         style = MaterialTheme.typography.labelMedium.copy(
                             fontSize = 10.ssp,
                             fontWeight = FontWeight.Normal
@@ -754,7 +760,7 @@ fun HybridSpineTaskRow(
                         verticalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            text = formatMinutesAsClock(firstSegStart),
+                            text = formatMinutesAsClock(firstSegStart, use24Hour),
                             style = MaterialTheme.typography.labelMedium.copy(
                                 fontSize = 10.5.ssp,
                                 fontWeight = FontWeight.Normal,
@@ -762,7 +768,7 @@ fun HybridSpineTaskRow(
                             )
                         )
                         Text(
-                            text = formatMinutesAsClock(firstSegEnd),
+                            text = formatMinutesAsClock(firstSegEnd, use24Hour),
                             style = MaterialTheme.typography.labelMedium.copy(
                                 fontSize = 9.5.ssp,
                                 fontWeight = FontWeight.Normal
@@ -782,7 +788,7 @@ fun HybridSpineTaskRow(
                         verticalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            text = formatMinutesAsClock(secondSegStart),
+                            text = formatMinutesAsClock(secondSegStart, use24Hour),
                             style = MaterialTheme.typography.labelMedium.copy(
                                 fontSize = 9.5.ssp,
                                 fontWeight = FontWeight.Normal
@@ -790,7 +796,7 @@ fun HybridSpineTaskRow(
                             color = InkMuted
                         )
                         Text(
-                            text = formatMinutesAsClock(secondSegEnd),
+                            text = formatMinutesAsClock(secondSegEnd, use24Hour),
                             style = MaterialTheme.typography.labelMedium.copy(
                                 fontSize = 10.ssp,
                                 fontWeight = FontWeight.Normal
@@ -1258,12 +1264,13 @@ fun TaskDetailPopupModal(
                                 modifier = Modifier.size(22.dp)
                             )
                         }
+                        val use24Hour = LocalClockFormat.current.use24Hour
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = buildString {
                                     append("${task.folderName} • ${task.sectionName} • ${formatDurationBadge(task.durationMinutes)}")
                                     task.startTimeMinutes?.let {
-                                        append(" • ${formatMinutesAsClock(it)}")
+                                        append(" • ${formatMinutesAsClock(it, use24Hour)}")
                                     }
                                 },
                                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Normal),
@@ -1576,6 +1583,7 @@ fun DayThresholdMarkerRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val use24Hour = LocalClockFormat.current.use24Hour
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -1584,7 +1592,7 @@ fun DayThresholdMarkerRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = formatMinutesAsClock(timeMinutes),
+            text = formatMinutesAsClock(timeMinutes, use24Hour),
             style = MaterialTheme.typography.labelMedium.copy(
                 fontSize = 10.5.ssp,
                 fontWeight = FontWeight.Medium

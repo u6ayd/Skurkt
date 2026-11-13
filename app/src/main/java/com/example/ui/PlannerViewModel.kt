@@ -13,7 +13,7 @@ import com.example.data.SubtaskEntity
 import com.example.data.TaskEntity
 import com.example.data.TaskMode
 import com.example.data.TaskWithSubtasks
-import com.example.ui.components.GlobalClockFormat
+import com.example.ui.components.formatMinutesAsClock
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -158,9 +158,6 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
     )
 
     init {
-        GlobalClockFormat.use24Hour = navState.value.use24HourFormat
-        GlobalClockFormat.startOfDayMinutes = navState.value.startOfDayMinutes
-        GlobalClockFormat.endOfDayMinutes = navState.value.endOfDayMinutes
         viewModelScope.launch {
             repository.ensureSeedData(LocalDate.now().toEpochDay())
         }
@@ -696,9 +693,6 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
             .putInt("start_of_day_min", safeStart)
             .putInt("end_of_day_min", safeEnd)
             .apply()
-        GlobalClockFormat.use24Hour = use24Hour
-        GlobalClockFormat.startOfDayMinutes = safeStart
-        GlobalClockFormat.endOfDayMinutes = safeEnd
         navState.update {
             it.copy(
                 use24HourFormat = use24Hour,
@@ -890,7 +884,7 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
             navState.update {
                 it.copy(
                     pendingOverlapConflict = null,
-                    statusBannerMessage = "Auto-shifted to ${com.example.ui.components.formatMinutesAsClock(conflict.suggestedAutoShiftStartMin)}"
+                    statusBannerMessage = "Auto-shifted to ${formatMinutesAsClock(conflict.suggestedAutoShiftStartMin, it.use24HourFormat)}"
                 )
             }
         }

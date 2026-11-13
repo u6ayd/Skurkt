@@ -42,8 +42,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -58,14 +60,15 @@ import com.example.ui.PlannerViewModel
 import com.example.ui.StruktDestination
 import com.example.ui.components.AntiParalysisFocusScreen
 import com.example.ui.components.CleanupAndExportModal
+import com.example.ui.components.ClockFormatConfig
 import com.example.ui.components.DateAndWeekHeader
 import com.example.ui.components.DayThresholdMarkerRow
 import com.example.ui.components.DotGridBackground
 import com.example.ui.components.FlowStructureFilterBar
 import com.example.ui.components.FoldersAndSectionsScreen
-import com.example.ui.components.GlobalClockFormat
 import com.example.ui.components.GlobalSettingsPopupModal
 import com.example.ui.components.HybridSpineTaskRow
+import com.example.ui.components.LocalClockFormat
 import com.example.ui.components.NeoCard
 import com.example.ui.components.NeoDashedDivider
 import com.example.ui.components.NeoInboxPane
@@ -123,9 +126,17 @@ fun StruktPlannerApp(
     uiState: PlannerUiState,
     viewModel: PlannerViewModel
 ) {
-    GlobalClockFormat.use24Hour = uiState.use24HourFormat
-    GlobalClockFormat.startOfDayMinutes = uiState.startOfDayMinutes
-    GlobalClockFormat.endOfDayMinutes = uiState.endOfDayMinutes
+    val clockFormatConfig = remember(
+        uiState.use24HourFormat,
+        uiState.startOfDayMinutes,
+        uiState.endOfDayMinutes
+    ) {
+        ClockFormatConfig(
+            use24Hour = uiState.use24HourFormat,
+            startOfDayMinutes = uiState.startOfDayMinutes,
+            endOfDayMinutes = uiState.endOfDayMinutes
+        )
+    }
 
     BackHandler(
         enabled = uiState.pendingOverlapConflict != null ||
@@ -158,9 +169,10 @@ fun StruktPlannerApp(
         }
     }
 
-    DotGridBackground(
-        modifier = Modifier.fillMaxSize()
-    ) {
+    CompositionLocalProvider(LocalClockFormat provides clockFormatConfig) {
+        DotGridBackground(
+            modifier = Modifier.fillMaxSize()
+        ) {
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             val isLandscapeSplitLayout = maxWidth > maxHeight
             val isTabletDevice = minOf(maxWidth, maxHeight) >= 600.dp
@@ -352,6 +364,7 @@ fun StruktPlannerApp(
                     onDismiss = viewModel::dismissOverlapConflict
                 )
             }
+        }
         }
     }
 }
