@@ -59,9 +59,6 @@ interface PlannerDao {
     @Update
     suspend fun updateFolder(folder: FolderEntity)
 
-    @Query("DELETE FROM folders WHERE id = :folderId")
-    suspend fun deleteFolderById(folderId: Long)
-
     @Query("SELECT MAX(sortOrder) FROM tasks WHERE dateEpochDay = :epochDay")
     suspend fun getMaxSortOrderForDay(epochDay: Long): Int?
 }

@@ -58,10 +58,13 @@ data class TaskEntity(
     val recurrenceDayOfMonth: Int = 1,
     val recurrenceIntervalDays: Int = 2,
     val excludedEpochDaysCsv: String = "",
+    val completedEpochDaysCsv: String = "",
     val allowSimultaneous: Boolean = false,
     val isCompleted: Boolean = false,
     val sessionSegments: String = "",
-    val activeSessionStartMin: Int? = null
+    val sessionSegmentsByDayCsv: String = "",
+    val activeSessionStartMin: Int? = null,
+    val activeSessionEpochDay: Long? = null
 ) {
     @Ignore
     val modeEnum: TaskMode =
@@ -80,21 +83,34 @@ data class TaskEntity(
         }
 
     @Ignore
-    val parsedSessionSegments: List<Pair<Int, Int>> =
-        if (sessionSegments.isBlank()) {
-            emptyList()
+    val completedEpochDays: Set<Long> =
+        if (completedEpochDaysCsv.isBlank()) {
+            emptySet()
         } else {
-            sessionSegments.split("||").mapNotNull { seg ->
-                val dashIdx = seg.indexOf('-')
-                if (dashIdx > 0 && dashIdx < seg.length - 1) {
-                    val s = seg.substring(0, dashIdx).toIntOrNull()
-                    val e = seg.substring(dashIdx + 1).toIntOrNull()
-                    if (s != null && e != null) s to e else null
-                } else {
-                    null
+            completedEpochDaysCsv.split(",").mapNotNull { it.trim().toLongOrNull() }.toSet()
+        }
+
+    @Ignore
+    val sessionSegmentsByDay: Map<Long, String> =
+        if (sessionSegmentsByDayCsv.isBlank()) {
+            emptyMap()
+        } else {
+            buildMap {
+                for (entry in sessionSegmentsByDayCsv.split(";;")) {
+                    val colonIdx = entry.indexOf(':')
+                    if (colonIdx > 0 && colonIdx < entry.length - 1) {
+                        val day = entry.substring(0, colonIdx).trim().toLongOrNull()
+                        val segs = entry.substring(colonIdx + 1).trim()
+                        if (day != null && segs.isNotEmpty()) {
+                            put(day, segs)
+                        }
+                    }
                 }
             }
         }
+
+    @Ignore
+    val parsedSessionSegments: List<Pair<Int, Int>> = parseSegmentsString(sessionSegments)
 
     @Ignore
     val totalWorkedMinutes: Int =
@@ -110,6 +126,107 @@ data class TaskEntity(
             }
         }
 
+    fun isCompletedOnDay(epochDay: Long): Boolean {
+        return if (recurrenceEnum == RecurrenceRule.NONE) {
+            isCompleted
+        } else {
+            epochDay in completedEpochDays
+        }
+    }
+
+    fun sessionSegmentsForDay(epochDay: Long): String {
+        return if (recurrenceEnum == RecurrenceRule.NONE) {
+            sessionSegments
+        } else {
+            sessionSegmentsByDay[epochDay]
+                ?: if (dateEpochDay == epochDay && sessionSegmentsByDay.isEmpty()) sessionSegments else ""
+        }
+    }
+
+    fun parsedSessionSegmentsForDay(epochDay: Long): List<Pair<Int, Int>> =
+        parseSegmentsString(sessionSegmentsForDay(epochDay))
+
+    fun activeSessionStartMinForDay(epochDay: Long): Int? {
+        return if (recurrenceEnum == RecurrenceRule.NONE) {
+            activeSessionStartMin
+        } else {
+            if (activeSessionEpochDay == null || activeSessionEpochDay == epochDay) {
+                activeSessionStartMin
+            } else {
+                null
+            }
+        }
+    }
+
+    fun withUpdatedDayCompletion(epochDay: Long, completed: Boolean): TaskEntity {
+        return if (recurrenceEnum == RecurrenceRule.NONE) {
+            copy(isCompleted = completed)
+        } else {
+            val updatedSet = if (completed) {
+                completedEpochDays + epochDay
+            } else {
+                completedEpochDays - epochDay
+            }
+            val updatedCsv = updatedSet.sorted().joinToString(",")
+            copy(
+                completedEpochDaysCsv = updatedCsv,
+                isCompleted = completed
+            )
+        }
+    }
+
+    fun withUpdatedDaySession(
+        epochDay: Long,
+        newSegments: String,
+        newActiveStartMin: Int?
+    ): TaskEntity {
+        val nextActiveDay = if (newActiveStartMin != null) epochDay else null
+        return if (recurrenceEnum == RecurrenceRule.NONE) {
+            copy(
+                sessionSegments = newSegments,
+                activeSessionStartMin = newActiveStartMin,
+                activeSessionEpochDay = nextActiveDay
+            )
+        } else {
+            val updatedMap = sessionSegmentsByDay.toMutableMap()
+            if (newSegments.isBlank()) {
+                updatedMap.remove(epochDay)
+            } else {
+                updatedMap[epochDay] = newSegments
+            }
+            val updatedByDayCsv = updatedMap.entries
+                .sortedBy { it.key }
+                .joinToString(";;") { "${it.key}:${it.value}" }
+            copy(
+                sessionSegments = newSegments,
+                sessionSegmentsByDayCsv = updatedByDayCsv,
+                activeSessionStartMin = newActiveStartMin,
+                activeSessionEpochDay = nextActiveDay
+            )
+        }
+    }
+
+    fun forEpochDay(epochDay: Long): TaskEntity {
+        if (recurrenceEnum == RecurrenceRule.NONE) {
+            return if (activeSessionStartMin != null && activeSessionEpochDay != null && activeSessionEpochDay != epochDay) {
+                copy(activeSessionStartMin = null)
+            } else {
+                this
+            }
+        }
+        val dayDone = isCompletedOnDay(epochDay)
+        val daySegs = sessionSegmentsForDay(epochDay)
+        val dayActiveStart = activeSessionStartMinForDay(epochDay)
+        if (isCompleted == dayDone && sessionSegments == daySegs && activeSessionStartMin == dayActiveStart) {
+            return this
+        }
+        return copy(
+            isCompleted = dayDone,
+            sessionSegments = daySegs,
+            activeSessionStartMin = dayActiveStart
+        )
+    }
+
     fun recurrenceSummaryLabel(): String = when (recurrenceEnum) {
         RecurrenceRule.NONE -> RecurrenceRule.NONE.label
         RecurrenceRule.DAILY -> RecurrenceRule.DAILY.label
@@ -117,6 +234,22 @@ data class TaskEntity(
         RecurrenceRule.WEEKLY -> RecurrenceRule.WEEKLY.label
         RecurrenceRule.MONTHLY -> "Monthly (${formatOrdinalDayOfMonth(recurrenceDayOfMonth)})"
         RecurrenceRule.CUSTOM_DAYS -> "Every ${recurrenceIntervalDays.coerceAtLeast(1)} days"
+    }
+
+    companion object {
+        fun parseSegmentsString(rawSegments: String): List<Pair<Int, Int>> {
+            if (rawSegments.isBlank()) return emptyList()
+            return rawSegments.split("||").mapNotNull { seg ->
+                val dashIdx = seg.indexOf('-')
+                if (dashIdx > 0 && dashIdx < seg.length - 1) {
+                    val s = seg.substring(0, dashIdx).toIntOrNull()
+                    val e = seg.substring(dashIdx + 1).toIntOrNull()
+                    if (s != null && e != null) s to e else null
+                } else {
+                    null
+                }
+            }
+        }
     }
 }
 
@@ -157,6 +290,11 @@ data class TaskWithSubtasks(
 
     @Ignore
     val completedSubtasksCount: Int = subtasks.count { it.isCompleted }
+
+    fun forEpochDay(epochDay: Long): TaskWithSubtasks {
+        val projected = task.forEpochDay(epochDay)
+        return if (projected === task) this else copy(task = projected)
+    }
 }
 
 @Immutable

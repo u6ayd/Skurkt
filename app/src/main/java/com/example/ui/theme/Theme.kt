@@ -33,7 +33,6 @@ fun MyApplicationTheme(
 ) {
     val configuration = LocalConfiguration.current
     val shortestWidthDp = minOf(configuration.screenWidthDp, configuration.screenHeightDp)
-    // 1.0x on standard phones (< 600dp), 1.24x proportional boost on tablets like Redmi Pad Pro 5G (~800dp)
     val uiScale = if (shortestWidthDp >= 600) 1.24f else 1.0f
     val responsiveTypography = remember(uiScale) { scaledTypography(uiScale) }
 

@@ -37,7 +37,6 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -57,7 +56,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.data.FolderEntity
@@ -385,12 +383,6 @@ fun NeoInboxPane(
     }
 }
 
-/**
- * Unified "Schedule into Flow" popup when clicking "+" on an Inbox task:
- * - Powered by `UnifiedTimeAndDurationPickerSection`:
- *   - Supports Timeless (with 0m Stopwatch default or optional target duration)
- *   - Supports Timed (with Dual-Mode Start + Duration OR Start + End Time, plus direct Hour/Minute selection).
- */
 @Composable
 fun ScheduleInboxMiniPopup(
     task: TaskEntity,
@@ -420,7 +412,6 @@ fun ScheduleInboxMiniPopup(
                 .fillMaxWidth(),
             backgroundColor = PureWhiteSurface,
             cornerRadius = 22.dp,
-            shadowOffset = 4.dp,
             contentPadding = PaddingValues(18.dp)
         ) {
             Column(
@@ -462,7 +453,6 @@ fun ScheduleInboxMiniPopup(
                 UnifiedTimeAndDurationPickerSection(
                     toInbox = false,
                     taskMode = selectedMode,
-                    stepOrder = 1,
                     startTimeMinutes = startTimeMin,
                     durationMinutes = durationMin,
                     showBubbleOption = false,
@@ -616,8 +606,6 @@ fun FoldersAndSectionsScreen(
             .fillMaxSize()
             .padding(horizontal = 14.dp)
     ) {
-        val useTwoColumnFolderGrid = false
-
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(18.dp),
@@ -830,57 +818,24 @@ fun FoldersAndSectionsScreen(
                     }
                 }
 
-                if (useTwoColumnFolderGrid) {
-                    val folderRows = filteredFolders.chunked(2)
-                    items(
-                        items = folderRows,
-                        key = { row -> row.first().id },
-                        contentType = { "folder_row" }
-                    ) { rowFolders ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            rowFolders.forEach { folder ->
-                                val (folderTaskCount, _, folderPct) = folderStatsByKey[folder.name.trim().lowercase()]
-                                    ?: Triple(0, 0, 0)
+                items(
+                    items = filteredFolders,
+                    key = { it.id },
+                    contentType = { "folder_card" }
+                ) { folder ->
+                    val (folderTaskCount, _, folderPct) = folderStatsByKey[folder.name.trim().lowercase()]
+                        ?: Triple(0, 0, 0)
 
-                                NeoFolderCard(
-                                    tabCode = folder.codeTag,
-                                    title = folder.name,
-                                    subtitle = "${folder.sections.size} Sections • $folderTaskCount Tasks",
-                                    progressPercent = folderPct,
-                                    fillColor = neoColorForKey(folder.colorKey),
-                                    onCardClick = { onSelectFolder(folder.id) },
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .testTag("folder_card_${folder.id}")
-                                )
-                            }
-                            if (rowFolders.size == 1) {
-                                Spacer(modifier = Modifier.weight(1f))
-                            }
-                        }
-                    }
-                } else {
-                    items(
-                        items = filteredFolders,
-                        key = { it.id },
-                        contentType = { "folder_card" }
-                    ) { folder ->
-                        val (folderTaskCount, _, folderPct) = folderStatsByKey[folder.name.trim().lowercase()]
-                            ?: Triple(0, 0, 0)
-
-                        NeoFolderCard(
-                            tabCode = folder.codeTag,
-                            title = folder.name,
-                            subtitle = "${folder.sections.size} Sections • $folderTaskCount Tasks",
-                            progressPercent = folderPct,
-                            fillColor = neoColorForKey(folder.colorKey),
-                            onCardClick = { onSelectFolder(folder.id) },
-                            modifier = Modifier.testTag("folder_card_${folder.id}")
-                        )
-                    }
+                    NeoFolderCard(
+                        tabCode = folder.codeTag,
+                        title = folder.name,
+                        subtitle = "${folder.sections.size} Sections • $folderTaskCount Tasks",
+                        progressPercent = folderPct,
+                        fillColor = neoColorForKey(folder.colorKey),
+                        onCardClick = { onSelectFolder(folder.id) },
+                        modifier = Modifier
+                            .testTag("folder_card_${folder.id}")
+                    )
                 }
             } else {
                 val (folderTaskCount, folderDone, folderPct) = folderStatsByKey[selectedFolder.name.trim().lowercase()]
@@ -1180,7 +1135,6 @@ private fun CreateFolderPopupModal(
                 .fillMaxWidth(),
             backgroundColor = PureWhiteSurface,
             cornerRadius = 20.dp,
-            shadowOffset = 4.dp,
             contentPadding = PaddingValues(18.dp)
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1269,7 +1223,6 @@ private fun AddSectionPopupModal(
                 .fillMaxWidth(),
             backgroundColor = PureWhiteSurface,
             cornerRadius = 20.dp,
-            shadowOffset = 4.dp,
             contentPadding = PaddingValues(18.dp)
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {

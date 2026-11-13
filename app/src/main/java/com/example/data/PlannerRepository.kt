@@ -54,7 +54,6 @@ class PlannerRepository(private val dao: PlannerDao) {
 
         if (dao.countTasks() > 0) return
 
-        // 1. Top Routine Bubbles (Matches Structured Screenshots 5 & 6: "Call Mum", "Structure Tomorrow", "Water Plants")
         dao.insertTask(
             TaskEntity(
                 title = "Structure Tomorrow",
@@ -99,7 +98,6 @@ class PlannerRepository(private val dao: PlannerDao) {
             )
         )
 
-        // 2. Daily Timeline Spine (Mixing Timed & Timeless + Pause/Resume Continued Example)
         dao.insertTask(
             TaskEntity(
                 title = "Rise and Shine",
@@ -113,6 +111,7 @@ class PlannerRepository(private val dao: PlannerDao) {
                 folderName = "Reading & Daily",
                 sectionName = "Daily Habits",
                 recurrence = RecurrenceRule.DAILY.name,
+                completedEpochDaysCsv = todayEpochDay.toString(),
                 isCompleted = true
             )
         )
@@ -130,6 +129,7 @@ class PlannerRepository(private val dao: PlannerDao) {
                 folderName = "Sports & Life",
                 sectionName = "Workouts",
                 recurrence = RecurrenceRule.DAILY.name,
+                completedEpochDaysCsv = todayEpochDay.toString(),
                 isCompleted = true
             )
         )
@@ -140,7 +140,6 @@ class PlannerRepository(private val dao: PlannerDao) {
             )
         )
 
-        // Timeless task slotted into the unscheduled gap between 08:45 and 14:00
         dao.insertTask(
             TaskEntity(
                 title = "Read a Book",
@@ -159,7 +158,7 @@ class PlannerRepository(private val dao: PlannerDao) {
             )
         )
 
-        // Physics task with a recorded pause/resume session ("14:00-14:37" -> Continued "14:47-15:15")
+        val physicsSegs = "${14 * 60}-${14 * 60 + 37}||${14 * 60 + 47}-${15 * 60 + 15}"
         val physicsId = dao.insertTask(
             TaskEntity(
                 title = "Physics: Electric Charges & Fields",
@@ -175,7 +174,8 @@ class PlannerRepository(private val dao: PlannerDao) {
                 sectionName = "Electrostatics",
                 recurrence = RecurrenceRule.NONE.name,
                 isCompleted = false,
-                sessionSegments = "${14 * 60}-${14 * 60 + 37}||${14 * 60 + 47}-${15 * 60 + 15}"
+                sessionSegments = physicsSegs,
+                sessionSegmentsByDayCsv = "$todayEpochDay:$physicsSegs"
             )
         )
         dao.insertSubtasks(
@@ -186,7 +186,6 @@ class PlannerRepository(private val dao: PlannerDao) {
             )
         )
 
-        // Monthly recurring task on the 1st of every month ("File Taxes")
         val firstOfCurrentMonth = LocalDate.ofEpochDay(todayEpochDay).withDayOfMonth(1).toEpochDay()
         dao.insertTask(
             TaskEntity(
@@ -207,7 +206,6 @@ class PlannerRepository(private val dao: PlannerDao) {
             )
         )
 
-        // 3. Brain-Dump Inbox Tasks (Matches Screenshot 5 left sidebar)
         dao.insertTask(
             TaskEntity(
                 title = "Do Laundry",
@@ -336,13 +334,25 @@ class PlannerRepository(private val dao: PlannerDao) {
         dao.updateTask(task.copy(excludedEpochDaysCsv = updatedCsv))
     }
 
-    private val lastPauseRealtimeByTaskId = mutableMapOf<Long, Long>()
-    private val lastStartRealtimeByTaskId = mutableMapOf<Long, Long>()
+    private val lastPauseRealtimeByTaskDay = mutableMapOf<Pair<Long, Long>, Long>()
+    private val lastStartRealtimeByTaskDay = mutableMapOf<Pair<Long, Long>, Long>()
+
+    private fun clearRealtimeForTask(taskId: Long) {
+        lastPauseRealtimeByTaskDay.keys.removeAll { it.first == taskId }
+        lastStartRealtimeByTaskDay.keys.removeAll { it.first == taskId }
+    }
 
     suspend fun toggleTaskCompleted(
         task: TaskEntity,
+        targetEpochDay: Long = LocalDate.now().toEpochDay(),
         todayEpochDay: Long = LocalDate.now().toEpochDay()
     ): Boolean {
+        if (task.recurrenceEnum != RecurrenceRule.NONE) {
+            val markingDone = !task.isCompletedOnDay(targetEpochDay)
+            dao.updateTask(task.withUpdatedDayCompletion(targetEpochDay, markingDone))
+            return false
+        }
+
         val markingDone = !task.isCompleted
         val isFutureDated = task.dateEpochDay != null && task.dateEpochDay > todayEpochDay
         val targetDateEpoch = if (markingDone && isFutureDated) todayEpochDay else task.dateEpochDay
@@ -413,52 +423,48 @@ class PlannerRepository(private val dao: PlannerDao) {
     }
 
     suspend fun moveTaskToInbox(task: TaskEntity) {
-        lastPauseRealtimeByTaskId.remove(task.id)
-        lastStartRealtimeByTaskId.remove(task.id)
+        clearRealtimeForTask(task.id)
         dao.updateTask(
             task.copy(
                 dateEpochDay = null,
                 taskMode = TaskMode.TIMELESS_STEP.name,
                 startTimeMinutes = null,
                 isCompleted = false,
+                completedEpochDaysCsv = "",
+                sessionSegments = "",
+                sessionSegmentsByDayCsv = "",
+                activeSessionStartMin = null,
+                activeSessionEpochDay = null,
                 allowSimultaneous = false
             )
         )
     }
 
     suspend fun deleteTask(taskId: Long) {
-        lastPauseRealtimeByTaskId.remove(taskId)
-        lastStartRealtimeByTaskId.remove(taskId)
+        clearRealtimeForTask(taskId)
         dao.deleteTaskById(taskId)
     }
 
     suspend fun deleteTasksByIds(taskIds: List<Long>) {
         if (taskIds.isEmpty()) return
-        taskIds.forEach { id ->
-            lastPauseRealtimeByTaskId.remove(id)
-            lastStartRealtimeByTaskId.remove(id)
-        }
+        taskIds.forEach { id -> clearRealtimeForTask(id) }
         dao.deleteTasksByIds(taskIds)
     }
 
-    /**
-     * Live Focus Session Logging with <60s Micro-Pause Filtering and Future-Date Pull-to-Today:
-     * - When Play is tapped, notes current device clock time and feeds it to the timeline.
-     * - If resuming after a pause that lasted < 60 seconds, merges back into the previous segment
-     *   so accidental micro-pauses never split the timeline capsule.
-     * - If the task is scheduled on a future date, automatically pulls it into Today's Flow.
-     * - Returns pair of (mergedMicroPause, pulledFromFuture).
-     */
     suspend fun startOrResumeTaskSession(
         task: TaskEntity,
+        targetEpochDay: Long = LocalDate.now().toEpochDay(),
         currentClockMin: Int = currentMinutesFromMidnight(),
         todayEpochDay: Long = LocalDate.now().toEpochDay()
     ): Pair<Boolean, Boolean> {
-        if (task.activeSessionStartMin != null) return false to false
+        val isRecurring = task.recurrenceEnum != RecurrenceRule.NONE
+        val isFutureDatedOneTime = !isRecurring && task.dateEpochDay != null && task.dateEpochDay > todayEpochDay
+        val effectiveEpochDay = if (isFutureDatedOneTime) todayEpochDay else targetEpochDay
+
+        if (task.activeSessionStartMinForDay(effectiveEpochDay) != null) return false to false
         val nowRealtime = android.os.SystemClock.elapsedRealtime()
-        val isFutureDated = task.dateEpochDay != null && task.dateEpochDay > todayEpochDay
-        val targetDateEpoch = if (isFutureDated) todayEpochDay else task.dateEpochDay
-        val updatedOrder = if (isFutureDated) {
+        val targetDateEpoch = if (isFutureDatedOneTime) todayEpochDay else task.dateEpochDay
+        val updatedOrder = if (isFutureDatedOneTime) {
             val currentMax = dao.getMaxSortOrderForDay(todayEpochDay) ?: 0
             val normalizedMax = if (currentMax >= 10 && currentMax % 10 == 0) currentMax / 10 else currentMax
             (normalizedMax + 1).coerceIn(1, 99)
@@ -472,62 +478,75 @@ class PlannerRepository(private val dao: PlannerDao) {
             null
         }
 
-        val lastPauseMs = lastPauseRealtimeByTaskId[task.id]
-        val existingSegs = task.parsedSessionSegments
+        val key = task.id to effectiveEpochDay
+        val lastPauseMs = lastPauseRealtimeByTaskDay[key]
+        val existingSegs = task.parsedSessionSegmentsForDay(effectiveEpochDay)
         val isMicroPause = lastPauseMs != null &&
             (nowRealtime - lastPauseMs) < 60_000L &&
             existingSegs.isNotEmpty()
 
-        lastStartRealtimeByTaskId[task.id] = nowRealtime
-        lastPauseRealtimeByTaskId.remove(task.id)
+        lastStartRealtimeByTaskDay[key] = nowRealtime
+        lastPauseRealtimeByTaskDay.remove(key)
 
         if (isMicroPause) {
             val lastSegStart = existingSegs.last().first
             val remainingSegs = existingSegs.dropLast(1).joinToString("||") { "${it.first}-${it.second}" }
             dao.updateTask(
-                task.copy(
-                    dateEpochDay = targetDateEpoch,
-                    sortOrder = updatedOrder,
-                    startTimeMinutes = updatedStartMin,
-                    sessionSegments = remainingSegs,
-                    activeSessionStartMin = lastSegStart
-                )
+                task
+                    .withUpdatedDaySession(
+                        epochDay = effectiveEpochDay,
+                        newSegments = remainingSegs,
+                        newActiveStartMin = lastSegStart
+                    )
+                    .copy(
+                        dateEpochDay = targetDateEpoch,
+                        sortOrder = updatedOrder,
+                        startTimeMinutes = updatedStartMin
+                    )
             )
-            return true to isFutureDated
+            return true to isFutureDatedOneTime
         }
 
         dao.updateTask(
-            task.copy(
-                dateEpochDay = targetDateEpoch,
-                sortOrder = updatedOrder,
-                startTimeMinutes = updatedStartMin,
-                activeSessionStartMin = currentClockMin
-            )
+            task
+                .withUpdatedDaySession(
+                    epochDay = effectiveEpochDay,
+                    newSegments = task.sessionSegmentsForDay(effectiveEpochDay),
+                    newActiveStartMin = currentClockMin
+                )
+                .copy(
+                    dateEpochDay = targetDateEpoch,
+                    sortOrder = updatedOrder,
+                    startTimeMinutes = updatedStartMin
+                )
         )
-        return false to isFutureDated
+        return false to isFutureDatedOneTime
     }
 
     suspend fun pauseTaskSession(
         task: TaskEntity,
+        targetEpochDay: Long = LocalDate.now().toEpochDay(),
         currentClockMin: Int = currentMinutesFromMidnight()
     ): Boolean {
-        val startMin = task.activeSessionStartMin ?: return false
+        val effectiveEpochDay = task.activeSessionEpochDay ?: targetEpochDay
+        val startMin = task.activeSessionStartMinForDay(effectiveEpochDay) ?: task.activeSessionStartMin ?: return false
         val nowRealtime = android.os.SystemClock.elapsedRealtime()
-        val lastStartMs = lastStartRealtimeByTaskId[task.id]
-        val existingSegs = task.parsedSessionSegments
+        val key = task.id to effectiveEpochDay
+        val lastStartMs = lastStartRealtimeByTaskDay[key]
+        val existingSegs = task.parsedSessionSegmentsForDay(effectiveEpochDay)
 
-        lastPauseRealtimeByTaskId[task.id] = nowRealtime
+        lastPauseRealtimeByTaskDay[key] = nowRealtime
 
-        // If user already had a segment and tapped Resume -> Pause within < 60s, merge into previous segment
         if (existingSegs.isNotEmpty() && lastStartMs != null && (nowRealtime - lastStartMs) < 60_000L) {
             val prevSegStart = existingSegs.last().first
             val prevSegEnd = maxOf(existingSegs.last().second, currentClockMin.coerceAtLeast(prevSegStart + 1))
             val mergedList = existingSegs.dropLast(1) + (prevSegStart to prevSegEnd)
             val updatedSegments = mergedList.joinToString("||") { "${it.first}-${it.second}" }
             dao.updateTask(
-                task.copy(
-                    sessionSegments = updatedSegments,
-                    activeSessionStartMin = null
+                task.withUpdatedDaySession(
+                    epochDay = effectiveEpochDay,
+                    newSegments = updatedSegments,
+                    newActiveStartMin = null
                 )
             )
             return true
@@ -535,15 +554,17 @@ class PlannerRepository(private val dao: PlannerDao) {
 
         val endMin = currentClockMin.coerceAtLeast(startMin + 1)
         val newSeg = "$startMin-$endMin"
-        val updatedSegments = if (task.sessionSegments.isBlank()) {
+        val daySegments = task.sessionSegmentsForDay(effectiveEpochDay)
+        val updatedSegments = if (daySegments.isBlank()) {
             newSeg
         } else {
-            "${task.sessionSegments}||$newSeg"
+            "$daySegments||$newSeg"
         }
         dao.updateTask(
-            task.copy(
-                sessionSegments = updatedSegments,
-                activeSessionStartMin = null
+            task.withUpdatedDaySession(
+                epochDay = effectiveEpochDay,
+                newSegments = updatedSegments,
+                newActiveStartMin = null
             )
         )
         return false
@@ -551,52 +572,66 @@ class PlannerRepository(private val dao: PlannerDao) {
 
     suspend fun finishTaskSessionAndComplete(
         task: TaskEntity,
+        targetEpochDay: Long = LocalDate.now().toEpochDay(),
         currentClockMin: Int = currentMinutesFromMidnight(),
         todayEpochDay: Long = LocalDate.now().toEpochDay()
     ): Boolean {
-        lastPauseRealtimeByTaskId.remove(task.id)
-        lastStartRealtimeByTaskId.remove(task.id)
-        val isFutureDated = task.dateEpochDay != null && task.dateEpochDay > todayEpochDay
-        val targetDateEpoch = if (isFutureDated) todayEpochDay else task.dateEpochDay
-        val updatedOrder = if (isFutureDated) {
+        val isRecurring = task.recurrenceEnum != RecurrenceRule.NONE
+        val isFutureDatedOneTime = !isRecurring && task.dateEpochDay != null && task.dateEpochDay > todayEpochDay
+        val effectiveEpochDay = if (isFutureDatedOneTime) todayEpochDay else (task.activeSessionEpochDay ?: targetEpochDay)
+
+        lastPauseRealtimeByTaskDay.remove(task.id to effectiveEpochDay)
+        lastStartRealtimeByTaskDay.remove(task.id to effectiveEpochDay)
+
+        val targetDateEpoch = if (isFutureDatedOneTime) todayEpochDay else task.dateEpochDay
+        val updatedOrder = if (isFutureDatedOneTime) {
             val currentMax = dao.getMaxSortOrderForDay(todayEpochDay) ?: 0
             val normalizedMax = if (currentMax >= 10 && currentMax % 10 == 0) currentMax / 10 else currentMax
             (normalizedMax + 1).coerceIn(1, 99)
         } else {
             task.sortOrder
         }
-        val startMin = task.activeSessionStartMin
+        val startMin = task.activeSessionStartMinForDay(effectiveEpochDay) ?: task.activeSessionStartMin
+        val daySegments = task.sessionSegmentsForDay(effectiveEpochDay)
         val updatedSegments = if (startMin != null) {
             val endMin = currentClockMin.coerceAtLeast(startMin + 1)
             val newSeg = "$startMin-$endMin"
-            if (task.sessionSegments.isBlank()) newSeg else "${task.sessionSegments}||$newSeg"
+            if (daySegments.isBlank()) newSeg else "$daySegments||$newSeg"
         } else {
-            task.sessionSegments
+            daySegments
         }
         dao.updateTask(
-            task.copy(
-                dateEpochDay = targetDateEpoch,
-                sortOrder = updatedOrder,
-                sessionSegments = updatedSegments,
-                activeSessionStartMin = null,
-                isCompleted = true
-            )
+            task
+                .withUpdatedDaySession(
+                    epochDay = effectiveEpochDay,
+                    newSegments = updatedSegments,
+                    newActiveStartMin = null
+                )
+                .withUpdatedDayCompletion(
+                    epochDay = effectiveEpochDay,
+                    completed = true
+                )
+                .copy(
+                    dateEpochDay = targetDateEpoch,
+                    sortOrder = updatedOrder
+                )
         )
-        return isFutureDated
+        return isFutureDatedOneTime
     }
 
-    /**
-     * Toggles a break loop split on any task so its timeline oval capsule halves
-     * and connects via a dotted loop, or merges back into a single continuous oval.
-     */
-    suspend fun toggleTaskBreakLoop(task: TaskEntity) {
-        val hasBreak = task.parsedSessionSegments.size > 1 ||
-            (task.parsedSessionSegments.size == 1 && task.activeSessionStartMin != null)
+    suspend fun toggleTaskBreakLoop(
+        task: TaskEntity,
+        targetEpochDay: Long = LocalDate.now().toEpochDay()
+    ) {
+        val daySegs = task.parsedSessionSegmentsForDay(targetEpochDay)
+        val dayActive = task.activeSessionStartMinForDay(targetEpochDay)
+        val hasBreak = daySegs.size > 1 || (daySegs.size == 1 && dayActive != null)
         if (hasBreak) {
             dao.updateTask(
-                task.copy(
-                    sessionSegments = "",
-                    activeSessionStartMin = null
+                task.withUpdatedDaySession(
+                    epochDay = targetEpochDay,
+                    newSegments = "",
+                    newActiveStartMin = null
                 )
             )
         } else {
@@ -606,11 +641,15 @@ class PlannerRepository(private val dao: PlannerDao) {
             val resumeStart = (firstEnd + 10).coerceAtMost(23 * 60 + 49)
             val secondEnd = (resumeStart + halfDur).coerceAtMost(23 * 60 + 59)
             dao.updateTask(
-                task.copy(
-                    startTimeMinutes = if (task.modeEnum == TaskMode.TIMED_BLOCK) (task.startTimeMinutes ?: baseStart) else null,
-                    sessionSegments = "$baseStart-$firstEnd||$resumeStart-$secondEnd",
-                    activeSessionStartMin = null
-                )
+                task
+                    .withUpdatedDaySession(
+                        epochDay = targetEpochDay,
+                        newSegments = "$baseStart-$firstEnd||$resumeStart-$secondEnd",
+                        newActiveStartMin = null
+                    )
+                    .copy(
+                        startTimeMinutes = if (task.modeEnum == TaskMode.TIMED_BLOCK) (task.startTimeMinutes ?: baseStart) else null
+                    )
             )
         }
     }
@@ -639,10 +678,6 @@ class PlannerRepository(private val dao: PlannerDao) {
         if (newSection.isBlank()) return
         val updated = (folder.sections + newSection.trim()).distinct().joinToString(";;")
         dao.updateFolder(folder.copy(sectionsCsv = updated))
-    }
-
-    suspend fun deleteFolder(folderId: Long) {
-        dao.deleteFolderById(folderId)
     }
 
     private fun currentMinutesFromMidnight(): Int {

@@ -5,7 +5,6 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -24,7 +23,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -78,7 +76,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 import com.example.ui.theme.DotGridColor
 import com.example.ui.theme.InkBlack
@@ -91,11 +88,6 @@ import com.example.ui.theme.PureWhiteSurface
 import com.example.ui.theme.sdp
 import com.example.ui.theme.ssp
 
-/**
- * Hardware-accelerated cached dot-grid background:
- * Pre-renders a single 18.dp x 18.dp tile into an ImageBitmap once and tiles it across the screen
- * in a single GPU drawRect call (eliminating ~2,800 drawCircle calls per frame).
- */
 @Composable
 fun DotGridBackground(
     modifier: Modifier = Modifier,
@@ -130,9 +122,6 @@ fun DotGridBackground(
     )
 }
 
-/**
- * Smooth color-dimming press modifier without a boxy rectangular ripple.
- */
 fun Modifier.smoothPressClickable(
     role: Role? = Role.Button,
     onClick: () -> Unit
@@ -196,16 +185,12 @@ fun Modifier.smoothCombinedClickable(
         )
 }
 
-/**
- * Clean Learnify-style Card: Crisp 1.5.dp normal border lines, symmetrical 20.dp curves, ZERO drop shadow.
- */
 @Composable
 fun NeoCard(
     modifier: Modifier = Modifier,
     backgroundColor: Color = PureWhiteSurface,
     borderColor: Color = InkBlack,
     cornerRadius: Dp = 20.dp,
-    shadowOffset: Dp = 0.dp,
     borderWidth: Dp = 1.5.dp,
     onClick: (() -> Unit)? = null,
     contentPadding: PaddingValues = PaddingValues(16.dp),
@@ -235,7 +220,6 @@ fun NeoFolderCard(
     title: String,
     subtitle: String,
     progressPercent: Int,
-    tagLabel: String = "",
     fillColor: Color,
     onCardClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -249,7 +233,6 @@ fun NeoFolderCard(
         contentPadding = PaddingValues(20.dp)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            // Top Row: Learnify-style internal pill badge (e.g. PHY 12) + Percentage badge
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -294,7 +277,6 @@ fun NeoFolderCard(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Folder Title (SemiBold 600, bumped ~2% in size, max 2 lines)
             Text(
                 text = title,
                 style = MaterialTheme.typography.headlineMedium.copy(
@@ -309,7 +291,6 @@ fun NeoFolderCard(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Learnify-style Progress Header Row (Regular 400 metadata, bumped ~2% in size)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -339,7 +320,6 @@ fun NeoFolderCard(
             NeoProgressBar(progress = progressPercent / 100f)
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Bottom Action Row: Clean status on left (Medium 500) + "Continue" pill on right (SemiBold 600)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -396,9 +376,6 @@ fun NeoFolderCard(
     }
 }
 
-/**
- * Clean Pill Button with normal 1.5.dp border and zero drop shadow.
- */
 @Composable
 fun NeoPillButton(
     text: String,
@@ -408,7 +385,6 @@ fun NeoPillButton(
     selected: Boolean = false,
     activeColor: Color = NeoYellow,
     inactiveColor: Color = PureWhiteSurface,
-    shadowOffset: Dp = 0.dp,
     textFontWeight: FontWeight = FontWeight.SemiBold
 ) {
     val bgColor by animateColorAsState(
@@ -457,10 +433,6 @@ fun NeoPillButton(
     }
 }
 
-/**
- * High-Contrast Progress Bar: crisp Pure White (#FFFFFF) unfilled track with a 1.2.dp solid dark border (#1A1A1A),
- * and solid dark (#1A1A1A) or vibrant coral (#FF5E45) filled progress indicator.
- */
 @Composable
 fun NeoProgressBar(
     progress: Float,

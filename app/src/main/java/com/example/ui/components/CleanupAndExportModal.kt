@@ -7,6 +7,8 @@ import android.graphics.Color as AndroidColor
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -151,6 +153,39 @@ fun CleanupAndExportModal(
 
     val totalSubtasksDone = remember(matchedTasks) {
         matchedTasks.sumOf { it.completedSubtasksCount }
+    }
+
+    var pendingPdfFile by remember { mutableStateOf<File?>(null) }
+    var pendingCsvFile by remember { mutableStateOf<File?>(null) }
+
+    val createPdfLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/pdf")
+    ) { uri ->
+        val src = pendingPdfFile
+        if (uri != null && src != null) {
+            val saved = runCatching {
+                context.contentResolver.openOutputStream(uri)?.use { out ->
+                    src.inputStream().use { input -> input.copyTo(out) }
+                }
+            }.isSuccess
+            onExportStatusMessage(if (saved) "Saved PDF: ${src.name}" else "Failed to save PDF")
+        }
+        pendingPdfFile = null
+    }
+
+    val createCsvLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri ->
+        val src = pendingCsvFile
+        if (uri != null && src != null) {
+            val saved = runCatching {
+                context.contentResolver.openOutputStream(uri)?.use { out ->
+                    src.inputStream().use { input -> input.copyTo(out) }
+                }
+            }.isSuccess
+            onExportStatusMessage(if (saved) "Saved CSV: ${src.name}" else "Failed to save CSV")
+        }
+        pendingCsvFile = null
     }
 
     Dialog(
@@ -320,8 +355,14 @@ fun CleanupAndExportModal(
                                 totalBreakMinutes = totalBreakMinutes
                             )
                             if (file != null) {
-                                shareExportedFile(context, file, "application/pdf")
-                                onExportStatusMessage("PDF exported: ${file.name}")
+                                pendingPdfFile = file
+                                val launched = runCatching {
+                                    createPdfLauncher.launch(file.name)
+                                }.isSuccess
+                                if (!launched) {
+                                    shareExportedFile(context, file, "application/pdf")
+                                    onExportStatusMessage("PDF exported: ${file.name}")
+                                }
                             } else {
                                 onExportStatusMessage("Failed to generate PDF")
                             }
@@ -343,8 +384,14 @@ fun CleanupAndExportModal(
                                 matchedTasks = matchedTasks
                             )
                             if (file != null) {
-                                shareExportedFile(context, file, "text/csv")
-                                onExportStatusMessage("CSV exported: ${file.name}")
+                                pendingCsvFile = file
+                                val launched = runCatching {
+                                    createCsvLauncher.launch(file.name)
+                                }.isSuccess
+                                if (!launched) {
+                                    shareExportedFile(context, file, "text/csv")
+                                    onExportStatusMessage("CSV exported: ${file.name}")
+                                }
                             } else {
                                 onExportStatusMessage("Failed to generate CSV")
                             }

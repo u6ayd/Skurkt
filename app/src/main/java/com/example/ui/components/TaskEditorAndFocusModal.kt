@@ -1,6 +1,5 @@
 package com.example.ui.components
 
-import android.os.SystemClock
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
@@ -11,11 +10,9 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -46,13 +43,9 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -60,10 +53,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -74,22 +65,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.repeatOnLifecycle
 import com.example.data.FolderEntity
 import com.example.data.RecurrenceRule
-import com.example.data.SubtaskEntity
 import com.example.data.TaskEntity
 import com.example.data.TaskMode
 import com.example.data.TaskWithSubtasks
@@ -107,9 +91,6 @@ import com.example.ui.theme.PaperCanvas
 import com.example.ui.theme.PureWhiteSurface
 import com.example.ui.theme.SoftSheetSurface
 import com.example.ui.theme.neoColorForKey
-import com.example.ui.theme.sdp
-import com.example.ui.theme.ssp
-import kotlinx.coroutines.delay
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -131,12 +112,6 @@ private enum class TimedSelectorTab {
 }
 
 
-/**
- * Clean Neo-Brutalist Single-Line Custom Minutes Row:
- * - Replaces the tall Material OutlinedTextField and its 2-line wrapping floating label.
- * - Renders a compact Neo-Brutalist bordered box with a short single-line "Minutes" label + numeric input,
- *   flanked by `-5m` and `+5m` buttons on the same single line.
- */
 @Composable
 private fun NeoCompactMinutesRow(
     durationMinutes: Int,
@@ -214,9 +189,6 @@ private fun NeoCompactMinutesRow(
     }
 }
 
-/**
- * Clean, Compact Centered `Hour : Minute` Selector using Neo-Brutalist bordered boxes (zero OutlinedTextFields).
- */
 @Composable
 private fun NeoCompactClockSelector(
     clockMinutes: Int,
@@ -237,7 +209,6 @@ private fun NeoCompactClockSelector(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Hour Neo-Brutalist Box (50% width via weight(1f) so HR and MIN are always symmetrical)
         Row(
             modifier = Modifier
                 .weight(1f)
@@ -327,7 +298,6 @@ private fun NeoCompactClockSelector(
             color = InkBlack
         )
 
-        // Minute Neo-Brutalist Box (50% width via weight(1f) so MIN never clips)
         Row(
             modifier = Modifier
                 .weight(1f)
@@ -411,33 +381,15 @@ private fun NeoCompactClockSelector(
     }
 }
 
-/**
- * Decluttered, Streamlined Time & Duration Picker Section:
- * 1. Timeless / Inbox / Bubble Mode:
- *    - Shows ONLY a single row of duration pills: `None (0m)` | `15m` | `30m` | `45m` | `1h` | `Custom`.
- *    - Defaults to `None (0m)` for timeless tasks.
- *    - Hides the custom minutes input field and `-5m / +5m` buttons by default; ONLY reveals a compact
- *      single-line `"Minutes"` row if the user taps `Custom`.
- * 2. Timed Mode:
- *    - Displays 3 compact selector cards in a single row at the top of the Timed box:
- *      `[ START: 09:00 ]`   `[ END: 10:00 ]`   `[ DURATION: 1h ]`
- *    - Shows ONLY the controls for the currently selected card (never stacks Start Time and Duration pickers):
- *      - When `START` or `END` is active: shows ONLY a clean centered `Hour : Minute` Neo-Brutalist selector
- *        plus one row of quick nudge pills (`-15m`, `-5m`, `+5m`, `+15m`).
- *      - When `DURATION` is active: shows ONLY the preset duration pills (`15m`, `30m`, `45m`, `1h`, `1.5h`, `2h`)
- *        and a single compact row with the `"Minutes"` input box + `-5m` / `+5m` buttons.
- */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun UnifiedTimeAndDurationPickerSection(
     toInbox: Boolean,
     taskMode: TaskMode,
-    stepOrder: Int,
     startTimeMinutes: Int,
     durationMinutes: Int,
     showBubbleOption: Boolean = true,
     onModeChange: (TaskMode) -> Unit,
-    onStepOrderChange: (Int) -> Unit = {},
     onStartTimeChange: (Int) -> Unit,
     onDurationChange: (Int) -> Unit
 ) {
@@ -526,7 +478,6 @@ fun UnifiedTimeAndDurationPickerSection(
         }
 
         if (!toInbox && taskMode == TaskMode.TIMED_BLOCK) {
-            // 2. SIMPLIFIED "TIMED" MODE: 3 Compact Selector Cards in a Single Row
             val isBeforeStartOfDay = startTimeMinutes < startOfDayMin
             val isPastEndOfDay = (startTimeMinutes + effectiveTimedDuration) > endOfDayMin
 
@@ -540,7 +491,6 @@ fun UnifiedTimeAndDurationPickerSection(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Single Row of 3 Compact Selector Cards: [ START: 09:00 ] [ END: 10:00 ] [ DURATION: 1h ]
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -550,7 +500,6 @@ fun UnifiedTimeAndDurationPickerSection(
                     val endSelected = activeTimedTab == TimedSelectorTab.END
                     val durSelected = activeTimedTab == TimedSelectorTab.DURATION
 
-                    // Card 1: START
                     Column(
                         modifier = Modifier
                             .weight(1f)
@@ -575,7 +524,6 @@ fun UnifiedTimeAndDurationPickerSection(
                         )
                     }
 
-                    // Card 2: END
                     Column(
                         modifier = Modifier
                             .weight(1f)
@@ -600,7 +548,6 @@ fun UnifiedTimeAndDurationPickerSection(
                         )
                     }
 
-                    // Card 3: DURATION
                     Column(
                         modifier = Modifier
                             .weight(1f)
@@ -626,15 +573,12 @@ fun UnifiedTimeAndDurationPickerSection(
                     }
                 }
 
-                // Controls ONLY for the currently active tab (never stacked)
                 if (activeTimedTab == TimedSelectorTab.START || activeTimedTab == TimedSelectorTab.END) {
-                    // Clean, compact centered Hour : Minute selector
                     NeoCompactClockSelector(
                         clockMinutes = selectedClockMinutes,
                         onClockChange = applyClockUpdate
                     )
 
-                    // Single row of quick nudge pills (-15m, -5m, +5m, +15m)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -653,7 +597,6 @@ fun UnifiedTimeAndDurationPickerSection(
                         }
                     }
                 } else {
-                    // When DURATION is active: preset duration pills + single compact Minutes row
                     val timedPresets = remember {
                         listOf(
                             15 to "15m",
@@ -686,7 +629,6 @@ fun UnifiedTimeAndDurationPickerSection(
                     )
                 }
 
-                // Start-of-Day / End-of-Day Threshold Inline Notice & 1-Tap Clamp
                 if (isBeforeStartOfDay || isPastEndOfDay) {
                     Column(
                         modifier = Modifier
@@ -722,8 +664,6 @@ fun UnifiedTimeAndDurationPickerSection(
                 }
             }
         } else {
-            // 1. SIMPLIFIED "TIMELESS" MODE (No Wall of Boxes):
-            // Single row of duration pills: None (0m) | 15m | 30m | 45m | 1h | Custom
             val timelessPresets = remember {
                 listOf(
                     0 to "None (0m)",
@@ -769,7 +709,6 @@ fun UnifiedTimeAndDurationPickerSection(
                 )
             }
 
-            // ONLY reveal the compact single-line custom minutes row if the user tapped Custom
             if (showCustomTimelessInput) {
                 NeoCompactMinutesRow(
                     durationMinutes = durationMinutes,
@@ -906,7 +845,6 @@ fun StructuredTaskEditorDialog(
             activeSubPopup = EditorSubPopup.NONE
         }
 
-        // Full-screen backdrop: clicking outside the NeoCard dismisses the dialog immediately
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -924,10 +862,9 @@ fun StructuredTaskEditorDialog(
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
-                    ) { /* Consume inside clicks so backdrop doesn't dismiss */ },
+                    ) {},
                 backgroundColor = PaperCanvas,
                 cornerRadius = 28.dp,
-                shadowOffset = 5.dp,
                 contentPadding = PaddingValues(0.dp)
             ) {
                 AnimatedContent(
@@ -950,7 +887,6 @@ fun StructuredTaskEditorDialog(
                                     .fillMaxWidth()
                                     .verticalScroll(rememberScrollState())
                             ) {
-                                // 1. Colored Top Header with non-overlapping Close, Move to Inbox, and Delete controls
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -1026,7 +962,6 @@ fun StructuredTaskEditorDialog(
                                         modifier = Modifier.fillMaxWidth(),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        // Tapping the large circular icon opens the in-place Color & Icon view
                                         Box(
                                             modifier = Modifier
                                                 .size(62.dp)
@@ -1080,14 +1015,12 @@ fun StructuredTaskEditorDialog(
                                     }
                                 }
 
-                                // 2. Clean Summary Rows (Each transitions in-place inside this same window!)
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(18.dp),
                                     verticalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
-                                    // Destination Toggle Row (Date Flow vs Inbox)
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -1119,7 +1052,6 @@ fun StructuredTaskEditorDialog(
                                         }
                                     }
 
-                                    // Row 1: Time & Duration In-Place Trigger
                                     EditorSummaryRow(
                                         icon = Icons.Default.Schedule,
                                         label = "Time & Duration",
@@ -1140,7 +1072,6 @@ fun StructuredTaskEditorDialog(
                                         }
                                     )
 
-                                    // Row 2: Color & Category Icon In-Place Trigger
                                     EditorSummaryRow(
                                         icon = Icons.Default.Palette,
                                         label = "Color & Icon",
@@ -1148,7 +1079,6 @@ fun StructuredTaskEditorDialog(
                                         onClick = { activeSubPopup = EditorSubPopup.COLOR_ICON }
                                     )
 
-                                    // Row 3: Folder & Section In-Place Trigger
                                     EditorSummaryRow(
                                         icon = Icons.Default.Folder,
                                         label = "Folder",
@@ -1156,7 +1086,6 @@ fun StructuredTaskEditorDialog(
                                         onClick = { activeSubPopup = EditorSubPopup.FOLDER_SECTION }
                                     )
 
-                                    // Row 4: Repeat / Recurrence In-Place Trigger
                                     EditorSummaryRow(
                                         icon = Icons.Default.Repeat,
                                         label = "Repeat",
@@ -1168,7 +1097,6 @@ fun StructuredTaskEditorDialog(
                                         onClick = { activeSubPopup = EditorSubPopup.RECURRENCE }
                                     )
 
-                                    // Row 5: Subtasks In-Place Trigger
                                     EditorSummaryRow(
                                         icon = Icons.Default.Checklist,
                                         label = "Subtasks",
@@ -1195,7 +1123,6 @@ fun StructuredTaskEditorDialog(
 
                                     Spacer(modifier = Modifier.height(6.dp))
 
-                                    // Bottom Full-Width Coral "Continue" Button
                                     Box(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -1258,12 +1185,10 @@ fun StructuredTaskEditorDialog(
                                 UnifiedTimeAndDurationPickerSection(
                                     toInbox = toInbox,
                                     taskMode = taskMode,
-                                    stepOrder = stepOrder,
                                     startTimeMinutes = startTimeMinutes,
                                     durationMinutes = durationMinutes,
                                     showBubbleOption = true,
                                     onModeChange = { taskMode = it },
-                                    onStepOrderChange = { stepOrder = it },
                                     onStartTimeChange = { startTimeMinutes = it },
                                     onDurationChange = { durationMinutes = it }
                                 )

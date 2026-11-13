@@ -200,7 +200,6 @@ fun StruktPlannerApp(
                         }
                     }
                 }
-                val allVisibleSelected = visibleIds.isNotEmpty() && visibleIds.all { it in uiState.selectedTaskIds }
 
                 Box(
                     modifier = Modifier
@@ -824,12 +823,6 @@ private fun DayFlowSheetContent(
                             },
                             onInspectBubble = { item ->
                                 viewModel.openInspectTaskModal(item.task.id)
-                            },
-                            onEditBubble = { item ->
-                                viewModel.openEditTaskSheet(item)
-                            },
-                            onDeleteBubble = { taskId ->
-                                viewModel.deleteTask(taskId)
                             },
                             isMultiSelectActive = uiState.isMultiSelectActive,
                             selectedTaskIds = uiState.selectedTaskIds,

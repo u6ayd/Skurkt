@@ -16,11 +16,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
 
-/**
- * Responsive UI scale factor:
- * - 1.0f on standard phones (shortest width < 600.dp)
- * - 1.24f on tablets such as the 12.1-inch Redmi Pad Pro 5G (shortest width >= 600.dp)
- */
 val LocalUiScale = staticCompositionLocalOf { 1.0f }
 
 val Number.sdp: Dp
@@ -33,7 +28,6 @@ val Number.ssp: TextUnit
     @ReadOnlyComposable
     get() = (this.toFloat() * LocalUiScale.current).sp
 
-// Geometric Sans-Serif ("Outfit") with explicit variable-font weight axes (400, 500, 600, 700)
 @OptIn(ExperimentalTextApi::class)
 val OutfitFontFamily = FontFamily(
     Font(
@@ -53,30 +47,6 @@ val OutfitFontFamily = FontFamily(
     ),
     Font(
         resId = R.font.outfit,
-        weight = FontWeight.Bold,
-        variationSettings = FontVariation.Settings(FontVariation.weight(FontWeight.Bold.weight))
-    )
-)
-
-@OptIn(ExperimentalTextApi::class)
-val MonoFontFamily = FontFamily(
-    Font(
-        resId = R.font.jetbrains_mono,
-        weight = FontWeight.Normal,
-        variationSettings = FontVariation.Settings(FontVariation.weight(FontWeight.Normal.weight))
-    ),
-    Font(
-        resId = R.font.jetbrains_mono,
-        weight = FontWeight.Medium,
-        variationSettings = FontVariation.Settings(FontVariation.weight(FontWeight.Medium.weight))
-    ),
-    Font(
-        resId = R.font.jetbrains_mono,
-        weight = FontWeight.SemiBold,
-        variationSettings = FontVariation.Settings(FontVariation.weight(FontWeight.SemiBold.weight))
-    ),
-    Font(
-        resId = R.font.jetbrains_mono,
         weight = FontWeight.Bold,
         variationSettings = FontVariation.Settings(FontVariation.weight(FontWeight.Bold.weight))
     )

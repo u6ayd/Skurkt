@@ -85,7 +85,6 @@ data class PlannerUiState(
     val schedulingInboxTask: TaskEntity? = null,
     val pendingOverlapConflict: PendingOverlapConflict? = null,
     val focusedTaskId: Long? = null,
-    val forceSplitPreview: Boolean? = null,
     val statusBannerMessage: String? = null,
     val totalDayTasksCount: Int = 0,
     val completedDayTasksCount: Int = 0,
@@ -123,7 +122,6 @@ private data class LocalNavState(
     val schedulingInboxTask: TaskEntity? = null,
     val pendingOverlapConflict: PendingOverlapConflict? = null,
     val focusedTaskId: Long? = null,
-    val forceSplitPreview: Boolean? = null,
     val statusBannerMessage: String? = null,
     val isSettingsVisible: Boolean = false,
     val isCleanupExportVisible: Boolean = false,
@@ -166,7 +164,11 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
     ) { allTasks, folders, nav ->
         val selectedDate = LocalDate.ofEpochDay(nav.selectedDateEpochDay)
 
-        val tasksForSelectedDay = allTasks.filter { item ->
+        val projectedAllTasks = allTasks.map { item ->
+            item.forEpochDay(nav.selectedDateEpochDay)
+        }
+
+        val tasksForSelectedDay = projectedAllTasks.filter { item ->
             matchesDate(item.task, selectedDate)
         }
 
@@ -177,7 +179,6 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
         val spineCandidates = tasksForSelectedDay
             .filter { it.task.modeEnum != TaskMode.TOP_BUBBLE }
 
-        // 1. Timed tasks sort strictly chronologically by startTimeMinutes (e.g., 08:00 -> 08:15 -> 14:00)
         val timedTasks = spineCandidates
             .filter { it.task.modeEnum == TaskMode.TIMED_BLOCK && it.task.startTimeMinutes != null }
             .sortedWith(
@@ -186,7 +187,6 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
                     .thenBy { it.task.id }
             )
 
-        // 2. Timeless tasks sort by their normalized # step number (1..N) and slot into the spine at their # position
         val timelessTasks = spineCandidates
             .filter { it.task.modeEnum != TaskMode.TIMED_BLOCK || it.task.startTimeMinutes == null }
             .sortedWith(
@@ -209,7 +209,6 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
             FlowFilterMode.TIMED_ONLY -> fullSpine.filter { it.task.modeEnum == TaskMode.TIMED_BLOCK }
         }
 
-        // Identify overlapping Timed tasks on the selected day so both display a "Simultaneous" badge
         val simultaneousIds = buildSet<Long> {
             for (i in timedTasks.indices) {
                 val a = timedTasks[i].task
@@ -227,7 +226,6 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
             }
         }
 
-        // Compute unscheduled free-time intervals ("3h free", "45m free") between consecutive Timed tasks in filteredSpine
         val freeGapsByIndex = buildMap<Int, Int> {
             var prevTimedIndex: Int? = null
             var prevTimedEndMin: Int? = null
@@ -238,7 +236,6 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
                     val lastEnd = prevTimedEndMin
                     val lastIdx = prevTimedIndex
                     if (lastEnd != null && lastIdx != null && currStart > lastEnd) {
-                        // Place the free-time label on the connector immediately after the earlier Timed task
                         put(lastIdx + 1, currStart - lastEnd)
                     }
                     val currEnd = currStart + task.durationMinutes.coerceAtLeast(5)
@@ -251,7 +248,7 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
         val nextUp = fullSpine.firstOrNull { !it.task.isCompleted }
             ?: bubbles.firstOrNull { !it.task.isCompleted }
 
-        val inbox = allTasks
+        val inbox = projectedAllTasks
             .filter { it.task.dateEpochDay == null }
             .filter {
                 nav.searchQuery.isBlank() ||
@@ -259,8 +256,7 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
                     it.task.folderName.contains(nav.searchQuery, ignoreCase = true)
             }
 
-        // O(1) pre-partitioning for fast multi-week dot calculation (avoids 113 x N full scans)
-        val scheduledTasks = allTasks.filter { it.task.dateEpochDay != null }
+        val scheduledTasks = projectedAllTasks.filter { it.task.dateEpochDay != null }
         val nonRecurringByDay = scheduledTasks
             .filter { it.task.recurrenceEnum == RecurrenceRule.NONE }
             .groupBy { it.task.dateEpochDay!! }
@@ -295,7 +291,7 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
         }
 
         val inspected = nav.inspectingTaskId?.let { id ->
-            allTasks.firstOrNull { it.task.id == id }
+            projectedAllTasks.firstOrNull { it.task.id == id }
         }
 
         val totalDayCount = bubbles.size + filteredSpine.size
@@ -314,7 +310,7 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
             freeGapMinutesBeforeIndex = freeGapsByIndex,
             upNextTask = nextUp,
             inboxTasks = inbox,
-            allTasks = allTasks,
+            allTasks = projectedAllTasks,
             folders = folders,
             selectedFolderId = nav.selectedFolderId,
             weekDotColorsByEpochDay = weekDots,
@@ -328,7 +324,6 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
             schedulingInboxTask = nav.schedulingInboxTask,
             pendingOverlapConflict = nav.pendingOverlapConflict,
             focusedTaskId = nav.focusedTaskId,
-            forceSplitPreview = nav.forceSplitPreview,
             statusBannerMessage = nav.statusBannerMessage,
             totalDayTasksCount = totalDayCount,
             completedDayTasksCount = completedDayCount,
@@ -363,7 +358,8 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
             RecurrenceRule.WEEKLY ->
                 targetEpoch >= taskEpoch && targetDate.dayOfWeek == originDate.dayOfWeek
             RecurrenceRule.MONTHLY ->
-                targetDate.dayOfMonth == task.recurrenceDayOfMonth.coerceIn(1, targetDate.lengthOfMonth())
+                targetEpoch >= taskEpoch &&
+                    targetDate.dayOfMonth == task.recurrenceDayOfMonth.coerceIn(1, targetDate.lengthOfMonth())
             RecurrenceRule.CUSTOM_DAYS -> {
                 val interval = task.recurrenceIntervalDays.coerceAtLeast(1).toLong()
                 val diff = targetEpoch - taskEpoch
@@ -414,17 +410,6 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
         navState.update { it.copy(selectedDateEpochDay = epochDay) }
     }
 
-    fun jumpToToday() {
-        navState.update { it.copy(selectedDateEpochDay = LocalDate.now().toEpochDay()) }
-    }
-
-    fun shiftWeek(weeksDelta: Long) {
-        navState.update { state ->
-            val nextDate = LocalDate.ofEpochDay(state.selectedDateEpochDay).plusWeeks(weeksDelta)
-            state.copy(selectedDateEpochDay = nextDate.toEpochDay())
-        }
-    }
-
     fun setDestination(destination: StruktDestination) {
         navState.update {
             it.copy(
@@ -451,10 +436,6 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
                 selectedTaskIds = emptySet()
             )
         }
-    }
-
-    fun toggleSplitViewMode(currentlySplit: Boolean) {
-        navState.update { it.copy(forceSplitPreview = !currentlySplit) }
     }
 
     fun openCreateTaskSheet(
@@ -759,10 +740,13 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
             recurrenceDayOfMonth = recurrenceDayOfMonth.coerceIn(1, 31),
             recurrenceIntervalDays = recurrenceIntervalDays.coerceIn(2, 365),
             excludedEpochDaysCsv = prevTask?.excludedEpochDaysCsv.orEmpty(),
+            completedEpochDaysCsv = prevTask?.completedEpochDaysCsv.orEmpty(),
             allowSimultaneous = prevTask?.allowSimultaneous ?: false,
             isCompleted = prevTask?.isCompleted ?: false,
             sessionSegments = prevTask?.sessionSegments.orEmpty(),
-            activeSessionStartMin = prevTask?.activeSessionStartMin
+            sessionSegmentsByDayCsv = prevTask?.sessionSegmentsByDayCsv.orEmpty(),
+            activeSessionStartMin = prevTask?.activeSessionStartMin,
+            activeSessionEpochDay = prevTask?.activeSessionEpochDay
         )
 
         if (!toInbox && targetEpoch != null && taskMode == TaskMode.TIMED_BLOCK && resolvedStartMin != null) {
@@ -910,8 +894,13 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
 
     fun toggleTaskDone(task: TaskEntity) {
         val todayEpoch = LocalDate.now().toEpochDay()
+        val selectedEpoch = navState.value.selectedDateEpochDay
         viewModelScope.launch {
-            val pulledFromFuture = repository.toggleTaskCompleted(task, todayEpoch)
+            val pulledFromFuture = repository.toggleTaskCompleted(
+                task = task,
+                targetEpochDay = selectedEpoch,
+                todayEpochDay = todayEpoch
+            )
             navState.update {
                 it.copy(
                     focusedTaskId = if (it.focusedTaskId == task.id) null else it.focusedTaskId,
@@ -988,9 +977,11 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
 
     fun startOrResumeFocusTimer(task: TaskEntity) {
         val todayEpoch = LocalDate.now().toEpochDay()
+        val selectedEpoch = navState.value.selectedDateEpochDay
         viewModelScope.launch {
             val (mergedMicroPause, pulledFromFuture) = repository.startOrResumeTaskSession(
                 task = task,
+                targetEpochDay = selectedEpoch,
                 todayEpochDay = todayEpoch
             )
             navState.update {
@@ -1008,8 +999,12 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun pauseFocusTimer(task: TaskEntity) {
+        val selectedEpoch = navState.value.selectedDateEpochDay
         viewModelScope.launch {
-            val mergedShortBurst = repository.pauseTaskSession(task)
+            val mergedShortBurst = repository.pauseTaskSession(
+                task = task,
+                targetEpochDay = selectedEpoch
+            )
             navState.update {
                 it.copy(
                     statusBannerMessage = if (mergedShortBurst) {
@@ -1032,10 +1027,12 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun toggleTaskBreakLoop(task: TaskEntity) {
+        val selectedEpoch = navState.value.selectedDateEpochDay
         viewModelScope.launch {
-            repository.toggleTaskBreakLoop(task)
-            val hasBreak = task.parsedSessionSegments.size > 1 ||
-                (task.parsedSessionSegments.size == 1 && task.activeSessionStartMin != null)
+            val daySegs = task.parsedSessionSegmentsForDay(selectedEpoch)
+            val dayActive = task.activeSessionStartMinForDay(selectedEpoch)
+            val hasBreak = daySegs.size > 1 || (daySegs.size == 1 && dayActive != null)
+            repository.toggleTaskBreakLoop(task, selectedEpoch)
             navState.update {
                 it.copy(
                     statusBannerMessage = if (hasBreak) "Break loop cleared" else "Break loop added to capsule"
@@ -1059,9 +1056,11 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
     fun completeFocusedTaskAndAdvance() {
         val currentFocus = uiState.value.activeFocusTask ?: return
         val todayEpoch = LocalDate.now().toEpochDay()
+        val selectedEpoch = navState.value.selectedDateEpochDay
         viewModelScope.launch {
             val pulledFromFuture = repository.finishTaskSessionAndComplete(
                 task = currentFocus.task,
+                targetEpochDay = selectedEpoch,
                 todayEpochDay = todayEpoch
             )
             navState.update {

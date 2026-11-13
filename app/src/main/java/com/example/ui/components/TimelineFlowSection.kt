@@ -7,7 +7,6 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
@@ -44,7 +43,6 @@ import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -83,7 +81,6 @@ import com.example.data.SubtaskEntity
 import com.example.data.TaskMode
 import com.example.data.TaskWithSubtasks
 import com.example.ui.FlowFilterMode
-import com.example.ui.effectiveTaskStepNumber
 import com.example.ui.theme.InkBlack
 import com.example.ui.theme.InkCharcoal
 import com.example.ui.theme.InkMuted
@@ -151,7 +148,6 @@ private const val WEEK_PAGER_CENTER = 500
 private const val WEEK_PAGER_COUNT = 1000
 private val SHORT_WEEKDAY_LABELS = arrayOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
-// Shared geometry constants so the timeline spine sits shifted toward the left edge and scales proportionally on tablet
 private val TIME_COLUMN_WIDTH: Dp
     @Composable get() = if (GlobalClockFormat.use24Hour) 38.sdp else 52.sdp
 private val TIME_TO_CAPSULE_GAP: Dp
@@ -159,11 +155,6 @@ private val TIME_TO_CAPSULE_GAP: Dp
 private val CAPSULE_COLUMN_WIDTH: Dp
     @Composable get() = 48.sdp
 
-/**
- * Ultra-Clean Header & Swipeable Week Calendar:
- * - Shows ONLY the Month name ("November") in the Outfit font.
- * - Horizontally swipeable 7-day week strip with cached weekday labels and smooth press dimming.
- */
 @Composable
 fun DateAndWeekHeader(
     selectedDate: LocalDate,
@@ -331,8 +322,6 @@ fun TopAnytimeBubblesRow(
     bubbles: List<TaskWithSubtasks>,
     onToggleBubbleDone: (TaskWithSubtasks) -> Unit,
     onInspectBubble: (TaskWithSubtasks) -> Unit,
-    onEditBubble: (TaskWithSubtasks) -> Unit = {},
-    onDeleteBubble: (Long) -> Unit = {},
     isMultiSelectActive: Boolean = false,
     selectedTaskIds: Set<Long> = emptySet(),
     onToggleSelectTask: (Long) -> Unit = {},
@@ -1093,14 +1082,6 @@ private fun TaskRightTitleAndCheckRow(
     }
 }
 
-/**
- * Unified, Cohesive Task Action & Detail Modal:
- * - Used for BOTH Top Bubbles (on long-click / label tap) and Spine Tasks (on click / long-click).
- * - Decluttered layout:
- *   1. Compact 1-Row Sequence (#) & Break Loop Strip for Spine Tasks.
- *   2. Subtasks Checklist (collapses the input field into a neat '+ Add Subtask' chip when 0 subtasks exist).
- *   3. Cohesive Action Buttons: Focus Timer, Mark Done, Edit (Pencil), and a dedicated Delete Popup!
- */
 @Composable
 fun TaskDetailPopupModal(
     item: TaskWithSubtasks,
@@ -1254,8 +1235,7 @@ fun TaskDetailPopupModal(
                         modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        // 1. Clean Header Row: Icon + Metadata + Title on Left, Close (X) on Right
-                Row(
+                        Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
@@ -1340,14 +1320,12 @@ fun TaskDetailPopupModal(
                     )
                 }
 
-                // 2. Sleek 1-Row Structure Bar for Spine Tasks (Sequence Step # + Break Loop side-by-side!)
                 if (task.modeEnum != TaskMode.TOP_BUBBLE) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Left: Compact Step # Stepper
                         Row(
                             modifier = Modifier
                                 .height(40.dp)
@@ -1421,7 +1399,6 @@ fun TaskDetailPopupModal(
                             }
                         }
 
-                        // Right: 1-Tap Break Loop Split / Merge Pill
                         NeoPillButton(
                             text = if (hasBreakLoop) "Merge Loop" else "Split Break Loop",
                             icon = Icons.Default.Pause,
@@ -1433,7 +1410,6 @@ fun TaskDetailPopupModal(
                     }
                 }
 
-                // 3. Subtasks Section (Smart: full checklist when subtasks exist, compact '+ Subtask' pill when 0 subtasks)
                 if (item.subtasks.isNotEmpty() || showAddSubtaskField) {
                     Column(
                         modifier = Modifier
@@ -1528,7 +1504,6 @@ fun TaskDetailPopupModal(
                         }
                     }
                 } else {
-                    // When 0 subtasks exist, show a clean single-tap '+ Add Subtask' chip instead of an empty text box
                     NeoPillButton(
                         text = "+ Add Subtask",
                         icon = Icons.Default.Checklist,
@@ -1538,7 +1513,6 @@ fun TaskDetailPopupModal(
                     )
                 }
 
-                // 4. Primary Workflow Row: Focus Timer + Mark Done
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -1564,7 +1538,6 @@ fun TaskDetailPopupModal(
                     )
                 }
 
-                // 5. Cohesive Edit (Pencil) & Dedicated Delete (Trash) Row (Same architecture across all bubbles & tasks!)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
