@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 
 @Database(
     entities = [TaskEntity::class, SubtaskEntity::class, FolderEntity::class],
-    version = 2,
+    version = 5,
     exportSchema = false
 )
 abstract class PlannerDatabase : RoomDatabase() {

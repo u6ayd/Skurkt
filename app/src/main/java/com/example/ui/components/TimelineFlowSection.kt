@@ -138,6 +138,15 @@ fun formatDurationBadge(minutes: Int): String {
     }
 }
 
+fun formatFreeGapLabel(gapMinutes: Int): String {
+    val safe = gapMinutes.coerceAtLeast(0)
+    return when {
+        safe >= 60 && safe % 60 == 0 -> "${safe / 60}h free"
+        safe > 60 -> "${safe / 60}h ${safe % 60}m free"
+        else -> "${safe}m free"
+    }
+}
+
 private const val WEEK_PAGER_CENTER = 500
 private const val WEEK_PAGER_COUNT = 1000
 private val SHORT_WEEKDAY_LABELS = arrayOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
@@ -148,7 +157,7 @@ private val TIME_COLUMN_WIDTH: Dp
 private val TIME_TO_CAPSULE_GAP: Dp
     @Composable get() = 6.sdp
 private val CAPSULE_COLUMN_WIDTH: Dp
-    @Composable get() = 44.sdp
+    @Composable get() = 48.sdp
 
 /**
  * Ultra-Clean Header & Swipeable Week Calendar:
@@ -431,7 +440,8 @@ fun FlowStructureFilterBar(
 @Composable
 fun SpineConnectorSegment(
     isDottedBreak: Boolean,
-    height: Dp = if (isDottedBreak) 26.dp else 18.dp,
+    freeTimeLabel: String? = null,
+    height: Dp = if (isDottedBreak) 34.sdp else 18.sdp,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -468,6 +478,25 @@ fun SpineConnectorSegment(
                         }
                     }
             )
+        }
+        if (!freeTimeLabel.isNullOrBlank()) {
+            Spacer(modifier = Modifier.width(12.dp))
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(SoftSheetSurface)
+                    .border(1.dp, InkBlack.copy(alpha = 0.35f), RoundedCornerShape(50))
+                    .padding(horizontal = 8.dp, vertical = 2.dp)
+            ) {
+                Text(
+                    text = freeTimeLabel,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 10.ssp,
+                        fontWeight = FontWeight.Medium
+                    ),
+                    color = InkMuted
+                )
+            }
         }
     }
 }
@@ -538,6 +567,7 @@ fun HybridSpineTaskRow(
     item: TaskWithSubtasks,
     sequenceNumber: Int,
     isUpNext: Boolean,
+    isSimultaneous: Boolean = false,
     onToggleComplete: () -> Unit,
     onOpenTaskDetail: () -> Unit,
     modifier: Modifier = Modifier
@@ -550,23 +580,19 @@ fun HybridSpineTaskRow(
         label = "capsule_fill_${task.id}"
     )
 
-    val isTimed = task.modeEnum == TaskMode.TIMED_BLOCK || task.startTimeMinutes != null
+    val isTimed = task.modeEnum == TaskMode.TIMED_BLOCK
     val startMin = task.startTimeMinutes ?: (9 * 60)
-    val endMin = (startMin + task.durationMinutes).coerceAtMost(23 * 60 + 59)
+    val endMin = (startMin + task.durationMinutes.coerceAtLeast(5)).coerceAtMost(23 * 60 + 59)
     val segments = task.parsedSessionSegments
     val hasPauseBreak = segments.size > 1 || (segments.size == 1 && task.activeSessionStartMin != null)
 
     if (!hasPauseBreak) {
-        // =========================================================================
-        // CASE A: Normal Unbroken Task -> Smooth Vertical Oval Bubble Capsule
-        // Always >= 68.dp tall so the oval is the tallest element in the Row and
-        // touches incoming/outgoing spine lines with ZERO vertical gap!
-        // =========================================================================
         val ovalHeight = when {
-            task.durationMinutes >= 60 -> 84.sdp
-            task.durationMinutes >= 45 -> 76.sdp
-            task.durationMinutes >= 30 -> 70.sdp
-            else -> 68.sdp
+            task.durationMinutes >= 90 -> 92.sdp
+            task.durationMinutes >= 60 -> 88.sdp
+            task.durationMinutes >= 45 -> 80.sdp
+            task.durationMinutes >= 30 -> 74.sdp
+            else -> 70.sdp
         }
         val ovalShape = RoundedCornerShape(percent = 50)
 
@@ -581,7 +607,7 @@ fun HybridSpineTaskRow(
                 ),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 1. Left-shifted Time Column
+            // 1. Left-shifted Time / Sequence (#1, #2, #3...) Column
             Column(
                 modifier = Modifier
                     .width(TIME_COLUMN_WIDTH)
@@ -608,11 +634,10 @@ fun HybridSpineTaskRow(
                         color = InkMuted
                     )
                 } else {
-                    val displayStep = maxOf(sequenceNumber, effectiveTaskStepNumber(task))
                     Spacer(modifier = Modifier.weight(1f))
                     Text(
-                        text = "#$displayStep",
-                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Normal),
+                        text = "#$sequenceNumber",
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
                         color = if (isUpNext) InkBlack else InkMuted
                     )
                     Spacer(modifier = Modifier.weight(1f))
@@ -635,7 +660,7 @@ fun HybridSpineTaskRow(
                     imageVector = iconForKey(task.iconKey),
                     contentDescription = task.title,
                     tint = InkBlack,
-                    modifier = Modifier.size(21.sdp)
+                    modifier = Modifier.size(22.sdp)
                 )
             }
 
@@ -645,6 +670,7 @@ fun HybridSpineTaskRow(
             TaskRightTitleAndCheckRow(
                 item = item,
                 isUpNext = isUpNext,
+                isSimultaneous = isSimultaneous || (isTimed && task.allowSimultaneous),
                 accentColor = accentColor,
                 onToggleComplete = onToggleComplete,
                 modifier = Modifier.weight(1f)
@@ -816,6 +842,7 @@ fun HybridSpineTaskRow(
                 TaskRightTitleAndCheckRow(
                     item = item,
                     isUpNext = isUpNext,
+                    isSimultaneous = isSimultaneous || (isTimed && task.allowSimultaneous),
                     accentColor = accentColor,
                     onToggleComplete = onToggleComplete,
                     modifier = Modifier.fillMaxWidth()
@@ -829,6 +856,7 @@ fun HybridSpineTaskRow(
 private fun TaskRightTitleAndCheckRow(
     item: TaskWithSubtasks,
     isUpNext: Boolean,
+    isSimultaneous: Boolean = false,
     accentColor: Color,
     onToggleComplete: () -> Unit,
     modifier: Modifier = Modifier
@@ -871,7 +899,7 @@ private fun TaskRightTitleAndCheckRow(
                 if (task.recurrenceEnum != RecurrenceRule.NONE) {
                     Icon(
                         imageVector = Icons.Default.Repeat,
-                        contentDescription = task.recurrenceEnum.label,
+                        contentDescription = task.recurrenceSummaryLabel(),
                         tint = InkMuted,
                         modifier = Modifier.size(14.dp)
                     )
@@ -880,7 +908,7 @@ private fun TaskRightTitleAndCheckRow(
 
             val hasDurationBadge = task.durationMinutes > 0
             val hasSubtasks = item.subtasks.isNotEmpty()
-            if (hasDurationBadge || hasSubtasks) {
+            if (hasDurationBadge || hasSubtasks || isSimultaneous) {
                 Spacer(modifier = Modifier.height(2.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -924,6 +952,25 @@ private fun TaskRightTitleAndCheckRow(
                             )
                         }
                     }
+
+                    if (isSimultaneous) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(NeoYellow)
+                                .border(1.dp, InkBlack, RoundedCornerShape(50))
+                                .padding(horizontal = 6.dp, vertical = 1.dp)
+                        ) {
+                            Text(
+                                text = "Simultaneous",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontSize = 9.5.ssp,
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                color = InkBlack
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -959,6 +1006,7 @@ fun TaskDetailPopupModal(
     onAddSubtask: (String) -> Unit,
     onStartFocus: () -> Unit,
     onEditTask: () -> Unit,
+    onDeleteTodayOnly: (() -> Unit)? = null,
     onDeleteTask: () -> Unit = {}
 ) {
     val task = item.task
@@ -966,8 +1014,8 @@ fun TaskDetailPopupModal(
     var newSubtask by remember { mutableStateOf("") }
     var showAddSubtaskField by remember(task.id) { mutableStateOf(item.subtasks.isNotEmpty()) }
     var showDeleteConfirmPopup by remember(task.id) { mutableStateOf(false) }
-    var stepVal by remember(task.id, task.sortOrder, currentStepNumber) {
-        mutableStateOf(maxOf(currentStepNumber, effectiveTaskStepNumber(task)))
+    var stepVal by remember(task.id, currentStepNumber) {
+        mutableStateOf(currentStepNumber.coerceIn(1, 99))
     }
     val hasBreakLoop = task.parsedSessionSegments.size > 1 ||
         (task.parsedSessionSegments.size == 1 && task.activeSessionStartMin != null)
@@ -995,7 +1043,7 @@ fun TaskDetailPopupModal(
                 if (isDeleting) {
                     Column(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -1018,7 +1066,7 @@ fun TaskDetailPopupModal(
                             }
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Delete Task?",
+                                    text = if (task.recurrenceEnum != RecurrenceRule.NONE) "Delete Repeating Task?" else "Delete Task?",
                                     style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                                     color = InkBlack
                                 )
@@ -1035,18 +1083,21 @@ fun TaskDetailPopupModal(
                             }
                         }
 
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
+                        if (task.recurrenceEnum != RecurrenceRule.NONE && onDeleteTodayOnly != null) {
                             NeoPillButton(
-                                text = "Cancel",
-                                selected = false,
-                                onClick = { showDeleteConfirmPopup = false },
-                                modifier = Modifier.weight(1f)
+                                text = "Delete Today Only",
+                                selected = true,
+                                activeColor = NeoYellow,
+                                onClick = {
+                                    showDeleteConfirmPopup = false
+                                    onDeleteTodayOnly()
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("delete_today_only_button")
                             )
                             NeoPillButton(
-                                text = "Delete",
+                                text = "Delete All Future Tasks",
                                 icon = Icons.Default.Delete,
                                 selected = true,
                                 activeColor = NeoCoral,
@@ -1055,9 +1106,40 @@ fun TaskDetailPopupModal(
                                     onDeleteTask()
                                 },
                                 modifier = Modifier
-                                    .weight(1f)
+                                    .fillMaxWidth()
                                     .testTag("confirm_delete_task_button")
                             )
+                            NeoPillButton(
+                                text = "Cancel",
+                                selected = false,
+                                onClick = { showDeleteConfirmPopup = false },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        } else {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                NeoPillButton(
+                                    text = "Cancel",
+                                    selected = false,
+                                    onClick = { showDeleteConfirmPopup = false },
+                                    modifier = Modifier.weight(1f)
+                                )
+                                NeoPillButton(
+                                    text = "Delete",
+                                    icon = Icons.Default.Delete,
+                                    selected = true,
+                                    activeColor = NeoCoral,
+                                    onClick = {
+                                        showDeleteConfirmPopup = false
+                                        onDeleteTask()
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag("confirm_delete_task_button")
+                                )
+                            }
                         }
                     }
                 } else {

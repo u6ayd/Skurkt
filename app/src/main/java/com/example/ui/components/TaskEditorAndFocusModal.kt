@@ -93,6 +93,7 @@ import com.example.data.SubtaskEntity
 import com.example.data.TaskEntity
 import com.example.data.TaskMode
 import com.example.data.TaskWithSubtasks
+import com.example.data.formatOrdinalDayOfMonth
 import com.example.ui.effectiveTaskStepNumber
 import com.example.ui.theme.InkBlack
 import com.example.ui.theme.InkCharcoal
@@ -119,7 +120,8 @@ private enum class EditorSubPopup {
     COLOR_ICON,
     FOLDER_SECTION,
     RECURRENCE,
-    SUBTASKS
+    SUBTASKS,
+    DELETE_CONFIRM
 }
 
 private enum class TimedSelectorTab {
@@ -535,26 +537,27 @@ private fun NeoCompactClockSelector(
 
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.Center,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Hour Neo-Brutalist Box with compact - / + steppers & direct input
+        // Hour Neo-Brutalist Box (50% width via weight(1f) so HR and MIN are always symmetrical)
         Row(
             modifier = Modifier
+                .weight(1f)
                 .clip(RoundedCornerShape(14.dp))
                 .background(PureWhiteSurface)
                 .border(1.5.dp, InkBlack, RoundedCornerShape(14.dp))
                 .padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Box(
                 modifier = Modifier
-                    .size(28.dp)
+                    .size(30.dp)
                     .clip(CircleShape)
                     .background(SoftSheetSurface, CircleShape)
-                    .border(1.dp, InkBlack, CircleShape)
-                    .smoothPressClickable {
+                    .border(1.2.dp, InkBlack, CircleShape)
+                    .clickable {
                         val prevHr = if (currentHour == 0) 23 else currentHour - 1
                         onClockChange(prevHr * 60 + currentMinute)
                     },
@@ -564,18 +567,19 @@ private fun NeoCompactClockSelector(
                     imageVector = Icons.Default.Remove,
                     contentDescription = "Previous Hour",
                     tint = InkBlack,
-                    modifier = Modifier.size(14.dp)
+                    modifier = Modifier.size(15.dp)
                 )
             }
 
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.width(46.dp)
+                modifier = Modifier.weight(1f)
             ) {
                 Text(
                     text = "HR",
                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                    color = InkMuted
+                    color = InkMuted,
+                    maxLines = 1
                 )
                 BasicTextField(
                     value = hourText,
@@ -601,11 +605,11 @@ private fun NeoCompactClockSelector(
 
             Box(
                 modifier = Modifier
-                    .size(28.dp)
+                    .size(30.dp)
                     .clip(CircleShape)
                     .background(SoftSheetSurface, CircleShape)
-                    .border(1.dp, InkBlack, CircleShape)
-                    .smoothPressClickable {
+                    .border(1.2.dp, InkBlack, CircleShape)
+                    .clickable {
                         val nextHr = (currentHour + 1) % 24
                         onClockChange(nextHr * 60 + currentMinute)
                     },
@@ -615,7 +619,7 @@ private fun NeoCompactClockSelector(
                     imageVector = Icons.Default.Add,
                     contentDescription = "Next Hour",
                     tint = InkBlack,
-                    modifier = Modifier.size(14.dp)
+                    modifier = Modifier.size(15.dp)
                 )
             }
         }
@@ -623,27 +627,27 @@ private fun NeoCompactClockSelector(
         Text(
             text = ":",
             style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-            color = InkBlack,
-            modifier = Modifier.padding(horizontal = 8.dp)
+            color = InkBlack
         )
 
-        // Minute Neo-Brutalist Box with compact - / + steppers & direct input
+        // Minute Neo-Brutalist Box (50% width via weight(1f) so MIN never clips)
         Row(
             modifier = Modifier
+                .weight(1f)
                 .clip(RoundedCornerShape(14.dp))
                 .background(PureWhiteSurface)
                 .border(1.5.dp, InkBlack, RoundedCornerShape(14.dp))
                 .padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Box(
                 modifier = Modifier
-                    .size(28.dp)
+                    .size(30.dp)
                     .clip(CircleShape)
                     .background(SoftSheetSurface, CircleShape)
-                    .border(1.dp, InkBlack, CircleShape)
-                    .smoothPressClickable {
+                    .border(1.2.dp, InkBlack, CircleShape)
+                    .clickable {
                         onClockChange((clockMinutes - 5).coerceAtLeast(0))
                     },
                 contentAlignment = Alignment.Center
@@ -652,18 +656,19 @@ private fun NeoCompactClockSelector(
                     imageVector = Icons.Default.Remove,
                     contentDescription = "Decrease 5 Minutes",
                     tint = InkBlack,
-                    modifier = Modifier.size(14.dp)
+                    modifier = Modifier.size(15.dp)
                 )
             }
 
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.width(46.dp)
+                modifier = Modifier.weight(1f)
             ) {
                 Text(
                     text = "MIN",
                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                    color = InkMuted
+                    color = InkMuted,
+                    maxLines = 1
                 )
                 BasicTextField(
                     value = minText,
@@ -689,11 +694,11 @@ private fun NeoCompactClockSelector(
 
             Box(
                 modifier = Modifier
-                    .size(28.dp)
+                    .size(30.dp)
                     .clip(CircleShape)
                     .background(SoftSheetSurface, CircleShape)
-                    .border(1.dp, InkBlack, CircleShape)
-                    .smoothPressClickable {
+                    .border(1.2.dp, InkBlack, CircleShape)
+                    .clickable {
                         onClockChange((clockMinutes + 5).coerceAtMost(23 * 60 + 59))
                     },
                 contentAlignment = Alignment.Center
@@ -702,7 +707,7 @@ private fun NeoCompactClockSelector(
                     imageVector = Icons.Default.Add,
                     contentDescription = "Increase 5 Minutes",
                     tint = InkBlack,
-                    modifier = Modifier.size(14.dp)
+                    modifier = Modifier.size(15.dp)
                 )
             }
         }
@@ -1108,10 +1113,12 @@ fun StructuredTaskEditorDialog(
         sectionName: String,
         recurrence: RecurrenceRule,
         recurrenceDayOfMonth: Int,
+        recurrenceIntervalDays: Int,
         subtasks: List<Pair<String, String>>,
         sortOrder: Int
     ) -> Unit,
     onMoveToInbox: ((TaskEntity) -> Unit)? = null,
+    onDeleteTodayOnly: ((TaskEntity) -> Unit)? = null,
     onDelete: ((Long) -> Unit)? = null
 ) {
     val existingTask = editingItem?.task
@@ -1127,11 +1134,10 @@ fun StructuredTaskEditorDialog(
         val defaultStart = (GlobalClockFormat.startOfDayMinutes + 60).coerceIn(0, 22 * 60)
         mutableIntStateOf(existingTask?.startTimeMinutes ?: defaultStart)
     }
-    // Timeless tasks default to 0m ("No duration • Stopwatch") when newly created; Timed tasks default to 45m
     var durationMinutes by remember(existingTask, defaultMode) {
         val initialDur = when {
             existingTask != null -> existingTask.durationMinutes
-            defaultMode == TaskMode.TIMED_BLOCK -> 45
+            defaultMode == TaskMode.TIMED_BLOCK -> 60
             else -> 0
         }
         mutableIntStateOf(initialDur)
@@ -1151,6 +1157,9 @@ fun StructuredTaskEditorDialog(
     }
     var recurrenceDayOfMonth by remember(existingTask) {
         mutableIntStateOf(existingTask?.recurrenceDayOfMonth ?: selectedDate.dayOfMonth)
+    }
+    var recurrenceIntervalDays by remember(existingTask) {
+        mutableIntStateOf(existingTask?.recurrenceIntervalDays ?: 2)
     }
     var stepOrder by remember(existingTask) {
         mutableIntStateOf(existingTask?.let { effectiveTaskStepNumber(it) } ?: 1)
@@ -1274,7 +1283,13 @@ fun StructuredTaskEditorDialog(
                                             }
                                             if (existingTask != null && onDelete != null) {
                                                 IconButton(
-                                                    onClick = { onDelete(existingTask.id) },
+                                                    onClick = {
+                                                        if (existingTask.recurrenceEnum != RecurrenceRule.NONE && onDeleteTodayOnly != null) {
+                                                            activeSubPopup = EditorSubPopup.DELETE_CONFIRM
+                                                        } else {
+                                                            onDelete(existingTask.id)
+                                                        }
+                                                    },
                                                     modifier = Modifier
                                                         .minimumInteractiveComponentSize()
                                                         .size(40.dp)
@@ -1434,10 +1449,10 @@ fun StructuredTaskEditorDialog(
                                     EditorSummaryRow(
                                         icon = Icons.Default.Repeat,
                                         label = "Repeat",
-                                        valueText = if (recurrence == RecurrenceRule.MONTHLY) {
-                                            "Monthly (Day $recurrenceDayOfMonth)"
-                                        } else {
-                                            recurrence.label
+                                        valueText = when (recurrence) {
+                                            RecurrenceRule.MONTHLY -> "Monthly (${formatOrdinalDayOfMonth(recurrenceDayOfMonth)})"
+                                            RecurrenceRule.CUSTOM_DAYS -> "Every ${recurrenceIntervalDays.coerceAtLeast(1)} days"
+                                            else -> recurrence.label
                                         },
                                         onClick = { activeSubPopup = EditorSubPopup.RECURRENCE }
                                     )
@@ -1506,6 +1521,7 @@ fun StructuredTaskEditorDialog(
                                                     sectionName,
                                                     recurrence,
                                                     recurrenceDayOfMonth,
+                                                    recurrenceIntervalDays,
                                                     subtasksList.toList(),
                                                     if (taskMode == TaskMode.TIMELESS_STEP) stepOrder else (existingTask?.sortOrder ?: 0)
                                                 )
@@ -1582,8 +1598,10 @@ fun StructuredTaskEditorDialog(
                                 RecurrenceInPlaceContent(
                                     selectedRule = recurrence,
                                     dayOfMonth = recurrenceDayOfMonth,
+                                    intervalDays = recurrenceIntervalDays,
                                     onSelectRule = { recurrence = it },
-                                    onSelectDayOfMonth = { recurrenceDayOfMonth = it }
+                                    onSelectDayOfMonth = { recurrenceDayOfMonth = it },
+                                    onSelectIntervalDays = { recurrenceIntervalDays = it }
                                 )
                             }
                         }
@@ -1605,6 +1623,56 @@ fun StructuredTaskEditorDialog(
                                     draftSubtask = draftSubtask,
                                     onDraftSubtaskChange = { draftSubtask = it },
                                     onNotesChange = { notes = it }
+                                )
+                            }
+                        }
+
+                        EditorSubPopup.DELETE_CONFIRM -> {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(PureWhiteSurface)
+                                    .padding(22.dp),
+                                verticalArrangement = Arrangement.spacedBy(14.dp)
+                            ) {
+                                Text(
+                                    text = "Delete Repeating Task?",
+                                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                                    color = InkBlack
+                                )
+                                Text(
+                                    text = "Would you like to remove \"${existingTask?.title.orEmpty()}\" from today only, or delete all future occurrences?",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = InkCharcoal
+                                )
+                                NeoPillButton(
+                                    text = "Delete Today Only",
+                                    selected = true,
+                                    activeColor = NeoYellow,
+                                    onClick = {
+                                        if (existingTask != null && onDeleteTodayOnly != null) {
+                                            onDeleteTodayOnly(existingTask)
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                NeoPillButton(
+                                    text = "Delete All Future Tasks",
+                                    icon = Icons.Default.Delete,
+                                    selected = true,
+                                    activeColor = NeoCoral,
+                                    onClick = {
+                                        if (existingTask != null && onDelete != null) {
+                                            onDelete(existingTask.id)
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                NeoPillButton(
+                                    text = "Cancel",
+                                    selected = false,
+                                    onClick = { activeSubPopup = EditorSubPopup.NONE },
+                                    modifier = Modifier.fillMaxWidth()
                                 )
                             }
                         }
@@ -1871,16 +1939,24 @@ private fun FolderAndSectionInPlaceContent(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun RecurrenceInPlaceContent(
     selectedRule: RecurrenceRule,
     dayOfMonth: Int,
+    intervalDays: Int,
     onSelectRule: (RecurrenceRule) -> Unit,
-    onSelectDayOfMonth: (Int) -> Unit
+    onSelectDayOfMonth: (Int) -> Unit,
+    onSelectIntervalDays: (Int) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         RecurrenceRule.entries.forEach { rule ->
             val selected = selectedRule == rule
+            val displayLabel = when (rule) {
+                RecurrenceRule.MONTHLY -> "Monthly (${formatOrdinalDayOfMonth(dayOfMonth)})"
+                RecurrenceRule.CUSTOM_DAYS -> "Every ${intervalDays.coerceAtLeast(1)} days"
+                else -> rule.label
+            }
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1893,7 +1969,7 @@ private fun RecurrenceInPlaceContent(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = rule.label,
+                    text = displayLabel,
                     style = MaterialTheme.typography.titleMedium,
                     color = InkBlack
                 )
@@ -1910,13 +1986,18 @@ private fun RecurrenceInPlaceContent(
 
         if (selectedRule == RecurrenceRule.MONTHLY) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(SoftSheetSurface)
+                    .border(1.5.dp, InkBlack, RoundedCornerShape(14.dp))
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Day of Month",
-                    style = MaterialTheme.typography.titleMedium,
+                    text = formatOrdinalDayOfMonth(dayOfMonth),
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                     color = InkBlack
                 )
                 Row(
@@ -1929,7 +2010,7 @@ private fun RecurrenceInPlaceContent(
                     )
                     Text(
                         text = "$dayOfMonth",
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                         color = InkBlack
                     )
                     NeoPillButton(
@@ -1937,6 +2018,175 @@ private fun RecurrenceInPlaceContent(
                         onClick = { onSelectDayOfMonth((dayOfMonth + 1).coerceAtMost(31)) }
                     )
                 }
+            }
+        }
+
+        if (selectedRule == RecurrenceRule.CUSTOM_DAYS) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(SoftSheetSurface)
+                    .border(1.5.dp, InkBlack, RoundedCornerShape(14.dp))
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Repeat Interval",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = InkBlack
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        NeoPillButton(
+                            text = "-",
+                            onClick = { onSelectIntervalDays((intervalDays - 1).coerceAtLeast(2)) }
+                        )
+                        Text(
+                            text = "Every $intervalDays days",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = InkBlack
+                        )
+                        NeoPillButton(
+                            text = "+",
+                            onClick = { onSelectIntervalDays((intervalDays + 1).coerceAtMost(90)) }
+                        )
+                    }
+                }
+
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    listOf(2, 3, 4, 5, 10, 14, 30).forEach { days ->
+                        NeoPillButton(
+                            text = "Every ${days}d",
+                            selected = intervalDays == days,
+                            activeColor = NeoYellow,
+                            onClick = { onSelectIntervalDays(days) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Overlapping / Simultaneous Timed Task Conflict Prompt Modal:
+ * - Shown when scheduling or saving a Timed task that overlaps an existing Timed task on the same date.
+ * - Offers two clear choices:
+ *   1. Auto-Shift: Moves the new task's start time to immediately follow the existing task's end time.
+ *   2. Allow Simultaneous: Saves the task at the overlapping time and displays a compact "Simultaneous" badge on both tasks.
+ */
+@Composable
+fun OverlapConflictModal(
+    newTaskTitle: String,
+    conflictingTaskTitle: String,
+    requestedStartMin: Int,
+    requestedEndMin: Int,
+    suggestedShiftStartMin: Int,
+    suggestedShiftEndMin: Int,
+    onAutoShift: () -> Unit,
+    onAllowSimultaneous: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true
+        )
+    ) {
+        NeoCard(
+            modifier = Modifier
+                .widthIn(max = 420.dp)
+                .fillMaxWidth(),
+            backgroundColor = PureWhiteSurface,
+            cornerRadius = 22.dp,
+            contentPadding = PaddingValues(20.dp)
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Time Slot Overlap",
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                        color = InkBlack
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(SoftSheetSurface, CircleShape)
+                            .border(1.5.dp, InkBlack, CircleShape)
+                            .clickable(onClick = onDismiss),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = InkBlack,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(SoftSheetSurface)
+                        .border(1.5.dp, InkBlack, RoundedCornerShape(14.dp))
+                        .padding(12.dp)
+                ) {
+                    Text(
+                        text = "\"$newTaskTitle\" (${formatMinutesAsClock(requestedStartMin)}–${formatMinutesAsClock(requestedEndMin)}) overlaps with \"$conflictingTaskTitle\".",
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                        color = InkBlack
+                    )
+                }
+
+                NeoPillButton(
+                    text = "Auto-Shift (${formatMinutesAsClock(suggestedShiftStartMin)}–${formatMinutesAsClock(suggestedShiftEndMin)})",
+                    selected = true,
+                    activeColor = NeoMintGreen,
+                    onClick = onAutoShift,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("overlap_auto_shift_button")
+                )
+
+                NeoPillButton(
+                    text = "Allow Simultaneous",
+                    selected = true,
+                    activeColor = NeoYellow,
+                    onClick = onAllowSimultaneous,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("overlap_allow_simultaneous_button")
+                )
+
+                NeoPillButton(
+                    text = "Cancel",
+                    selected = false,
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
     }

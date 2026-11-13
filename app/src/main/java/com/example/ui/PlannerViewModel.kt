@@ -47,6 +47,18 @@ fun effectiveTaskStepNumber(task: TaskEntity): Int {
 }
 
 @Immutable
+data class PendingOverlapConflict(
+    val newTaskTitle: String,
+    val conflictingTask: TaskEntity,
+    val requestedStartMin: Int,
+    val requestedDurationMin: Int,
+    val suggestedAutoShiftStartMin: Int,
+    val pendingEditorEntity: TaskEntity? = null,
+    val pendingEditorSubtasks: List<Pair<String, String>> = emptyList(),
+    val pendingInboxTask: TaskEntity? = null
+)
+
+@Immutable
 data class PlannerUiState(
     val selectedDateEpochDay: Long = LocalDate.now().toEpochDay(),
     val selectedLocalDate: LocalDate = LocalDate.now(),
@@ -55,6 +67,8 @@ data class PlannerUiState(
     val searchQuery: String = "",
     val topBubbles: List<TaskWithSubtasks> = emptyList(),
     val spineFlowTasks: List<TaskWithSubtasks> = emptyList(),
+    val simultaneousTaskIds: Set<Long> = emptySet(),
+    val freeGapMinutesBeforeIndex: Map<Int, Int> = emptyMap(),
     val upNextTask: TaskWithSubtasks? = null,
     val inboxTasks: List<TaskWithSubtasks> = emptyList(),
     val allTasks: List<TaskWithSubtasks> = emptyList(),
@@ -67,6 +81,7 @@ data class PlannerUiState(
     val editorTargetInbox: Boolean = false,
     val inspectingTask: TaskWithSubtasks? = null,
     val schedulingInboxTask: TaskEntity? = null,
+    val pendingOverlapConflict: PendingOverlapConflict? = null,
     val focusedTaskId: Long? = null,
     val forceSplitPreview: Boolean? = null,
     val statusBannerMessage: String? = null,
@@ -94,6 +109,7 @@ private data class LocalNavState(
     val editorTargetInbox: Boolean = false,
     val inspectingTaskId: Long? = null,
     val schedulingInboxTask: TaskEntity? = null,
+    val pendingOverlapConflict: PendingOverlapConflict? = null,
     val focusedTaskId: Long? = null,
     val forceSplitPreview: Boolean? = null,
     val statusBannerMessage: String? = null,
@@ -146,17 +162,18 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
         val spineCandidates = tasksForSelectedDay
             .filter { it.task.modeEnum != TaskMode.TOP_BUBBLE }
 
-        // 1. Timed tasks sort strictly chronologically by startTimeMinutes (e.g., 08:00 -> 08:15 -> 09:00)
+        // 1. Timed tasks sort strictly chronologically by startTimeMinutes (e.g., 08:00 -> 08:15 -> 14:00)
         val timedTasks = spineCandidates
-            .filter { it.task.modeEnum == TaskMode.TIMED_BLOCK || it.task.startTimeMinutes != null }
+            .filter { it.task.modeEnum == TaskMode.TIMED_BLOCK && it.task.startTimeMinutes != null }
             .sortedWith(
                 compareBy<TaskWithSubtasks> { it.task.startTimeMinutes ?: 0 }
+                    .thenBy { effectiveTaskStepNumber(it.task) }
                     .thenBy { it.task.id }
             )
 
-        // 2. Timeless tasks sort by their # step number (1..99) and slot into the spine at their # position
+        // 2. Timeless tasks sort by their normalized # step number (1..N) and slot into the spine at their # position
         val timelessTasks = spineCandidates
-            .filter { it.task.modeEnum != TaskMode.TIMED_BLOCK && it.task.startTimeMinutes == null }
+            .filter { it.task.modeEnum != TaskMode.TIMED_BLOCK || it.task.startTimeMinutes == null }
             .sortedWith(
                 compareBy<TaskWithSubtasks> { effectiveTaskStepNumber(it.task) }
                     .thenBy { it.task.id }
@@ -175,6 +192,45 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
             FlowFilterMode.ALL -> fullSpine
             FlowFilterMode.TIMELESS_ONLY -> fullSpine.filter { it.task.modeEnum == TaskMode.TIMELESS_STEP }
             FlowFilterMode.TIMED_ONLY -> fullSpine.filter { it.task.modeEnum == TaskMode.TIMED_BLOCK }
+        }
+
+        // Identify overlapping Timed tasks on the selected day so both display a "Simultaneous" badge
+        val simultaneousIds = buildSet<Long> {
+            for (i in timedTasks.indices) {
+                val a = timedTasks[i].task
+                val aStart = a.startTimeMinutes ?: continue
+                val aEnd = aStart + a.durationMinutes.coerceAtLeast(5)
+                for (j in i + 1 until timedTasks.size) {
+                    val b = timedTasks[j].task
+                    val bStart = b.startTimeMinutes ?: continue
+                    val bEnd = bStart + b.durationMinutes.coerceAtLeast(5)
+                    if (aStart < bEnd && bStart < aEnd) {
+                        add(a.id)
+                        add(b.id)
+                    }
+                }
+            }
+        }
+
+        // Compute unscheduled free-time intervals ("3h free", "45m free") between consecutive Timed tasks in filteredSpine
+        val freeGapsByIndex = buildMap<Int, Int> {
+            var prevTimedIndex: Int? = null
+            var prevTimedEndMin: Int? = null
+            for (index in filteredSpine.indices) {
+                val task = filteredSpine[index].task
+                if (task.modeEnum == TaskMode.TIMED_BLOCK && task.startTimeMinutes != null) {
+                    val currStart = task.startTimeMinutes
+                    val lastEnd = prevTimedEndMin
+                    val lastIdx = prevTimedIndex
+                    if (lastEnd != null && lastIdx != null && currStart > lastEnd) {
+                        // Place the free-time label on the connector immediately after the earlier Timed task
+                        put(lastIdx + 1, currStart - lastEnd)
+                    }
+                    val currEnd = currStart + task.durationMinutes.coerceAtLeast(5)
+                    prevTimedEndMin = maxOf(prevTimedEndMin ?: 0, currEnd)
+                    prevTimedIndex = index
+                }
+            }
         }
 
         val nextUp = fullSpine.firstOrNull { !it.task.isCompleted }
@@ -205,7 +261,9 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
                 val colors = ArrayList<String>(4)
                 for (item in direct) {
                     if (colors.size >= 4) break
-                    colors.add(item.task.colorKey)
+                    if (dayEpoch !in item.task.excludedEpochDays) {
+                        colors.add(item.task.colorKey)
+                    }
                 }
                 if (colors.size < 4) {
                     for (rec in recurringTasks) {
@@ -237,6 +295,8 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
             searchQuery = nav.searchQuery,
             topBubbles = bubbles,
             spineFlowTasks = filteredSpine,
+            simultaneousTaskIds = simultaneousIds,
+            freeGapMinutesBeforeIndex = freeGapsByIndex,
             upNextTask = nextUp,
             inboxTasks = inbox,
             allTasks = allTasks,
@@ -249,6 +309,7 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
             editorTargetInbox = nav.editorTargetInbox,
             inspectingTask = inspected,
             schedulingInboxTask = nav.schedulingInboxTask,
+            pendingOverlapConflict = nav.pendingOverlapConflict,
             focusedTaskId = nav.focusedTaskId,
             forceSplitPreview = nav.forceSplitPreview,
             statusBannerMessage = nav.statusBannerMessage,
@@ -268,18 +329,66 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
 
     private fun matchesDate(task: TaskEntity, targetDate: LocalDate): Boolean {
         val taskEpoch = task.dateEpochDay ?: return false
-        if (taskEpoch == targetDate.toEpochDay()) return true
+        val targetEpoch = targetDate.toEpochDay()
+        if (targetEpoch in task.excludedEpochDays) return false
+        if (taskEpoch == targetEpoch) return true
         val originDate = LocalDate.ofEpochDay(taskEpoch)
         return when (task.recurrenceEnum) {
             RecurrenceRule.NONE -> false
-            RecurrenceRule.DAILY -> true
+            RecurrenceRule.DAILY -> targetEpoch >= taskEpoch
             RecurrenceRule.WEEKDAYS ->
-                targetDate.dayOfWeek != DayOfWeek.SATURDAY && targetDate.dayOfWeek != DayOfWeek.SUNDAY
+                targetEpoch >= taskEpoch &&
+                    targetDate.dayOfWeek != DayOfWeek.SATURDAY &&
+                    targetDate.dayOfWeek != DayOfWeek.SUNDAY
             RecurrenceRule.WEEKLY ->
-                targetDate.dayOfWeek == originDate.dayOfWeek
+                targetEpoch >= taskEpoch && targetDate.dayOfWeek == originDate.dayOfWeek
             RecurrenceRule.MONTHLY ->
                 targetDate.dayOfMonth == task.recurrenceDayOfMonth.coerceIn(1, targetDate.lengthOfMonth())
+            RecurrenceRule.CUSTOM_DAYS -> {
+                val interval = task.recurrenceIntervalDays.coerceAtLeast(1).toLong()
+                val diff = targetEpoch - taskEpoch
+                diff >= 0L && (diff % interval == 0L)
+            }
         }
+    }
+
+    private fun findOverlapConflictOnDay(
+        targetEpochDay: Long,
+        excludeTaskId: Long,
+        requestedStartMin: Int,
+        requestedDurationMin: Int
+    ): Pair<TaskEntity, Int>? {
+        val targetDate = LocalDate.ofEpochDay(targetEpochDay)
+        val dayTimedTasks = uiState.value.allTasks
+            .map { it.task }
+            .filter {
+                it.id != excludeTaskId &&
+                    it.modeEnum == TaskMode.TIMED_BLOCK &&
+                    it.startTimeMinutes != null &&
+                    matchesDate(it, targetDate)
+            }
+            .sortedBy { it.startTimeMinutes ?: 0 }
+
+        val reqEnd = requestedStartMin + requestedDurationMin.coerceAtLeast(5)
+        val firstConflict = dayTimedTasks.firstOrNull { existing ->
+            val exStart = existing.startTimeMinutes ?: return@firstOrNull false
+            val exEnd = exStart + existing.durationMinutes.coerceAtLeast(5)
+            requestedStartMin < exEnd && exStart < reqEnd
+        } ?: return null
+
+        // Calculate the earliest conflict-free start time right after the conflicting block(s)
+        var candidateStart = (firstConflict.startTimeMinutes ?: requestedStartMin) +
+            firstConflict.durationMinutes.coerceAtLeast(5)
+        for (existing in dayTimedTasks) {
+            val exStart = existing.startTimeMinutes ?: continue
+            val exEnd = exStart + existing.durationMinutes.coerceAtLeast(5)
+            val candEnd = candidateStart + requestedDurationMin.coerceAtLeast(5)
+            if (candidateStart < exEnd && exStart < candEnd) {
+                candidateStart = maxOf(candidateStart, exEnd)
+            }
+        }
+        val safeSuggestedStart = candidateStart.coerceIn(0, 23 * 60 + 50)
+        return firstConflict to safeSuggestedStart
     }
 
     fun selectDate(epochDay: Long) {
@@ -405,8 +514,41 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
         durationMinutes: Int = task.durationMinutes
     ) {
         val targetDay = navState.value.selectedDateEpochDay
+        val safeDuration = if (asTimed) durationMinutes.coerceIn(5, 720) else durationMinutes.coerceIn(0, 720)
+        if (asTimed && startTimeMinutes != null) {
+            val conflictPair = findOverlapConflictOnDay(
+                targetEpochDay = targetDay,
+                excludeTaskId = task.id,
+                requestedStartMin = startTimeMinutes,
+                requestedDurationMin = safeDuration
+            )
+            if (conflictPair != null) {
+                val (conflictingTask, suggestedStart) = conflictPair
+                navState.update {
+                    it.copy(
+                        schedulingInboxTask = null,
+                        pendingOverlapConflict = PendingOverlapConflict(
+                            newTaskTitle = task.title,
+                            conflictingTask = conflictingTask,
+                            requestedStartMin = startTimeMinutes,
+                            requestedDurationMin = safeDuration,
+                            suggestedAutoShiftStartMin = suggestedStart,
+                            pendingInboxTask = task
+                        )
+                    )
+                }
+                return
+            }
+        }
         viewModelScope.launch {
-            repository.scheduleInboxTaskToDay(task, targetDay, asTimed, startTimeMinutes, durationMinutes)
+            repository.scheduleInboxTaskToDay(
+                task = task,
+                targetEpochDay = targetDay,
+                asTimed = asTimed,
+                startTimeMinutes = startTimeMinutes,
+                durationMinutes = safeDuration,
+                allowSimultaneous = false
+            )
             navState.update {
                 it.copy(
                     schedulingInboxTask = null,
@@ -430,6 +572,7 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
         sectionName: String,
         recurrence: RecurrenceRule,
         recurrenceDayOfMonth: Int,
+        recurrenceIntervalDays: Int = 2,
         subtasks: List<Pair<String, String>>,
         sortOrder: Int
     ) {
@@ -442,13 +585,14 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
         } else {
             durationMinutes.coerceIn(0, 720)
         }
+        val resolvedStartMin = if (taskMode == TaskMode.TIMED_BLOCK) (startTimeMinutes ?: 9 * 60) else null
         val entity = TaskEntity(
             id = existingId,
             title = title.trim(),
             notes = notes.trim(),
             dateEpochDay = targetEpoch,
             taskMode = taskMode.name,
-            startTimeMinutes = if (taskMode == TaskMode.TIMED_BLOCK) (startTimeMinutes ?: 9 * 60) else null,
+            startTimeMinutes = resolvedStartMin,
             durationMinutes = safeDuration,
             sortOrder = sortOrder,
             colorKey = colorKey,
@@ -457,10 +601,42 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
             sectionName = sectionName.ifBlank { "Core" },
             recurrence = recurrence.name,
             recurrenceDayOfMonth = recurrenceDayOfMonth.coerceIn(1, 31),
+            recurrenceIntervalDays = recurrenceIntervalDays.coerceIn(2, 365),
+            excludedEpochDaysCsv = prevTask?.excludedEpochDaysCsv.orEmpty(),
+            allowSimultaneous = prevTask?.allowSimultaneous ?: false,
             isCompleted = prevTask?.isCompleted ?: false,
             sessionSegments = prevTask?.sessionSegments.orEmpty(),
             activeSessionStartMin = prevTask?.activeSessionStartMin
         )
+
+        if (!toInbox && targetEpoch != null && taskMode == TaskMode.TIMED_BLOCK && resolvedStartMin != null) {
+            val conflictPair = findOverlapConflictOnDay(
+                targetEpochDay = targetEpoch,
+                excludeTaskId = existingId,
+                requestedStartMin = resolvedStartMin,
+                requestedDurationMin = safeDuration
+            )
+            if (conflictPair != null) {
+                val (conflictingTask, suggestedStart) = conflictPair
+                navState.update {
+                    it.copy(
+                        isEditorVisible = false,
+                        editingTask = null,
+                        pendingOverlapConflict = PendingOverlapConflict(
+                            newTaskTitle = entity.title,
+                            conflictingTask = conflictingTask,
+                            requestedStartMin = resolvedStartMin,
+                            requestedDurationMin = safeDuration,
+                            suggestedAutoShiftStartMin = suggestedStart,
+                            pendingEditorEntity = entity,
+                            pendingEditorSubtasks = subtasks
+                        )
+                    )
+                }
+                return
+            }
+        }
+
         viewModelScope.launch {
             repository.saveTaskWithSubtasks(entity, subtasks)
             navState.update {
@@ -471,6 +647,73 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
                 )
             }
         }
+    }
+
+    fun resolveOverlapAutoShift() {
+        val conflict = navState.value.pendingOverlapConflict ?: return
+        val targetDay = navState.value.selectedDateEpochDay
+        viewModelScope.launch {
+            if (conflict.pendingEditorEntity != null) {
+                repository.saveTaskWithSubtasks(
+                    task = conflict.pendingEditorEntity.copy(
+                        startTimeMinutes = conflict.suggestedAutoShiftStartMin,
+                        allowSimultaneous = false
+                    ),
+                    subtaskTitles = conflict.pendingEditorSubtasks
+                )
+            } else if (conflict.pendingInboxTask != null) {
+                repository.scheduleInboxTaskToDay(
+                    task = conflict.pendingInboxTask,
+                    targetEpochDay = targetDay,
+                    asTimed = true,
+                    startTimeMinutes = conflict.suggestedAutoShiftStartMin,
+                    durationMinutes = conflict.requestedDurationMin,
+                    allowSimultaneous = false
+                )
+            }
+            navState.update {
+                it.copy(
+                    pendingOverlapConflict = null,
+                    statusBannerMessage = "Auto-shifted to ${com.example.ui.components.formatMinutesAsClock(conflict.suggestedAutoShiftStartMin)}"
+                )
+            }
+        }
+    }
+
+    fun resolveOverlapAllowSimultaneous() {
+        val conflict = navState.value.pendingOverlapConflict ?: return
+        val targetDay = navState.value.selectedDateEpochDay
+        viewModelScope.launch {
+            repository.markTaskSimultaneous(conflict.conflictingTask)
+            if (conflict.pendingEditorEntity != null) {
+                repository.saveTaskWithSubtasks(
+                    task = conflict.pendingEditorEntity.copy(
+                        startTimeMinutes = conflict.requestedStartMin,
+                        allowSimultaneous = true
+                    ),
+                    subtaskTitles = conflict.pendingEditorSubtasks
+                )
+            } else if (conflict.pendingInboxTask != null) {
+                repository.scheduleInboxTaskToDay(
+                    task = conflict.pendingInboxTask,
+                    targetEpochDay = targetDay,
+                    asTimed = true,
+                    startTimeMinutes = conflict.requestedStartMin,
+                    durationMinutes = conflict.requestedDurationMin,
+                    allowSimultaneous = true
+                )
+            }
+            navState.update {
+                it.copy(
+                    pendingOverlapConflict = null,
+                    statusBannerMessage = "Scheduled as Simultaneous"
+                )
+            }
+        }
+    }
+
+    fun dismissOverlapConflict() {
+        navState.update { it.copy(pendingOverlapConflict = null) }
     }
 
     fun quickAddInboxTask(title: String) {
@@ -538,6 +781,21 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun deleteTaskTodayOnly(task: TaskEntity) {
+        val currentEpoch = navState.value.selectedDateEpochDay
+        viewModelScope.launch {
+            repository.excludeRecurringTaskOnDay(task, currentEpoch)
+            navState.update {
+                it.copy(
+                    isEditorVisible = false,
+                    editingTask = null,
+                    inspectingTaskId = null,
+                    statusBannerMessage = "Removed for today only"
+                )
+            }
+        }
+    }
+
     fun enterFocusForTask(taskId: Long?) {
         navState.update {
             it.copy(
@@ -577,11 +835,13 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun updateTaskStepNumber(task: TaskEntity, newStepNumber: Int) {
-        val clamped = newStepNumber.coerceIn(1, 99)
+        val totalSpine = uiState.value.spineFlowTasks.size.coerceAtLeast(1)
+        val clamped = newStepNumber.coerceIn(1, totalSpine)
+        val currentSpineTasks = uiState.value.spineFlowTasks.map { it.task }
         viewModelScope.launch {
-            repository.updateTaskStepOrder(task, clamped)
+            repository.reorderDaySpineTask(currentSpineTasks, task, clamped)
             navState.update {
-                it.copy(statusBannerMessage = "Step set to #$clamped")
+                it.copy(statusBannerMessage = "Step moved to #$clamped")
             }
         }
     }

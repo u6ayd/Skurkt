@@ -107,7 +107,7 @@ class PlannerRepository(private val dao: PlannerDao) {
                 taskMode = TaskMode.TIMED_BLOCK.name,
                 startTimeMinutes = 8 * 60,
                 durationMinutes = 15,
-                sortOrder = 10,
+                sortOrder = 1,
                 colorKey = "CORAL",
                 iconKey = "ALARM",
                 folderName = "Reading & Daily",
@@ -124,7 +124,7 @@ class PlannerRepository(private val dao: PlannerDao) {
                 taskMode = TaskMode.TIMED_BLOCK.name,
                 startTimeMinutes = 8 * 60 + 15,
                 durationMinutes = 30,
-                sortOrder = 20,
+                sortOrder = 2,
                 colorKey = "SKY",
                 iconKey = "WORKOUT",
                 folderName = "Sports & Life",
@@ -140,16 +140,35 @@ class PlannerRepository(private val dao: PlannerDao) {
             )
         )
 
+        // Timeless task slotted into the unscheduled gap between 08:45 and 14:00
+        dao.insertTask(
+            TaskEntity(
+                title = "Read a Book",
+                notes = "20 pages daily reading",
+                dateEpochDay = todayEpochDay,
+                taskMode = TaskMode.TIMELESS_STEP.name,
+                startTimeMinutes = null,
+                durationMinutes = 45,
+                sortOrder = 3,
+                colorKey = "SAGE",
+                iconKey = "BOOK",
+                folderName = "Reading & Daily",
+                sectionName = "Books",
+                recurrence = RecurrenceRule.DAILY.name,
+                isCompleted = false
+            )
+        )
+
         // Physics task with a recorded pause/resume session ("14:00-14:37" -> Continued "14:47-15:15")
         val physicsId = dao.insertTask(
             TaskEntity(
                 title = "Physics: Electric Charges & Fields",
                 notes = "Gauss Law derivations and practice problems",
                 dateEpochDay = todayEpochDay,
-                taskMode = TaskMode.TIMELESS_STEP.name,
+                taskMode = TaskMode.TIMED_BLOCK.name,
                 startTimeMinutes = 14 * 60,
                 durationMinutes = 60,
-                sortOrder = 30,
+                sortOrder = 4,
                 colorKey = "SKY",
                 iconKey = "SCIENCE",
                 folderName = "Physics",
@@ -167,23 +186,6 @@ class PlannerRepository(private val dao: PlannerDao) {
             )
         )
 
-        dao.insertTask(
-            TaskEntity(
-                title = "Read a Book",
-                notes = "20 pages daily reading",
-                dateEpochDay = todayEpochDay,
-                taskMode = TaskMode.TIMELESS_STEP.name,
-                durationMinutes = 45,
-                sortOrder = 40,
-                colorKey = "SAGE",
-                iconKey = "BOOK",
-                folderName = "Reading & Daily",
-                sectionName = "Books",
-                recurrence = RecurrenceRule.DAILY.name,
-                isCompleted = false
-            )
-        )
-
         // Monthly recurring task on the 1st of every month ("File Taxes")
         val firstOfCurrentMonth = LocalDate.ofEpochDay(todayEpochDay).withDayOfMonth(1).toEpochDay()
         dao.insertTask(
@@ -192,8 +194,9 @@ class PlannerRepository(private val dao: PlannerDao) {
                 notes = "Automatically repeats on the 1st of every month",
                 dateEpochDay = firstOfCurrentMonth,
                 taskMode = TaskMode.TIMELESS_STEP.name,
+                startTimeMinutes = null,
                 durationMinutes = 45,
-                sortOrder = 50,
+                sortOrder = 5,
                 colorKey = "YELLOW",
                 iconKey = "TAX",
                 folderName = "Sports & Life",
@@ -266,9 +269,11 @@ class PlannerRepository(private val dao: PlannerDao) {
         val nextOrder = if (task.id == 0L && task.dateEpochDay != null && task.sortOrder <= 0) {
             val currentMax = dao.getMaxSortOrderForDay(task.dateEpochDay) ?: 0
             val normalizedMax = if (currentMax >= 10 && currentMax % 10 == 0) currentMax / 10 else currentMax
-            normalizedMax + 1
+            (normalizedMax + 1).coerceIn(1, 99)
         } else {
-            task.sortOrder.coerceAtLeast(1)
+            val raw = task.sortOrder
+            val normalized = if (raw >= 20 && raw % 10 == 0) raw / 10 else raw
+            normalized.coerceIn(1, 99)
         }
         val taskId = dao.insertTask(task.copy(sortOrder = nextOrder))
         dao.deleteSubtasksForTask(taskId)
@@ -291,6 +296,44 @@ class PlannerRepository(private val dao: PlannerDao) {
 
     suspend fun updateTaskStepOrder(task: TaskEntity, newStepOrder: Int) {
         dao.updateTask(task.copy(sortOrder = newStepOrder.coerceIn(1, 99)))
+    }
+
+    suspend fun reorderDaySpineTask(
+        daySpineTasks: List<TaskEntity>,
+        targetTask: TaskEntity,
+        newStepNumber: Int
+    ) {
+        if (daySpineTasks.isEmpty()) {
+            updateTaskStepOrder(targetTask, newStepNumber)
+            return
+        }
+        val mutable = daySpineTasks.toMutableList()
+        val currentIdx = mutable.indexOfFirst { it.id == targetTask.id }
+        val targetIdx = (newStepNumber - 1).coerceIn(0, mutable.lastIndex.coerceAtLeast(0))
+        if (currentIdx >= 0) {
+            val removed = mutable.removeAt(currentIdx)
+            mutable.add(targetIdx, removed)
+        } else {
+            mutable.add(targetIdx.coerceAtMost(mutable.size), targetTask)
+        }
+        mutable.forEachIndexed { index, item ->
+            val desiredOrder = index + 1
+            if (item.id == targetTask.id || item.sortOrder != desiredOrder) {
+                dao.updateTask(item.copy(sortOrder = desiredOrder))
+            }
+        }
+    }
+
+    suspend fun markTaskSimultaneous(task: TaskEntity) {
+        if (!task.allowSimultaneous) {
+            dao.updateTask(task.copy(allowSimultaneous = true))
+        }
+    }
+
+    suspend fun excludeRecurringTaskOnDay(task: TaskEntity, epochDay: Long) {
+        val updatedSet = (task.excludedEpochDays + epochDay).sorted()
+        val updatedCsv = updatedSet.joinToString(",")
+        dao.updateTask(task.copy(excludedEpochDaysCsv = updatedCsv))
     }
 
     suspend fun toggleTaskCompleted(task: TaskEntity) {
@@ -319,9 +362,12 @@ class PlannerRepository(private val dao: PlannerDao) {
         targetEpochDay: Long,
         asTimed: Boolean = false,
         startTimeMinutes: Int? = null,
-        durationMinutes: Int = task.durationMinutes
+        durationMinutes: Int = task.durationMinutes,
+        allowSimultaneous: Boolean = false
     ) {
-        val nextOrder = (dao.getMaxSortOrderForDay(targetEpochDay) ?: 0) + 1
+        val currentMax = dao.getMaxSortOrderForDay(targetEpochDay) ?: 0
+        val normalizedMax = if (currentMax >= 10 && currentMax % 10 == 0) currentMax / 10 else currentMax
+        val nextOrder = (normalizedMax + 1).coerceIn(1, 99)
         dao.updateTask(
             task.copy(
                 dateEpochDay = targetEpochDay,
@@ -332,7 +378,8 @@ class PlannerRepository(private val dao: PlannerDao) {
                 },
                 startTimeMinutes = if (asTimed) startTimeMinutes else null,
                 durationMinutes = if (asTimed) durationMinutes.coerceIn(5, 720) else durationMinutes.coerceIn(0, 720),
-                sortOrder = nextOrder
+                sortOrder = nextOrder,
+                allowSimultaneous = allowSimultaneous
             )
         )
     }
@@ -343,7 +390,8 @@ class PlannerRepository(private val dao: PlannerDao) {
                 dateEpochDay = null,
                 taskMode = TaskMode.TIMELESS_STEP.name,
                 startTimeMinutes = null,
-                isCompleted = false
+                isCompleted = false,
+                allowSimultaneous = false
             )
         )
     }
@@ -355,15 +403,20 @@ class PlannerRepository(private val dao: PlannerDao) {
     /**
      * Live Focus Session Logging:
      * - When Play is tapped, notes current device clock time and feeds it to the timeline.
+     * - For Timeless tasks, preserves startTimeMinutes = null so fake clock timestamps are never injected.
      * - When Pause is tapped, saves the segment ("start-pause") so a break is implicitly noted.
      * - When Resume is tapped, starts a new segment so the timeline displays a dotted "Continued" line!
      */
     suspend fun startOrResumeTaskSession(task: TaskEntity, currentClockMin: Int = currentMinutesFromMidnight()) {
         if (task.activeSessionStartMin != null) return
-        val firstStart = task.startTimeMinutes ?: currentClockMin
+        val updatedStartMin = if (task.modeEnum == TaskMode.TIMED_BLOCK) {
+            task.startTimeMinutes ?: currentClockMin
+        } else {
+            null
+        }
         dao.updateTask(
             task.copy(
-                startTimeMinutes = firstStart,
+                startTimeMinutes = updatedStartMin,
                 activeSessionStartMin = currentClockMin
             )
         )
@@ -426,7 +479,7 @@ class PlannerRepository(private val dao: PlannerDao) {
             val secondEnd = (resumeStart + halfDur).coerceAtMost(23 * 60 + 59)
             dao.updateTask(
                 task.copy(
-                    startTimeMinutes = task.startTimeMinutes ?: baseStart,
+                    startTimeMinutes = if (task.modeEnum == TaskMode.TIMED_BLOCK) (task.startTimeMinutes ?: baseStart) else null,
                     sessionSegments = "$baseStart-$firstEnd||$resumeStart-$secondEnd",
                     activeSessionStartMin = null
                 )

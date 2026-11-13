@@ -20,7 +20,20 @@ enum class RecurrenceRule(val label: String) {
     DAILY("Every Day"),
     WEEKDAYS("Weekdays"),
     WEEKLY("Weekly"),
-    MONTHLY("Monthly")
+    MONTHLY("Monthly"),
+    CUSTOM_DAYS("Every N Days")
+}
+
+fun formatOrdinalDayOfMonth(day: Int): String {
+    val d = day.coerceIn(1, 31)
+    val suffix = when {
+        d in 11..13 -> "th"
+        d % 10 == 1 -> "st"
+        d % 10 == 2 -> "nd"
+        d % 10 == 3 -> "rd"
+        else -> "th"
+    }
+    return "${d}$suffix of month"
 }
 
 @Immutable
@@ -43,6 +56,9 @@ data class TaskEntity(
     val sectionName: String = "Core",
     val recurrence: String = RecurrenceRule.NONE.name,
     val recurrenceDayOfMonth: Int = 1,
+    val recurrenceIntervalDays: Int = 2,
+    val excludedEpochDaysCsv: String = "",
+    val allowSimultaneous: Boolean = false,
     val isCompleted: Boolean = false,
     val sessionSegments: String = "",
     val activeSessionStartMin: Int? = null
@@ -54,6 +70,14 @@ data class TaskEntity(
     @Ignore
     val recurrenceEnum: RecurrenceRule =
         runCatching { RecurrenceRule.valueOf(recurrence) }.getOrDefault(RecurrenceRule.NONE)
+
+    @Ignore
+    val excludedEpochDays: Set<Long> =
+        if (excludedEpochDaysCsv.isBlank()) {
+            emptySet()
+        } else {
+            excludedEpochDaysCsv.split(",").mapNotNull { it.trim().toLongOrNull() }.toSet()
+        }
 
     @Ignore
     val parsedSessionSegments: List<Pair<Int, Int>> =
@@ -71,6 +95,15 @@ data class TaskEntity(
                 }
             }
         }
+
+    fun recurrenceSummaryLabel(): String = when (recurrenceEnum) {
+        RecurrenceRule.NONE -> RecurrenceRule.NONE.label
+        RecurrenceRule.DAILY -> RecurrenceRule.DAILY.label
+        RecurrenceRule.WEEKDAYS -> RecurrenceRule.WEEKDAYS.label
+        RecurrenceRule.WEEKLY -> RecurrenceRule.WEEKLY.label
+        RecurrenceRule.MONTHLY -> "Monthly (${formatOrdinalDayOfMonth(recurrenceDayOfMonth)})"
+        RecurrenceRule.CUSTOM_DAYS -> "Every ${recurrenceIntervalDays.coerceAtLeast(1)} days"
+    }
 }
 
 @Immutable

@@ -69,11 +69,13 @@ import com.example.ui.components.NeoCard
 import com.example.ui.components.NeoDashedDivider
 import com.example.ui.components.NeoInboxPane
 import com.example.ui.components.NeoPillButton
+import com.example.ui.components.OverlapConflictModal
 import com.example.ui.components.ScheduleInboxMiniPopup
 import com.example.ui.components.SpineConnectorSegment
 import com.example.ui.components.StructuredTaskEditorDialog
 import com.example.ui.components.TaskDetailPopupModal
 import com.example.ui.components.TopAnytimeBubblesRow
+import com.example.ui.components.formatFreeGapLabel
 import com.example.ui.components.smoothPressClickable
 import com.example.ui.theme.InkBlack
 import com.example.ui.theme.MyApplicationTheme
@@ -124,7 +126,8 @@ fun StruktPlannerApp(
     GlobalClockFormat.endOfDayMinutes = uiState.endOfDayMinutes
 
     BackHandler(
-        enabled = uiState.isSettingsVisible ||
+        enabled = uiState.pendingOverlapConflict != null ||
+            uiState.isSettingsVisible ||
             uiState.isEditorVisible ||
             uiState.inspectingTask != null ||
             uiState.schedulingInboxTask != null ||
@@ -132,6 +135,7 @@ fun StruktPlannerApp(
             uiState.activeDestination != StruktDestination.FLOW
     ) {
         when {
+            uiState.pendingOverlapConflict != null -> viewModel.dismissOverlapConflict()
             uiState.isSettingsVisible -> viewModel.closeSettingsModal()
             uiState.isEditorVisible -> viewModel.closeTaskSheet()
             uiState.inspectingTask != null -> viewModel.closeInspectTaskModal()
@@ -221,6 +225,10 @@ fun StruktPlannerApp(
                     onDeleteTask = {
                         viewModel.deleteTask(inspected.task.id)
                         viewModel.closeInspectTaskModal()
+                    },
+                    onDeleteTodayOnly = {
+                        viewModel.deleteTaskTodayOnly(inspected.task)
+                        viewModel.closeInspectTaskModal()
                     }
                 )
             }
@@ -234,7 +242,7 @@ fun StruktPlannerApp(
                     defaultMode = uiState.editorDefaultMode,
                     defaultToInbox = uiState.editorTargetInbox,
                     onDismiss = { viewModel.closeTaskSheet() },
-                    onSave = { id, title, notes, toInbox, mode, startMin, duration, color, icon, folder, section, recur, dayOfMonth, subs, order ->
+                    onSave = { id, title, notes, toInbox, mode, startMin, duration, color, icon, folder, section, recur, dayOfMonth, intervalDays, subs, order ->
                         viewModel.saveTaskFromEditor(
                             existingId = id,
                             title = title,
@@ -249,12 +257,14 @@ fun StruktPlannerApp(
                             sectionName = section,
                             recurrence = recur,
                             recurrenceDayOfMonth = dayOfMonth,
+                            recurrenceIntervalDays = intervalDays,
                             subtasks = subs,
                             sortOrder = order
                         )
                     },
                     onMoveToInbox = { task -> viewModel.sendTaskBackToInbox(task) },
-                    onDelete = { taskId -> viewModel.deleteTask(taskId) }
+                    onDelete = { taskId -> viewModel.deleteTask(taskId) },
+                    onDeleteTodayOnly = { task -> viewModel.deleteTaskTodayOnly(task) }
                 )
             }
 
@@ -266,6 +276,25 @@ fun StruktPlannerApp(
                     endOfDayMinutes = uiState.endOfDayMinutes,
                     onUpdateSettings = viewModel::updateGlobalSettings,
                     onDismiss = viewModel::closeSettingsModal
+                )
+            }
+
+            // 5. Overlap Conflict Resolution Modal (Auto-Shift vs Allow Simultaneous)
+            uiState.pendingOverlapConflict?.let { conflict ->
+                val reqStart = conflict.requestedStartMin
+                val reqEnd = reqStart + conflict.requestedDurationMin.coerceAtLeast(5)
+                val shiftStart = conflict.suggestedAutoShiftStartMin
+                val shiftEnd = shiftStart + conflict.requestedDurationMin.coerceAtLeast(5)
+                OverlapConflictModal(
+                    newTaskTitle = conflict.newTaskTitle,
+                    conflictingTaskTitle = conflict.conflictingTask.title,
+                    requestedStartMin = reqStart,
+                    requestedEndMin = reqEnd,
+                    suggestedShiftStartMin = shiftStart,
+                    suggestedShiftEndMin = shiftEnd,
+                    onAutoShift = viewModel::resolveOverlapAutoShift,
+                    onAllowSimultaneous = viewModel::resolveOverlapAllowSimultaneous,
+                    onDismiss = viewModel::dismissOverlapConflict
                 )
             }
         }
@@ -765,25 +794,17 @@ private fun DayFlowSheetContent(
                         contentType = { _, _ -> "spine_task_row" }
                     ) { index, item ->
                         val isUpNext = uiState.upNextTask?.task?.id == item.task.id
+                        val isSimultaneous = item.task.id in uiState.simultaneousTaskIds
 
                         if (index > 0) {
-                            val prev = uiState.spineFlowTasks[index - 1].task
-                            val curr = item.task
-                            val hasTimeGap = if (
-                                prev.modeEnum == TaskMode.TIMED_BLOCK &&
-                                curr.modeEnum == TaskMode.TIMED_BLOCK &&
-                                prev.startTimeMinutes != null &&
-                                curr.startTimeMinutes != null
-                            ) {
-                                val prevEnd = prev.startTimeMinutes + prev.durationMinutes
-                                (curr.startTimeMinutes - prevEnd) > 0
-                            } else {
-                                false
-                            }
+                            val gapMinutes = uiState.freeGapMinutesBeforeIndex[index]
+                            val freeTimeLabel = gapMinutes?.let { formatFreeGapLabel(it) }
+                            val hasTimeGap = gapMinutes != null && gapMinutes > 0
 
                             SpineConnectorSegment(
                                 isDottedBreak = hasTimeGap,
-                                height = if (hasTimeGap) 26.dp else 14.dp
+                                height = if (hasTimeGap) 34.sdp else 16.sdp,
+                                freeTimeLabel = freeTimeLabel
                             )
                         }
 
@@ -791,6 +812,7 @@ private fun DayFlowSheetContent(
                             item = item,
                             sequenceNumber = index + 1,
                             isUpNext = isUpNext,
+                            isSimultaneous = isSimultaneous,
                             onToggleComplete = { viewModel.toggleTaskDone(item.task) },
                             onOpenTaskDetail = { viewModel.openInspectTaskModal(item.task.id) }
                         )
