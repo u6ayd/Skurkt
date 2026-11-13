@@ -365,7 +365,7 @@ fun ScheduleInboxMiniPopup(
         mutableIntStateOf(task.startTimeMinutes ?: defaultStart)
     }
     var durationMin by remember(task.id) {
-        mutableIntStateOf(task.durationMinutes.coerceAtLeast(0))
+        mutableIntStateOf(0)
     }
     var errorBanner by remember { mutableStateOf<String?>(null) }
 
@@ -428,9 +428,14 @@ fun ScheduleInboxMiniPopup(
                     startTimeMinutes = startTimeMin,
                     durationMinutes = durationMin,
                     showBubbleOption = false,
-                    onModeChange = {
+                    onModeChange = { newMode ->
                         errorBanner = null
-                        selectedMode = it
+                        selectedMode = newMode
+                        if (newMode == TaskMode.TIMELESS_STEP) {
+                            durationMin = 0
+                        } else if (newMode == TaskMode.TIMED_BLOCK && durationMin <= 0) {
+                            durationMin = 60
+                        }
                     },
                     onStartTimeChange = {
                         errorBanner = null

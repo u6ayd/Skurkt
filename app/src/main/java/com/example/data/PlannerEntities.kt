@@ -35,7 +35,7 @@ data class TaskEntity(
     val dateEpochDay: Long? = null,
     val taskMode: String = TaskMode.TIMELESS_STEP.name,
     val startTimeMinutes: Int? = null,
-    val durationMinutes: Int = 30,
+    val durationMinutes: Int = 0,
     val sortOrder: Int = 0,
     val colorKey: String = "CORAL",
     val iconKey: String = "BOOK",
