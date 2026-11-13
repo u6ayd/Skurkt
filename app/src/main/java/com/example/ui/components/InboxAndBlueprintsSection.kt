@@ -148,64 +148,25 @@ fun NeoInboxPane(
                 .height(IntrinsicSize.Min),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            NeoCard(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight(),
+            NeoStatCard(
+                label = "DAY FLOW",
+                primaryValue = "$dayReadinessPercent%",
                 backgroundColor = NeoYellow,
-                cornerRadius = 18.dp,
-                contentPadding = PaddingValues(14.dp)
-            ) {
-                Column(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = "DAY FLOW",
-                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Medium),
-                        color = InkBlack
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "$dayReadinessPercent%",
-                        style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Bold),
-                        color = InkBlack
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    NeoProgressBar(progress = dayReadinessPercent / 100f, height = 6.dp)
-                }
-            }
-
-            NeoCard(
+                progress = dayReadinessPercent / 100f,
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxHeight(),
+                    .fillMaxHeight()
+            )
+
+            NeoStatCard(
+                label = "STEPS DONE",
+                primaryValue = "$completedCount / $totalCount",
                 backgroundColor = NeoSkyBlue,
-                cornerRadius = 18.dp,
-                contentPadding = PaddingValues(14.dp)
-            ) {
-                Column(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = "STEPS DONE",
-                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Medium),
-                        color = InkBlack
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "$completedCount / $totalCount",
-                        style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Bold),
-                        color = InkBlack
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    NeoProgressBar(
-                        progress = if (totalCount == 0) 0f else completedCount.toFloat() / totalCount,
-                        height = 6.dp
-                    )
-                }
-            }
+                progress = if (totalCount == 0) 0f else completedCount.toFloat() / totalCount,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+            )
         }
 
         Spacer(modifier = Modifier.height(14.dp))
@@ -256,7 +217,7 @@ fun NeoInboxPane(
                     .clip(uniformCorner)
                     .background(NeoMintGreen, uniformCorner)
                     .border(1.5.dp, InkBlack, uniformCorner)
-                    .clickable {
+                    .smoothPressClickable(role = Role.Button) {
                         if (brainDumpText.isNotBlank()) {
                             onQuickAddInbox(brainDumpText)
                             brainDumpText = ""
@@ -364,7 +325,7 @@ fun NeoInboxPane(
                                     .clip(RoundedCornerShape(12.dp))
                                     .background(SoftSheetSurface)
                                     .border(1.5.dp, InkBlack, RoundedCornerShape(12.dp))
-                                    .clickable { onOpenSchedulePopup(task) }
+                                    .smoothPressClickable(role = Role.Button) { onOpenSchedulePopup(task) }
                                     .testTag("schedule_inbox_task_${task.id}"),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -440,15 +401,7 @@ fun ScheduleInboxMiniPopup(
                             overflow = TextOverflow.Ellipsis
                         )
                     }
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Close",
-                        tint = InkBlack,
-                        modifier = Modifier
-                            .minimumInteractiveComponentSize()
-                            .size(20.dp)
-                            .smoothPressClickable(role = Role.Button, onClick = onDismiss)
-                    )
+                    NeoCircleCloseButton(onClick = onDismiss)
                 }
 
                 UnifiedTimeAndDurationPickerSection(
@@ -692,69 +645,25 @@ fun FoldersAndSectionsScreen(
                                 .height(IntrinsicSize.Min),
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            NeoCard(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(94.sdp),
+                            NeoStatCard(
+                                label = "TASKS COMPLETED",
+                                primaryValue = "$completedTasks / ${allTasks.size}",
                                 backgroundColor = NeoMintGreen,
-                                cornerRadius = 18.dp,
-                                contentPadding = PaddingValues(16.dp)
-                            ) {
-                                Column(
-                                    modifier = Modifier.fillMaxSize(),
-                                    verticalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text(
-                                        text = "TASKS COMPLETED",
-                                        style = MaterialTheme.typography.labelLarge.copy(
-                                            fontSize = 10.3.ssp,
-                                            fontWeight = FontWeight.Medium
-                                        ),
-                                        color = InkBlack
-                                    )
-                                    Text(
-                                        text = "$completedTasks / ${allTasks.size}",
-                                        style = MaterialTheme.typography.displayMedium.copy(
-                                            fontSize = 26.6.ssp,
-                                            lineHeight = 32.5.ssp,
-                                            fontWeight = FontWeight.Bold
-                                        ),
-                                        color = InkBlack
-                                    )
-                                }
-                            }
-
-                            NeoCard(
+                                contentPadding = PaddingValues(16.dp),
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(94.sdp),
+                                    .height(94.sdp)
+                            )
+
+                            NeoStatCard(
+                                label = "FOLDERS",
+                                primaryValue = "${folders.size}",
                                 backgroundColor = NeoRosePink,
-                                cornerRadius = 18.dp,
-                                contentPadding = PaddingValues(16.dp)
-                            ) {
-                                Column(
-                                    modifier = Modifier.fillMaxSize(),
-                                    verticalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text(
-                                        text = "FOLDERS",
-                                        style = MaterialTheme.typography.labelLarge.copy(
-                                            fontSize = 10.3.ssp,
-                                            fontWeight = FontWeight.Medium
-                                        ),
-                                        color = InkBlack
-                                    )
-                                    Text(
-                                        text = "${folders.size}",
-                                        style = MaterialTheme.typography.displayMedium.copy(
-                                            fontSize = 26.6.ssp,
-                                            lineHeight = 32.5.ssp,
-                                            fontWeight = FontWeight.Bold
-                                        ),
-                                        color = InkBlack
-                                    )
-                                }
-                            }
+                                contentPadding = PaddingValues(16.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(94.sdp)
+                            )
                         }
                     }
                 }
@@ -1176,7 +1085,7 @@ private fun CreateFolderPopupModal(
                                 .clip(CircleShape)
                                 .background(opt.fill)
                                 .border(if (colorKey == opt.key) 2.5.dp else 1.dp, InkBlack, CircleShape)
-                                .clickable { colorKey = opt.key }
+                                .smoothPressClickable(role = Role.Button) { colorKey = opt.key }
                         )
                     }
                 }

@@ -226,7 +226,7 @@ private fun NeoCompactClockSelector(
                     .clip(CircleShape)
                     .background(SoftSheetSurface, CircleShape)
                     .border(1.2.dp, InkBlack, CircleShape)
-                    .clickable {
+                    .smoothPressClickable(role = Role.Button) {
                         val prevHr = if (currentHour == 0) 23 else currentHour - 1
                         onClockChange(prevHr * 60 + currentMinute)
                     },
@@ -278,7 +278,7 @@ private fun NeoCompactClockSelector(
                     .clip(CircleShape)
                     .background(SoftSheetSurface, CircleShape)
                     .border(1.2.dp, InkBlack, CircleShape)
-                    .clickable {
+                    .smoothPressClickable(role = Role.Button) {
                         val nextHr = (currentHour + 1) % 24
                         onClockChange(nextHr * 60 + currentMinute)
                     },
@@ -315,7 +315,7 @@ private fun NeoCompactClockSelector(
                     .clip(CircleShape)
                     .background(SoftSheetSurface, CircleShape)
                     .border(1.2.dp, InkBlack, CircleShape)
-                    .clickable {
+                    .smoothPressClickable(role = Role.Button) {
                         onClockChange((clockMinutes - 5).coerceAtLeast(0))
                     },
                 contentAlignment = Alignment.Center
@@ -366,7 +366,7 @@ private fun NeoCompactClockSelector(
                     .clip(CircleShape)
                     .background(SoftSheetSurface, CircleShape)
                     .border(1.2.dp, InkBlack, CircleShape)
-                    .clickable {
+                    .smoothPressClickable(role = Role.Button) {
                         onClockChange((clockMinutes + 5).coerceAtMost(23 * 60 + 59))
                     },
                 contentAlignment = Alignment.Center
@@ -901,23 +901,13 @@ fun StructuredTaskEditorDialog(
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        IconButton(
+                                        NeoCircleCloseButton(
                                             onClick = onDismiss,
-                                            modifier = Modifier
-                                                .minimumInteractiveComponentSize()
-                                                .size(40.dp)
-                                                .clip(CircleShape)
-                                                .background(PureWhiteSurface.copy(alpha = 0.9f), CircleShape)
-                                                .border(1.5.dp, InkBlack, CircleShape)
-                                                .testTag("close_editor_button")
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Close,
-                                                contentDescription = "Close",
-                                                tint = InkBlack,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                        }
+                                            size = 40.dp,
+                                            iconSize = 18.dp,
+                                            backgroundColor = PureWhiteSurface.copy(alpha = 0.9f),
+                                            modifier = Modifier.testTag("close_editor_button")
+                                        )
 
                                         Row(
                                             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -1267,53 +1257,22 @@ fun StructuredTaskEditorDialog(
                         }
 
                         EditorSubPopup.DELETE_CONFIRM -> {
-                            Column(
+                            NeoDeleteTaskConfirmView(
+                                taskTitle = existingTask?.title.orEmpty(),
+                                isRecurring = existingTask?.recurrenceEnum != RecurrenceRule.NONE,
+                                onDeleteTodayOnly = if (existingTask != null && onDeleteTodayOnly != null) {
+                                    { onDeleteTodayOnly(existingTask) }
+                                } else null,
+                                onDeleteAll = {
+                                    if (existingTask != null && onDelete != null) {
+                                        onDelete(existingTask.id)
+                                    }
+                                },
+                                onCancel = { activeSubPopup = EditorSubPopup.NONE },
                                 modifier = Modifier
-                                    .fillMaxWidth()
                                     .background(PureWhiteSurface)
-                                    .padding(22.dp),
-                                verticalArrangement = Arrangement.spacedBy(14.dp)
-                            ) {
-                                Text(
-                                    text = "Delete Repeating Task?",
-                                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                                    color = InkBlack
-                                )
-                                Text(
-                                    text = "Would you like to remove \"${existingTask?.title.orEmpty()}\" from today only, or delete all future occurrences?",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = InkCharcoal
-                                )
-                                NeoPillButton(
-                                    text = "Delete Today Only",
-                                    selected = true,
-                                    activeColor = NeoYellow,
-                                    onClick = {
-                                        if (existingTask != null && onDeleteTodayOnly != null) {
-                                            onDeleteTodayOnly(existingTask)
-                                        }
-                                    },
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                                NeoPillButton(
-                                    text = "Delete All Future Tasks",
-                                    icon = Icons.Default.Delete,
-                                    selected = true,
-                                    activeColor = NeoCoral,
-                                    onClick = {
-                                        if (existingTask != null && onDelete != null) {
-                                            onDelete(existingTask.id)
-                                        }
-                                    },
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                                NeoPillButton(
-                                    text = "Cancel",
-                                    selected = false,
-                                    onClick = { activeSubPopup = EditorSubPopup.NONE },
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
+                                    .padding(22.dp)
+                            )
                         }
                     }
                 }
@@ -1379,7 +1338,7 @@ private fun EditorSummaryRow(
             .clip(RoundedCornerShape(16.dp))
             .background(PureWhiteSurface)
             .border(1.5.dp, InkBlack, RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick)
+            .smoothPressClickable(role = Role.Button, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 13.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -1532,7 +1491,7 @@ private fun FolderAndSectionInPlaceContent(
                         .clip(RoundedCornerShape(12.dp))
                         .background(if (isSelected) neoColorForKey(folder.colorKey) else SoftSheetSurface)
                         .border(if (isSelected) 1.8.dp else 1.dp, InkBlack, RoundedCornerShape(12.dp))
-                        .clickable {
+                        .smoothPressClickable(role = Role.Button) {
                             val firstSec = folder.sections.firstOrNull() ?: "Core"
                             onSelectFolderAndSection(folder.name, firstSec)
                         }
@@ -1602,7 +1561,7 @@ private fun RecurrenceInPlaceContent(
                     .clip(RoundedCornerShape(12.dp))
                     .background(if (selected) NeoYellow else SoftSheetSurface)
                     .border(if (selected) 1.8.dp else 1.dp, InkBlack, RoundedCornerShape(12.dp))
-                    .clickable { onSelectRule(rule) }
+                    .smoothPressClickable(role = Role.Button) { onSelectRule(rule) }
                     .padding(horizontal = 14.dp, vertical = 10.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
@@ -1759,7 +1718,7 @@ private fun SubtasksInPlaceContent(
                     modifier = Modifier
                         .minimumInteractiveComponentSize()
                         .size(18.dp)
-                        .clickable { subtasks.removeAt(idx) }
+                        .smoothPressClickable(role = Role.Button) { subtasks.removeAt(idx) }
                 )
             }
         }

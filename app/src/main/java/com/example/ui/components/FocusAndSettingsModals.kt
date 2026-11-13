@@ -143,23 +143,10 @@ fun GlobalSettingsPopupModal(
                         )
                     }
 
-                    Box(
-                        modifier = Modifier
-                            .minimumInteractiveComponentSize()
-                            .size(34.dp)
-                            .clip(CircleShape)
-                            .background(SoftSheetSurface, CircleShape)
-                            .border(1.5.dp, InkBlack, CircleShape)
-                            .smoothPressClickable(role = Role.Button, onClick = onDismiss),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Close Settings",
-                            tint = InkBlack,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
+                    NeoCircleCloseButton(
+                        onClick = onDismiss,
+                        contentDescription = "Close Settings"
+                    )
                 }
 
                 Column(
@@ -426,22 +413,10 @@ fun OverlapConflictModal(
                         style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                         color = InkBlack
                     )
-                    Box(
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clip(CircleShape)
-                            .background(SoftSheetSurface, CircleShape)
-                            .border(1.5.dp, InkBlack, CircleShape)
-                            .clickable(onClick = onDismiss),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Close",
-                            tint = InkBlack,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
+                    NeoCircleCloseButton(
+                        onClick = onDismiss,
+                        size = 32.dp
+                    )
                 }
 
                 val use24h = LocalClockFormat.current.use24Hour
@@ -568,7 +543,6 @@ fun AntiParalysisFocusScreen(
     var isRunning by remember(task.id, task.activeSessionStartMin) {
         mutableStateOf(task.activeSessionStartMin != null)
     }
-    var newStepTitle by remember { mutableStateOf("") }
 
     val use24h = LocalClockFormat.current.use24Hour
     val recordedIntervals = remember(task.parsedSessionSegments, task.activeSessionStartMin, use24h) {
@@ -670,14 +644,9 @@ fun AntiParalysisFocusScreen(
                 FocusSubtasksAndSessionCard(
                     focusItem = focusItem,
                     recordedIntervals = recordedIntervals,
-                    newStepTitle = newStepTitle,
-                    onNewStepTitleChange = { newStepTitle = it },
                     onToggleSubtask = onToggleSubtask,
-                    onAddQuickSubtask = {
-                        if (newStepTitle.isNotBlank()) {
-                            onAddQuickSubtask(task.id, newStepTitle)
-                            newStepTitle = ""
-                        }
+                    onAddQuickSubtask = { title ->
+                        onAddQuickSubtask(task.id, title)
                     }
                 )
             }
@@ -985,81 +954,18 @@ private fun FocusLiveClockAndProgressLeaf(
 private fun FocusSubtasksAndSessionCard(
     focusItem: TaskWithSubtasks,
     recordedIntervals: List<String>,
-    newStepTitle: String,
-    onNewStepTitleChange: (String) -> Unit,
     onToggleSubtask: (SubtaskEntity) -> Unit,
-    onAddQuickSubtask: () -> Unit
+    onAddQuickSubtask: (String) -> Unit
 ) {
     val task = focusItem.task
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        NeoCard(
-            modifier = Modifier.fillMaxWidth(),
-            backgroundColor = PureWhiteSurface,
-            cornerRadius = 22.dp,
-            contentPadding = PaddingValues(18.dp)
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    text = "Subtasks (${focusItem.completedSubtasksCount}/${focusItem.subtasks.size})",
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
-                    color = InkBlack
-                )
-
-                focusItem.sortedSubtasks.forEach { sub ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(SoftSheetSurface)
-                            .smoothPressClickable { onToggleSubtask(sub) }
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        NeoSquareCheckbox(
-                            checked = sub.isCompleted,
-                            onCheckedChange = { onToggleSubtask(sub) },
-                            accentColor = NeoMintGreen
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = sub.title,
-                            style = MaterialTheme.typography.bodyLarge.copy(
-                                fontWeight = FontWeight.Medium,
-                                textDecoration = if (sub.isCompleted) TextDecoration.LineThrough else TextDecoration.None
-                            ),
-                            color = if (sub.isCompleted) InkMuted else InkBlack
-                        )
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = newStepTitle,
-                        onValueChange = onNewStepTitleChange,
-                        placeholder = {
-                            Text(
-                                "Add subtask",
-                                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Normal),
-                                color = InkMuted
-                            )
-                        },
-                        singleLine = true,
-                        shape = RoundedCornerShape(14.dp),
-                        modifier = Modifier.weight(1f)
-                    )
-                    NeoPillButton(
-                        text = "Add",
-                        selected = true,
-                        activeColor = NeoSkyBlue,
-                        onClick = onAddQuickSubtask
-                    )
-                }
-            }
-        }
+        NeoSubtaskChecklistSection(
+            subtasks = focusItem.sortedSubtasks,
+            completedCount = focusItem.completedSubtasksCount,
+            onToggleSubtask = onToggleSubtask,
+            onAddSubtask = onAddQuickSubtask,
+            alwaysExpanded = true
+        )
 
         if (recordedIntervals.isNotEmpty()) {
             NeoCard(

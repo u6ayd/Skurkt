@@ -1104,8 +1104,6 @@ fun TaskDetailPopupModal(
 ) {
     val task = item.task
     val accent = neoColorForKey(task.colorKey)
-    var newSubtask by remember { mutableStateOf("") }
-    var showAddSubtaskField by remember(task.id) { mutableStateOf(item.subtasks.isNotEmpty()) }
     var showDeleteConfirmPopup by remember(task.id) { mutableStateOf(false) }
     var stepVal by remember(task.id, currentStepNumber) {
         mutableStateOf(currentStepNumber.coerceIn(1, 99))
@@ -1133,390 +1131,187 @@ fun TaskDetailPopupModal(
                 label = "task_detail_delete_switch"
             ) { isDeleting ->
                 if (isDeleting) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(42.dp)
-                                    .clip(CircleShape)
-                                    .background(NeoCoral)
-                                    .border(1.5.dp, InkBlack, CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Delete,
-                                    contentDescription = null,
-                                    tint = PureWhiteSurface,
-                                    modifier = Modifier.size(20.dp)
-                                )
+                    NeoDeleteTaskConfirmView(
+                        taskTitle = task.title,
+                        isRecurring = task.recurrenceEnum != RecurrenceRule.NONE,
+                        onDeleteTodayOnly = onDeleteTodayOnly?.let { action ->
+                            {
+                                showDeleteConfirmPopup = false
+                                action()
                             }
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = if (task.recurrenceEnum != RecurrenceRule.NONE) "Delete Repeating Task?" else "Delete Task?",
-                                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                                    color = InkBlack
-                                )
-                                Text(
-                                    text = task.title,
-                                    style = MaterialTheme.typography.bodyMedium.copy(
-                                        fontWeight = FontWeight.Medium,
-                                        lineHeight = 18.ssp
-                                    ),
-                                    color = InkMuted,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-
-                        if (task.recurrenceEnum != RecurrenceRule.NONE && onDeleteTodayOnly != null) {
-                            NeoPillButton(
-                                text = "Delete Today Only",
-                                selected = true,
-                                activeColor = NeoYellow,
-                                onClick = {
-                                    showDeleteConfirmPopup = false
-                                    onDeleteTodayOnly()
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("delete_today_only_button")
-                            )
-                            NeoPillButton(
-                                text = "Delete All Future Tasks",
-                                icon = Icons.Default.Delete,
-                                selected = true,
-                                activeColor = NeoCoral,
-                                onClick = {
-                                    showDeleteConfirmPopup = false
-                                    onDeleteTask()
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("confirm_delete_task_button")
-                            )
-                            NeoPillButton(
-                                text = "Cancel",
-                                selected = false,
-                                onClick = { showDeleteConfirmPopup = false },
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        } else {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                NeoPillButton(
-                                    text = "Cancel",
-                                    selected = false,
-                                    onClick = { showDeleteConfirmPopup = false },
-                                    modifier = Modifier.weight(1f)
-                                )
-                                NeoPillButton(
-                                    text = "Delete",
-                                    icon = Icons.Default.Delete,
-                                    selected = true,
-                                    activeColor = NeoCoral,
-                                    onClick = {
-                                        showDeleteConfirmPopup = false
-                                        onDeleteTask()
-                                    },
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .testTag("confirm_delete_task_button")
-                                )
-                            }
-                        }
-                    }
+                        },
+                        onDeleteAll = {
+                            showDeleteConfirmPopup = false
+                            onDeleteTask()
+                        },
+                        onCancel = { showDeleteConfirmPopup = false }
+                    )
                 } else {
                     Column(
                         modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(44.dp)
-                                .clip(CircleShape)
-                                .background(accent)
-                                .border(1.5.dp, InkBlack, CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = iconForKey(task.iconKey),
-                                contentDescription = null,
-                                tint = InkBlack,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
-                        val use24Hour = LocalClockFormat.current.use24Hour
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = buildString {
-                                    append("${task.folderName} • ${task.sectionName} • ${formatDurationBadge(task.durationMinutes)}")
-                                    task.startTimeMinutes?.let {
-                                        append(" • ${formatMinutesAsClock(it, use24Hour)}")
-                                    }
-                                },
-                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Normal),
-                                color = InkMuted,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = task.title,
-                                style = MaterialTheme.typography.titleLarge.copy(
-                                    fontWeight = FontWeight.SemiBold,
-                                    lineHeight = 20.ssp
-                                ),
-                                color = InkBlack,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    Box(
-                        modifier = Modifier
-                            .minimumInteractiveComponentSize()
-                            .smoothPressClickable(role = Role.Button, onClick = onDismiss),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(34.sdp)
-                                .clip(CircleShape)
-                                .background(SoftSheetSurface)
-                                .border(1.5.dp, InkBlack, CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Close",
-                                tint = InkBlack,
-                                modifier = Modifier.size(16.sdp)
-                            )
-                        }
-                    }
-                }
-
-                if (task.notes.isNotBlank()) {
-                    Text(
-                        text = task.notes,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = InkCharcoal
-                    )
-                }
-
-                if (task.modeEnum != TaskMode.TOP_BUBBLE) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .height(40.dp)
-                                .clip(RoundedCornerShape(50))
-                                .background(SoftSheetSurface)
-                                .border(1.5.dp, InkBlack, RoundedCornerShape(50))
-                                .padding(horizontal = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(28.dp)
-                                    .smoothPressClickable(role = Role.Button) {
-                                        val next = (stepVal - 1).coerceAtLeast(1)
-                                        stepVal = next
-                                        onUpdateStepNumber(next)
-                                    }
-                                    .clip(CircleShape)
-                                    .background(PureWhiteSurface)
-                                    .border(1.2.dp, InkBlack, CircleShape)
-                                    .testTag("step_number_minus"),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Remove,
-                                    contentDescription = "Decrease Step #",
-                                    tint = InkBlack,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                            }
-
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(50))
-                                    .background(NeoYellow)
-                                    .border(1.2.dp, InkBlack, RoundedCornerShape(50))
-                                    .padding(horizontal = 10.dp, vertical = 3.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "#$stepVal",
-                                    style = MaterialTheme.typography.titleMedium.copy(
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.SemiBold
-                                    ),
-                                    color = InkBlack
-                                )
-                            }
-
-                            Box(
-                                modifier = Modifier
-                                    .size(28.dp)
-                                    .smoothPressClickable(role = Role.Button) {
-                                        val next = (stepVal + 1).coerceAtMost(99)
-                                        stepVal = next
-                                        onUpdateStepNumber(next)
-                                    }
-                                    .clip(CircleShape)
-                                    .background(PureWhiteSurface)
-                                    .border(1.2.dp, InkBlack, CircleShape)
-                                    .testTag("step_number_plus"),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Add,
-                                    contentDescription = "Increase Step #",
-                                    tint = InkBlack,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                            }
-                        }
-
-                        NeoPillButton(
-                            text = if (hasBreakLoop) "Merge Loop" else "Split Break Loop",
-                            icon = Icons.Default.Pause,
-                            selected = hasBreakLoop,
-                            activeColor = NeoSkyBlue,
-                            onClick = onToggleBreakLoop,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-
-                if (item.subtasks.isNotEmpty() || showAddSubtaskField) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(SoftSheetSurface)
-                            .border(1.5.dp, InkBlack, RoundedCornerShape(16.dp))
-                            .padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = "Subtasks (${item.completedSubtasksCount}/${item.subtasks.size})",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                                color = InkBlack
-                            )
-                            if ( !showAddSubtaskField ) {
-                                Text(
-                                    text = "+ Add",
-                                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-                                    color = InkBlack,
-                                    modifier = Modifier.smoothPressClickable { showAddSubtaskField = true }
-                                )
-                            }
-                        }
-
-                        item.sortedSubtasks.forEach { sub ->
                             Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(PureWhiteSurface)
-                                    .smoothPressClickable { onToggleSubtask(sub) }
-                                    .padding(horizontal = 10.dp, vertical = 7.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                modifier = Modifier.weight(1f)
                             ) {
-                                NeoSquareCheckbox(
-                                    checked = sub.isCompleted,
-                                    onCheckedChange = { onToggleSubtask(sub) },
-                                    accentColor = NeoMintGreen
-                                )
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Text(
-                                    text = sub.title,
-                                    style = MaterialTheme.typography.bodyLarge.copy(
-                                        fontWeight = FontWeight.Medium,
-                                        textDecoration = if (sub.isCompleted) TextDecoration.LineThrough else TextDecoration.None
-                                    ),
-                                    color = if (sub.isCompleted) InkMuted else InkBlack
-                                )
+                                Box(
+                                    modifier = Modifier
+                                        .size(44.dp)
+                                        .clip(CircleShape)
+                                        .background(accent)
+                                        .border(1.5.dp, InkBlack, CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = iconForKey(task.iconKey),
+                                        contentDescription = null,
+                                        tint = InkBlack,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                                val use24Hour = LocalClockFormat.current.use24Hour
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = buildString {
+                                            append("${task.folderName} • ${task.sectionName} • ${formatDurationBadge(task.durationMinutes)}")
+                                            task.startTimeMinutes?.let {
+                                                append(" • ${formatMinutesAsClock(it, use24Hour)}")
+                                            }
+                                        },
+                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Normal),
+                                        color = InkMuted,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = task.title,
+                                        style = MaterialTheme.typography.titleLarge.copy(
+                                            fontWeight = FontWeight.SemiBold,
+                                            lineHeight = 20.ssp
+                                        ),
+                                        color = InkBlack,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
                             }
+
+                            Spacer(modifier = Modifier.width(8.dp))
+
+                            NeoCircleCloseButton(onClick = onDismiss)
                         }
 
-                        if (showAddSubtaskField) {
+                        if (task.notes.isNotBlank()) {
+                            Text(
+                                text = task.notes,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = InkCharcoal
+                            )
+                        }
+
+                        if (task.modeEnum != TaskMode.TOP_BUBBLE) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                OutlinedTextField(
-                                    value = newSubtask,
-                                    onValueChange = { newSubtask = it },
-                                    placeholder = {
-                                        Text(
-                                            "Add subtask...",
-                                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Normal),
-                                            color = InkMuted
-                                        )
-                                    },
-                                    singleLine = true,
-                                    shape = RoundedCornerShape(12.dp),
+                                Row(
                                     modifier = Modifier
-                                        .weight(1f)
-                                        .background(PureWhiteSurface, RoundedCornerShape(12.dp))
-                                )
-                                NeoPillButton(
-                                    text = "Add",
-                                    selected = true,
-                                    activeColor = NeoSkyBlue,
-                                    onClick = {
-                                        if (newSubtask.isNotBlank()) {
-                                            onAddSubtask(newSubtask)
-                                            newSubtask = ""
-                                        }
+                                        .height(40.dp)
+                                        .clip(RoundedCornerShape(50))
+                                        .background(SoftSheetSurface)
+                                        .border(1.5.dp, InkBlack, RoundedCornerShape(50))
+                                        .padding(horizontal = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .smoothPressClickable(role = Role.Button) {
+                                                val next = (stepVal - 1).coerceAtLeast(1)
+                                                stepVal = next
+                                                onUpdateStepNumber(next)
+                                            }
+                                            .clip(CircleShape)
+                                            .background(PureWhiteSurface)
+                                            .border(1.2.dp, InkBlack, CircleShape)
+                                            .testTag("step_number_minus"),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Remove,
+                                            contentDescription = "Decrease Step #",
+                                            tint = InkBlack,
+                                            modifier = Modifier.size(14.dp)
+                                        )
                                     }
+
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(50))
+                                            .background(NeoYellow)
+                                            .border(1.2.dp, InkBlack, RoundedCornerShape(50))
+                                            .padding(horizontal = 10.dp, vertical = 3.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "#$stepVal",
+                                            style = MaterialTheme.typography.titleMedium.copy(
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.SemiBold
+                                            ),
+                                            color = InkBlack
+                                        )
+                                    }
+
+                                    Box(
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .smoothPressClickable(role = Role.Button) {
+                                                val next = (stepVal + 1).coerceAtMost(99)
+                                                stepVal = next
+                                                onUpdateStepNumber(next)
+                                            }
+                                            .clip(CircleShape)
+                                            .background(PureWhiteSurface)
+                                            .border(1.2.dp, InkBlack, CircleShape)
+                                            .testTag("step_number_plus"),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Add,
+                                            contentDescription = "Increase Step #",
+                                            tint = InkBlack,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                }
+
+                                NeoPillButton(
+                                    text = if (hasBreakLoop) "Merge Loop" else "Split Break Loop",
+                                    icon = Icons.Default.Pause,
+                                    selected = hasBreakLoop,
+                                    activeColor = NeoSkyBlue,
+                                    onClick = onToggleBreakLoop,
+                                    modifier = Modifier.weight(1f)
                                 )
                             }
                         }
-                    }
-                } else {
-                    NeoPillButton(
-                        text = "+ Add Subtask",
-                        icon = Icons.Default.Checklist,
-                        selected = false,
-                        onClick = { showAddSubtaskField = true },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
+
+                        NeoSubtaskChecklistSection(
+                            subtasks = item.sortedSubtasks,
+                            completedCount = item.completedSubtasksCount,
+                            onToggleSubtask = onToggleSubtask,
+                            onAddSubtask = onAddSubtask
+                        )
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),

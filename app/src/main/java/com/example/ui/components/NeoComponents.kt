@@ -38,8 +38,10 @@ import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Checklist
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Coffee
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Eco
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.Groups
@@ -50,11 +52,14 @@ import androidx.compose.material.icons.filled.Shower
 import androidx.compose.material.icons.filled.TaskAlt
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
@@ -71,20 +76,26 @@ import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
+import com.example.data.SubtaskEntity
 import com.example.ui.theme.DotGridColor
 import com.example.ui.theme.InkBlack
 import com.example.ui.theme.InkCharcoal
+import com.example.ui.theme.InkMuted
 import com.example.ui.theme.NeoCoral
 import com.example.ui.theme.NeoMintGreen
+import com.example.ui.theme.NeoSkyBlue
 import com.example.ui.theme.NeoYellow
 import com.example.ui.theme.PaperCanvas
 import com.example.ui.theme.PureWhiteSurface
+import com.example.ui.theme.SoftSheetSurface
 import com.example.ui.theme.sdp
 import com.example.ui.theme.ssp
 
@@ -594,3 +605,303 @@ fun iconForKey(key: String): ImageVector {
     return TaskIconCatalog.firstOrNull { it.key.equals(key, ignoreCase = true) }?.icon
         ?: Icons.Default.TaskAlt
 }
+
+@Composable
+fun NeoStatCard(
+    label: String,
+    primaryValue: String,
+    backgroundColor: Color,
+    modifier: Modifier = Modifier,
+    subtitle: String? = null,
+    progress: Float? = null,
+    cornerRadius: Dp = 18.dp,
+    contentPadding: PaddingValues = PaddingValues(14.dp)
+) {
+    NeoCard(
+        modifier = modifier,
+        backgroundColor = backgroundColor,
+        cornerRadius = cornerRadius,
+        contentPadding = contentPadding
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Medium),
+                color = InkBlack
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = primaryValue,
+                style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Bold),
+                color = InkBlack
+            )
+            if (subtitle != null) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = InkCharcoal
+                )
+            }
+            if (progress != null) {
+                Spacer(modifier = Modifier.height(6.dp))
+                NeoProgressBar(progress = progress, height = 6.dp)
+            }
+        }
+    }
+}
+
+@Composable
+fun NeoCircleCloseButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    contentDescription: String = "Close",
+    size: Dp = 34.sdp,
+    iconSize: Dp = 16.sdp,
+    backgroundColor: Color = SoftSheetSurface
+) {
+    Box(
+        modifier = modifier
+            .minimumInteractiveComponentSize()
+            .smoothPressClickable(role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(size)
+                .clip(CircleShape)
+                .background(backgroundColor, CircleShape)
+                .border(1.5.dp, InkBlack, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Close,
+                contentDescription = contentDescription,
+                tint = InkBlack,
+                modifier = Modifier.size(iconSize)
+            )
+        }
+    }
+}
+
+@Composable
+fun NeoDeleteTaskConfirmView(
+    taskTitle: String,
+    isRecurring: Boolean,
+    onDeleteTodayOnly: (() -> Unit)?,
+    onDeleteAll: () -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(NeoCoral)
+                    .border(1.5.dp, InkBlack, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = null,
+                    tint = PureWhiteSurface,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = if (isRecurring) "Delete Repeating Task?" else "Delete Task?",
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                    color = InkBlack
+                )
+                Text(
+                    text = taskTitle,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontWeight = FontWeight.Medium,
+                        lineHeight = 18.ssp
+                    ),
+                    color = InkMuted,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+
+        if (isRecurring && onDeleteTodayOnly != null) {
+            NeoPillButton(
+                text = "Delete Today Only",
+                selected = true,
+                activeColor = NeoYellow,
+                onClick = onDeleteTodayOnly,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("delete_today_only_button")
+            )
+            NeoPillButton(
+                text = "Delete All Future Tasks",
+                icon = Icons.Default.Delete,
+                selected = true,
+                activeColor = NeoCoral,
+                onClick = onDeleteAll,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("confirm_delete_task_button")
+            )
+            NeoPillButton(
+                text = "Cancel",
+                selected = false,
+                onClick = onCancel,
+                modifier = Modifier.fillMaxWidth()
+            )
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                NeoPillButton(
+                    text = "Cancel",
+                    selected = false,
+                    onClick = onCancel,
+                    modifier = Modifier.weight(1f)
+                )
+                NeoPillButton(
+                    text = "Delete",
+                    icon = Icons.Default.Delete,
+                    selected = true,
+                    activeColor = NeoCoral,
+                    onClick = onDeleteAll,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("confirm_delete_task_button")
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun NeoSubtaskChecklistSection(
+    subtasks: List<SubtaskEntity>,
+    completedCount: Int,
+    onToggleSubtask: (SubtaskEntity) -> Unit,
+    onAddSubtask: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    alwaysExpanded: Boolean = false
+) {
+    var showAddSubtaskField by remember { mutableStateOf(alwaysExpanded) }
+    var newSubtask by remember { mutableStateOf("") }
+
+    if (subtasks.isNotEmpty() || showAddSubtaskField || alwaysExpanded) {
+        Column(
+            modifier = modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(SoftSheetSurface)
+                .border(1.5.dp, InkBlack, RoundedCornerShape(16.dp))
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Subtasks ($completedCount/${subtasks.size})",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = InkBlack
+                )
+                if (!showAddSubtaskField && !alwaysExpanded) {
+                    Text(
+                        text = "+ Add",
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                        color = InkBlack,
+                        modifier = Modifier.smoothPressClickable { showAddSubtaskField = true }
+                    )
+                }
+            }
+
+            subtasks.forEach { sub ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(PureWhiteSurface)
+                        .smoothPressClickable { onToggleSubtask(sub) }
+                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    NeoSquareCheckbox(
+                        checked = sub.isCompleted,
+                        onCheckedChange = { onToggleSubtask(sub) },
+                        accentColor = NeoMintGreen
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = sub.title,
+                        style = MaterialTheme.typography.bodyLarge.copy(
+                            fontWeight = FontWeight.Medium,
+                            textDecoration = if (sub.isCompleted) TextDecoration.LineThrough else TextDecoration.None
+                        ),
+                        color = if (sub.isCompleted) InkMuted else InkBlack
+                    )
+                }
+            }
+
+            if (showAddSubtaskField || alwaysExpanded) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = newSubtask,
+                        onValueChange = { newSubtask = it },
+                        placeholder = {
+                            Text(
+                                "Add subtask...",
+                                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Normal),
+                                color = InkMuted
+                            )
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .background(PureWhiteSurface, RoundedCornerShape(12.dp))
+                    )
+                    NeoPillButton(
+                        text = "Add",
+                        selected = true,
+                        activeColor = NeoSkyBlue,
+                        onClick = {
+                            if (newSubtask.isNotBlank()) {
+                                onAddSubtask(newSubtask)
+                                newSubtask = ""
+                            }
+                        }
+                    )
+                }
+            }
+        }
+    } else {
+        NeoPillButton(
+            text = "+ Add Subtask",
+            icon = Icons.Default.Checklist,
+            selected = false,
+            onClick = { showAddSubtaskField = true },
+            modifier = modifier.fillMaxWidth()
+        )
+    }
+}
+

@@ -227,23 +227,7 @@ fun CleanupAndExportModal(
                         )
                     }
 
-                    Box(
-                        modifier = Modifier
-                            .minimumInteractiveComponentSize()
-                            .size(34.dp)
-                            .clip(CircleShape)
-                            .background(SoftSheetSurface, CircleShape)
-                            .border(1.5.dp, InkBlack, CircleShape)
-                            .smoothPressClickable(role = Role.Button, onClick = onDismiss),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Close",
-                            tint = InkBlack,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
+                    NeoCircleCloseButton(onClick = onDismiss)
                 }
 
                 Column(
@@ -284,55 +268,25 @@ fun CleanupAndExportModal(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    NeoCard(
-                        modifier = Modifier.weight(1f),
+                    NeoStatCard(
+                        label = "COMPLETED",
+                        primaryValue = "${matchedTasks.size} tasks",
+                        subtitle = "$totalSubtasksDone milestones",
                         backgroundColor = NeoMintGreen,
                         cornerRadius = 16.dp,
-                        contentPadding = PaddingValues(12.dp)
-                    ) {
-                        Column {
-                            Text(
-                                text = "COMPLETED",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = InkBlack
-                            )
-                            Text(
-                                text = "${matchedTasks.size} tasks",
-                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                                color = InkBlack
-                            )
-                            Text(
-                                text = "$totalSubtasksDone milestones",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = InkCharcoal
-                            )
-                        }
-                    }
+                        contentPadding = PaddingValues(12.dp),
+                        modifier = Modifier.weight(1f)
+                    )
 
-                    NeoCard(
-                        modifier = Modifier.weight(1f),
+                    NeoStatCard(
+                        label = "FOCUSED TIME",
+                        primaryValue = formatDurationBadge(totalWorkedMinutes),
+                        subtitle = "Breaks: ${formatDurationBadge(totalBreakMinutes)}",
                         backgroundColor = NeoSkyBlue,
                         cornerRadius = 16.dp,
-                        contentPadding = PaddingValues(12.dp)
-                    ) {
-                        Column {
-                            Text(
-                                text = "FOCUSED TIME",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = InkBlack
-                            )
-                            Text(
-                                text = formatDurationBadge(totalWorkedMinutes),
-                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                                color = InkBlack
-                            )
-                            Text(
-                                text = "Breaks: ${formatDurationBadge(totalBreakMinutes)}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = InkCharcoal
-                            )
-                        }
-                    }
+                        contentPadding = PaddingValues(12.dp),
+                        modifier = Modifier.weight(1f)
+                    )
                 }
 
                 Row(
@@ -524,24 +478,13 @@ fun UniversalBulkSelectBar(
                     )
                 }
 
-                Box(
-                    modifier = Modifier
-                        .minimumInteractiveComponentSize()
-                        .size(36.sdp)
-                        .clip(CircleShape)
-                        .background(SoftSheetSurface, CircleShape)
-                        .border(1.5.dp, InkBlack, CircleShape)
-                        .clickable(onClick = onCancel)
-                        .testTag("bulk_cancel_button"),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Exit Multi-Select",
-                        tint = InkBlack,
-                        modifier = Modifier.size(18.sdp)
-                    )
-                }
+                NeoCircleCloseButton(
+                    onClick = onCancel,
+                    contentDescription = "Exit Multi-Select",
+                    size = 36.sdp,
+                    iconSize = 18.sdp,
+                    modifier = Modifier.testTag("bulk_cancel_button")
+                )
             }
         }
     }
