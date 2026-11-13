@@ -36,6 +36,17 @@ fun formatOrdinalDayOfMonth(day: Int): String {
     return "${d}$suffix of month"
 }
 
+fun normalizeTaskSortOrder(rawOrder: Int): Int {
+    val normalized = if (rawOrder >= 10 && rawOrder % 10 == 0) rawOrder / 10 else rawOrder
+    return normalized.coerceIn(1, 99)
+}
+
+fun nextDaySortOrder(currentMaxOrder: Int?): Int {
+    val maxOrder = currentMaxOrder ?: 0
+    if (maxOrder <= 0) return 1
+    return (normalizeTaskSortOrder(maxOrder) + 1).coerceIn(1, 99)
+}
+
 @Immutable
 @Entity(
     tableName = "tasks",
@@ -75,6 +86,9 @@ data class TaskEntity(
         runCatching { RecurrenceRule.valueOf(recurrence) }.getOrDefault(RecurrenceRule.NONE)
 
     @Ignore
+    val effectiveStepNumber: Int = normalizeTaskSortOrder(sortOrder)
+
+    @Ignore
     val excludedEpochDays: Set<Long> =
         if (excludedEpochDaysCsv.isBlank()) {
             emptySet()
@@ -111,6 +125,10 @@ data class TaskEntity(
 
     @Ignore
     val parsedSessionSegments: List<Pair<Int, Int>> = parseSegmentsString(sessionSegments)
+
+    @Ignore
+    val hasBreakLoop: Boolean =
+        parsedSessionSegments.size > 1 || (parsedSessionSegments.size == 1 && activeSessionStartMin != null)
 
     @Ignore
     val totalWorkedMinutes: Int =
@@ -156,6 +174,12 @@ data class TaskEntity(
                 null
             }
         }
+    }
+
+    fun hasBreakLoopOnDay(epochDay: Long): Boolean {
+        val segs = parsedSessionSegmentsForDay(epochDay)
+        val active = activeSessionStartMinForDay(epochDay)
+        return segs.size > 1 || (segs.size == 1 && active != null)
     }
 
     fun withUpdatedDayCompletion(epochDay: Long, completed: Boolean): TaskEntity {

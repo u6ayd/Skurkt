@@ -37,14 +37,7 @@ enum class FlowFilterMode(val label: String) {
     TIMED_ONLY("Timed")
 }
 
-fun effectiveTaskStepNumber(task: TaskEntity): Int {
-    val raw = task.sortOrder
-    return if (raw >= 20 && raw % 10 == 0) {
-        (raw / 10).coerceIn(1, 99)
-    } else {
-        raw.coerceIn(1, 99)
-    }
-}
+fun effectiveTaskStepNumber(task: TaskEntity): Int = task.effectiveStepNumber
 
 @Immutable
 data class PendingOverlapConflict(
@@ -1029,9 +1022,7 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
     fun toggleTaskBreakLoop(task: TaskEntity) {
         val selectedEpoch = navState.value.selectedDateEpochDay
         viewModelScope.launch {
-            val daySegs = task.parsedSessionSegmentsForDay(selectedEpoch)
-            val dayActive = task.activeSessionStartMinForDay(selectedEpoch)
-            val hasBreak = daySegs.size > 1 || (daySegs.size == 1 && dayActive != null)
+            val hasBreak = task.hasBreakLoopOnDay(selectedEpoch)
             repository.toggleTaskBreakLoop(task, selectedEpoch)
             navState.update {
                 it.copy(

@@ -265,29 +265,83 @@ class PlannerRepository(private val dao: PlannerDao) {
         subtaskTitles: List<Pair<String, String>>
     ): Long {
         val nextOrder = if (task.id == 0L && task.dateEpochDay != null && task.sortOrder <= 0) {
-            val currentMax = dao.getMaxSortOrderForDay(task.dateEpochDay) ?: 0
-            val normalizedMax = if (currentMax >= 10 && currentMax % 10 == 0) currentMax / 10 else currentMax
-            (normalizedMax + 1).coerceIn(1, 99)
+            nextDaySortOrder(dao.getMaxSortOrderForDay(task.dateEpochDay))
         } else {
-            val raw = task.sortOrder
-            val normalized = if (raw >= 20 && raw % 10 == 0) raw / 10 else raw
-            normalized.coerceIn(1, 99)
+            normalizeTaskSortOrder(task.sortOrder)
         }
-        val taskId = dao.insertTask(task.copy(sortOrder = nextOrder))
-        dao.deleteSubtasksForTask(taskId)
-        val entities = subtaskTitles
-            .filter { it.first.isNotBlank() }
-            .mapIndexed { idx, (title, stage) ->
+
+        val cleanedInputs = subtaskTitles
+            .map { (rawTitle, rawStage) -> rawTitle.trim() to rawStage.trim() }
+            .filter { it.first.isNotEmpty() }
+
+        if (task.id == 0L) {
+            val newTaskId = dao.insertTask(task.copy(sortOrder = nextOrder))
+            val newSubtasks = cleanedInputs.mapIndexed { idx, (title, stage) ->
                 SubtaskEntity(
-                    taskId = taskId,
-                    title = title.trim(),
+                    taskId = newTaskId,
+                    title = title,
                     stageTag = stage.ifBlank { "STEP ${idx + 1}" },
                     isCompleted = false,
                     sortOrder = idx + 1
                 )
             }
-        if (entities.isNotEmpty()) {
-            dao.insertSubtasks(entities)
+            if (newSubtasks.isNotEmpty()) {
+                dao.insertSubtasks(newSubtasks)
+            }
+            return newTaskId
+        }
+
+        val taskId = task.id
+        val existingSubtasks = dao.getSubtasksForTask(taskId)
+        dao.updateTask(task.copy(sortOrder = nextOrder))
+
+        val consumedExistingIds = mutableSetOf<Long>()
+        val matchedByIndex = arrayOfNulls<SubtaskEntity>(cleanedInputs.size)
+
+        // Pass 1: Match by exact/case-insensitive title so reordered subtasks keep their ID & completion state
+        for (idx in cleanedInputs.indices) {
+            val targetTitle = cleanedInputs[idx].first
+            val titleMatch = existingSubtasks.firstOrNull { existing ->
+                existing.id !in consumedExistingIds &&
+                    existing.title.trim().equals(targetTitle, ignoreCase = true)
+            }
+            if (titleMatch != null) {
+                consumedExistingIds.add(titleMatch.id)
+                matchedByIndex[idx] = titleMatch
+            }
+        }
+
+        // Pass 2: Match remaining slots positionally so in-place renamed subtasks keep their ID & completion state
+        for (idx in cleanedInputs.indices) {
+            if (matchedByIndex[idx] == null && idx < existingSubtasks.size) {
+                val positionalCandidate = existingSubtasks[idx]
+                if (positionalCandidate.id !in consumedExistingIds) {
+                    consumedExistingIds.add(positionalCandidate.id)
+                    matchedByIndex[idx] = positionalCandidate
+                }
+            }
+        }
+
+        val idsToDelete = existingSubtasks
+            .map { it.id }
+            .filter { it !in consumedExistingIds }
+        if (idsToDelete.isNotEmpty()) {
+            dao.deleteSubtasksByIds(idsToDelete)
+        }
+
+        val reconciledEntities = cleanedInputs.mapIndexed { idx, (title, stage) ->
+            val matched = matchedByIndex[idx]
+            SubtaskEntity(
+                id = matched?.id ?: 0L,
+                taskId = taskId,
+                title = title,
+                stageTag = stage.ifBlank { matched?.stageTag?.ifBlank { null } ?: "STEP ${idx + 1}" },
+                isCompleted = matched?.isCompleted ?: false,
+                sortOrder = idx + 1
+            )
+        }
+        if (reconciledEntities.isNotEmpty()) {
+            dao.insertSubtasks(reconciledEntities)
         }
         return taskId
     }
@@ -334,12 +388,15 @@ class PlannerRepository(private val dao: PlannerDao) {
         dao.updateTask(task.copy(excludedEpochDaysCsv = updatedCsv))
     }
 
+    private val realtimeLock = Any()
     private val lastPauseRealtimeByTaskDay = mutableMapOf<Pair<Long, Long>, Long>()
     private val lastStartRealtimeByTaskDay = mutableMapOf<Pair<Long, Long>, Long>()
 
     private fun clearRealtimeForTask(taskId: Long) {
-        lastPauseRealtimeByTaskDay.keys.removeAll { it.first == taskId }
-        lastStartRealtimeByTaskDay.keys.removeAll { it.first == taskId }
+        synchronized(realtimeLock) {
+            lastPauseRealtimeByTaskDay.keys.removeAll { it.first == taskId }
+            lastStartRealtimeByTaskDay.keys.removeAll { it.first == taskId }
+        }
     }
 
     suspend fun toggleTaskCompleted(
@@ -357,9 +414,7 @@ class PlannerRepository(private val dao: PlannerDao) {
         val isFutureDated = task.dateEpochDay != null && task.dateEpochDay > todayEpochDay
         val targetDateEpoch = if (markingDone && isFutureDated) todayEpochDay else task.dateEpochDay
         val updatedOrder = if (markingDone && isFutureDated) {
-            val currentMax = dao.getMaxSortOrderForDay(todayEpochDay) ?: 0
-            val normalizedMax = if (currentMax >= 10 && currentMax % 10 == 0) currentMax / 10 else currentMax
-            (normalizedMax + 1).coerceIn(1, 99)
+            nextDaySortOrder(dao.getMaxSortOrderForDay(todayEpochDay))
         } else {
             task.sortOrder
         }
@@ -384,13 +439,14 @@ class PlannerRepository(private val dao: PlannerDao) {
 
     suspend fun addQuickSubtask(taskId: Long, title: String, stageTag: String = "STEP") {
         if (title.isBlank()) return
+        val nextSortOrder = ((dao.getMaxSubtaskSortOrder(taskId) ?: 0) + 1).coerceAtLeast(1)
         dao.insertSubtask(
             SubtaskEntity(
                 taskId = taskId,
                 title = title.trim(),
                 stageTag = stageTag,
                 isCompleted = false,
-                sortOrder = 99
+                sortOrder = nextSortOrder
             )
         )
     }
@@ -403,9 +459,7 @@ class PlannerRepository(private val dao: PlannerDao) {
         durationMinutes: Int = task.durationMinutes,
         allowSimultaneous: Boolean = false
     ) {
-        val currentMax = dao.getMaxSortOrderForDay(targetEpochDay) ?: 0
-        val normalizedMax = if (currentMax >= 10 && currentMax % 10 == 0) currentMax / 10 else currentMax
-        val nextOrder = (normalizedMax + 1).coerceIn(1, 99)
+        val nextOrder = nextDaySortOrder(dao.getMaxSortOrderForDay(targetEpochDay))
         dao.updateTask(
             task.copy(
                 dateEpochDay = targetEpochDay,
@@ -465,9 +519,7 @@ class PlannerRepository(private val dao: PlannerDao) {
         val nowRealtime = android.os.SystemClock.elapsedRealtime()
         val targetDateEpoch = if (isFutureDatedOneTime) todayEpochDay else task.dateEpochDay
         val updatedOrder = if (isFutureDatedOneTime) {
-            val currentMax = dao.getMaxSortOrderForDay(todayEpochDay) ?: 0
-            val normalizedMax = if (currentMax >= 10 && currentMax % 10 == 0) currentMax / 10 else currentMax
-            (normalizedMax + 1).coerceIn(1, 99)
+            nextDaySortOrder(dao.getMaxSortOrderForDay(todayEpochDay))
         } else {
             task.sortOrder
         }
@@ -479,14 +531,16 @@ class PlannerRepository(private val dao: PlannerDao) {
         }
 
         val key = task.id to effectiveEpochDay
-        val lastPauseMs = lastPauseRealtimeByTaskDay[key]
         val existingSegs = task.parsedSessionSegmentsForDay(effectiveEpochDay)
-        val isMicroPause = lastPauseMs != null &&
-            (nowRealtime - lastPauseMs) < 60_000L &&
-            existingSegs.isNotEmpty()
-
-        lastStartRealtimeByTaskDay[key] = nowRealtime
-        lastPauseRealtimeByTaskDay.remove(key)
+        val isMicroPause = synchronized(realtimeLock) {
+            val lastPauseMs = lastPauseRealtimeByTaskDay[key]
+            val micro = lastPauseMs != null &&
+                (nowRealtime - lastPauseMs) < 60_000L &&
+                existingSegs.isNotEmpty()
+            lastStartRealtimeByTaskDay[key] = nowRealtime
+            lastPauseRealtimeByTaskDay.remove(key)
+            micro
+        }
 
         if (isMicroPause) {
             val lastSegStart = existingSegs.last().first
@@ -532,12 +586,15 @@ class PlannerRepository(private val dao: PlannerDao) {
         val startMin = task.activeSessionStartMinForDay(effectiveEpochDay) ?: task.activeSessionStartMin ?: return false
         val nowRealtime = android.os.SystemClock.elapsedRealtime()
         val key = task.id to effectiveEpochDay
-        val lastStartMs = lastStartRealtimeByTaskDay[key]
         val existingSegs = task.parsedSessionSegmentsForDay(effectiveEpochDay)
 
-        lastPauseRealtimeByTaskDay[key] = nowRealtime
+        val isShortBurst = synchronized(realtimeLock) {
+            val lastStartMs = lastStartRealtimeByTaskDay[key]
+            lastPauseRealtimeByTaskDay[key] = nowRealtime
+            existingSegs.isNotEmpty() && lastStartMs != null && (nowRealtime - lastStartMs) < 60_000L
+        }
 
-        if (existingSegs.isNotEmpty() && lastStartMs != null && (nowRealtime - lastStartMs) < 60_000L) {
+        if (isShortBurst) {
             val prevSegStart = existingSegs.last().first
             val prevSegEnd = maxOf(existingSegs.last().second, currentClockMin.coerceAtLeast(prevSegStart + 1))
             val mergedList = existingSegs.dropLast(1) + (prevSegStart to prevSegEnd)
@@ -580,14 +637,14 @@ class PlannerRepository(private val dao: PlannerDao) {
         val isFutureDatedOneTime = !isRecurring && task.dateEpochDay != null && task.dateEpochDay > todayEpochDay
         val effectiveEpochDay = if (isFutureDatedOneTime) todayEpochDay else (task.activeSessionEpochDay ?: targetEpochDay)
 
-        lastPauseRealtimeByTaskDay.remove(task.id to effectiveEpochDay)
-        lastStartRealtimeByTaskDay.remove(task.id to effectiveEpochDay)
+        synchronized(realtimeLock) {
+            lastPauseRealtimeByTaskDay.remove(task.id to effectiveEpochDay)
+            lastStartRealtimeByTaskDay.remove(task.id to effectiveEpochDay)
+        }
 
         val targetDateEpoch = if (isFutureDatedOneTime) todayEpochDay else task.dateEpochDay
         val updatedOrder = if (isFutureDatedOneTime) {
-            val currentMax = dao.getMaxSortOrderForDay(todayEpochDay) ?: 0
-            val normalizedMax = if (currentMax >= 10 && currentMax % 10 == 0) currentMax / 10 else currentMax
-            (normalizedMax + 1).coerceIn(1, 99)
+            nextDaySortOrder(dao.getMaxSortOrderForDay(todayEpochDay))
         } else {
             task.sortOrder
         }
@@ -623,9 +680,7 @@ class PlannerRepository(private val dao: PlannerDao) {
         task: TaskEntity,
         targetEpochDay: Long = LocalDate.now().toEpochDay()
     ) {
-        val daySegs = task.parsedSessionSegmentsForDay(targetEpochDay)
-        val dayActive = task.activeSessionStartMinForDay(targetEpochDay)
-        val hasBreak = daySegs.size > 1 || (daySegs.size == 1 && dayActive != null)
+        val hasBreak = task.hasBreakLoopOnDay(targetEpochDay)
         if (hasBreak) {
             dao.updateTask(
                 task.withUpdatedDaySession(

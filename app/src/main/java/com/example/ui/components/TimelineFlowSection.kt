@@ -591,7 +591,7 @@ fun HybridSpineTaskRow(
     val startMin = task.startTimeMinutes ?: (9 * 60)
     val endMin = (startMin + task.durationMinutes.coerceAtLeast(5)).coerceAtMost(23 * 60 + 59)
     val segments = task.parsedSessionSegments
-    val hasPauseBreak = segments.size > 1 || (segments.size == 1 && task.activeSessionStartMin != null)
+    val hasPauseBreak = task.hasBreakLoop
 
     if (!hasPauseBreak) {
         val ovalHeight = when {
@@ -923,8 +923,7 @@ private fun TaskRightTitleAndCheckRow(
     modifier: Modifier = Modifier
 ) {
     val task = item.task
-    val hasPauseBreak = task.parsedSessionSegments.size > 1 ||
-        (task.parsedSessionSegments.size == 1 && task.activeSessionStartMin != null)
+    val hasPauseBreak = task.hasBreakLoop
 
     Row(
         modifier = modifier
@@ -1105,8 +1104,7 @@ fun TaskDetailPopupModal(
     var stepVal by remember(task.id, currentStepNumber) {
         mutableStateOf(currentStepNumber.coerceIn(1, 99))
     }
-    val hasBreakLoop = task.parsedSessionSegments.size > 1 ||
-        (task.parsedSessionSegments.size == 1 && task.activeSessionStartMin != null)
+    val hasBreakLoop = task.hasBreakLoop
 
     Dialog(
         onDismissRequest = onDismiss,
