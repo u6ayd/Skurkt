@@ -44,6 +44,12 @@ enum class FlowFilterMode(val label: String) {
 fun effectiveTaskStepNumber(task: TaskEntity): Int = task.effectiveStepNumber
 
 @Immutable
+data class FocusTimerSnapshot(
+    val accumulatedSeconds: Long = 0L,
+    val activeRunAnchorRealtimeMs: Long = 0L
+)
+
+@Immutable
 data class PendingOverlapConflict(
     val newTaskTitle: String,
     val conflictingTask: TaskEntity,
@@ -83,6 +89,7 @@ data class PlannerUiState(
     val schedulingInboxTask: TaskEntity? = null,
     val pendingOverlapConflict: PendingOverlapConflict? = null,
     val focusedTaskId: Long? = null,
+    val focusTimersByTaskDay: Map<Pair<Long, Long>, FocusTimerSnapshot> = emptyMap(),
     val statusBannerMessage: String? = null,
     val totalDayTasksCount: Int = 0,
     val completedDayTasksCount: Int = 0,
@@ -102,6 +109,9 @@ data class PlannerUiState(
                 it.task.dateEpochDay != null &&
                 selectedDateEpochDay !in it.task.excludedEpochDays
         } ?: upNextTask
+
+    fun timerSnapshotFor(taskId: Long): FocusTimerSnapshot =
+        focusTimersByTaskDay[taskId to selectedDateEpochDay] ?: FocusTimerSnapshot()
 }
 
 private data class LocalNavState(
@@ -120,6 +130,7 @@ private data class LocalNavState(
     val schedulingInboxTask: TaskEntity? = null,
     val pendingOverlapConflict: PendingOverlapConflict? = null,
     val focusedTaskId: Long? = null,
+    val focusTimersByTaskDay: Map<Pair<Long, Long>, FocusTimerSnapshot> = emptyMap(),
     val statusBannerMessage: String? = null,
     val isSettingsVisible: Boolean = false,
     val isCleanupExportVisible: Boolean = false,
@@ -380,6 +391,7 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
             schedulingInboxTask = nav.schedulingInboxTask,
             pendingOverlapConflict = nav.pendingOverlapConflict,
             focusedTaskId = nav.focusedTaskId,
+            focusTimersByTaskDay = nav.focusTimersByTaskDay,
             statusBannerMessage = nav.statusBannerMessage,
             totalDayTasksCount = schedule.totalDayTasksCount,
             completedDayTasksCount = schedule.completedDayTasksCount,
@@ -639,14 +651,16 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
     fun bulkDeleteSelectedTasks() {
         val idsToDelete = navState.value.selectedTaskIds.toList()
         if (idsToDelete.isEmpty()) return
+        val idsSet = idsToDelete.toSet()
         viewModelScope.launch {
             repository.deleteTasksByIds(idsToDelete)
             navState.update {
                 it.copy(
                     isMultiSelectActive = false,
                     selectedTaskIds = emptySet(),
-                    focusedTaskId = if (it.focusedTaskId in idsToDelete) null else it.focusedTaskId,
-                    inspectingTaskId = if (it.inspectingTaskId in idsToDelete) null else it.inspectingTaskId,
+                    focusedTaskId = if (it.focusedTaskId in idsSet) null else it.focusedTaskId,
+                    focusTimersByTaskDay = it.focusTimersByTaskDay.filterKeys { (taskId, _) -> taskId !in idsSet },
+                    inspectingTaskId = if (it.inspectingTaskId in idsSet) null else it.inspectingTaskId,
                     statusBannerMessage = "Deleted ${idsToDelete.size} task(s)"
                 )
             }
@@ -655,13 +669,15 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
 
     fun purgeCompletedTasks(taskIds: List<Long>) {
         if (taskIds.isEmpty()) return
+        val idsSet = taskIds.toSet()
         viewModelScope.launch {
             repository.deleteTasksByIds(taskIds)
             navState.update {
                 it.copy(
-                    focusedTaskId = if (it.focusedTaskId in taskIds) null else it.focusedTaskId,
-                    inspectingTaskId = if (it.inspectingTaskId in taskIds) null else it.inspectingTaskId,
-                    selectedTaskIds = it.selectedTaskIds - taskIds.toSet(),
+                    focusedTaskId = if (it.focusedTaskId in idsSet) null else it.focusedTaskId,
+                    focusTimersByTaskDay = it.focusTimersByTaskDay.filterKeys { (taskId, _) -> taskId !in idsSet },
+                    inspectingTaskId = if (it.inspectingTaskId in idsSet) null else it.inspectingTaskId,
+                    selectedTaskIds = it.selectedTaskIds - idsSet,
                     statusBannerMessage = "Cleaned up ${taskIds.size} completed task(s)"
                 )
             }
@@ -944,6 +960,7 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
                     editingTask = null,
                     inspectingTaskId = null,
                     focusedTaskId = if (it.focusedTaskId == task.id) null else it.focusedTaskId,
+                    focusTimersByTaskDay = it.focusTimersByTaskDay.filterKeys { (taskId, _) -> taskId != task.id },
                     statusBannerMessage = "Moved to Inbox"
                 )
             }
@@ -993,6 +1010,7 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
                     editingTask = null,
                     inspectingTaskId = null,
                     focusedTaskId = if (it.focusedTaskId == taskId) null else it.focusedTaskId,
+                    focusTimersByTaskDay = it.focusTimersByTaskDay.filterKeys { (id, _) -> id != taskId },
                     statusBannerMessage = "Removed"
                 )
             }
@@ -1009,6 +1027,7 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
                     editingTask = null,
                     inspectingTaskId = null,
                     focusedTaskId = if (it.focusedTaskId == task.id) null else it.focusedTaskId,
+                    focusTimersByTaskDay = it.focusTimersByTaskDay - (task.id to currentEpoch),
                     statusBannerMessage = "Removed for today only"
                 )
             }
@@ -1036,20 +1055,32 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
     fun startOrResumeFocusTimer(task: TaskEntity) {
         val todayEpoch = LocalDate.now().toEpochDay()
         val selectedEpoch = navState.value.selectedDateEpochDay
+        val nowRealtime = android.os.SystemClock.elapsedRealtime()
         viewModelScope.launch {
             val (mergedMicroPause, pulledFromFuture) = repository.startOrResumeTaskSession(
                 task = task,
                 targetEpochDay = selectedEpoch,
                 todayEpochDay = todayEpoch
             )
-            navState.update {
-                it.copy(
-                    selectedDateEpochDay = if (pulledFromFuture) todayEpoch else it.selectedDateEpochDay,
+            val effectiveEpoch = if (pulledFromFuture) todayEpoch else selectedEpoch
+            val key = task.id to effectiveEpoch
+            navState.update { state ->
+                val existingSnap = state.focusTimersByTaskDay[key] ?: FocusTimerSnapshot()
+                val nextSnap = existingSnap.copy(
+                    activeRunAnchorRealtimeMs = if (existingSnap.activeRunAnchorRealtimeMs != 0L) {
+                        existingSnap.activeRunAnchorRealtimeMs
+                    } else {
+                        nowRealtime
+                    }
+                )
+                state.copy(
+                    selectedDateEpochDay = effectiveEpoch,
                     focusedTaskId = task.id,
+                    focusTimersByTaskDay = state.focusTimersByTaskDay + (key to nextSnap),
                     statusBannerMessage = when {
                         pulledFromFuture -> "Pulled into Today's Flow • Timer started"
                         mergedMicroPause -> "Resumed • Micro-pause (<60s) merged"
-                        else -> it.statusBannerMessage
+                        else -> state.statusBannerMessage
                     }
                 )
             }
@@ -1058,13 +1089,27 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
 
     fun pauseFocusTimer(task: TaskEntity) {
         val selectedEpoch = navState.value.selectedDateEpochDay
+        val effectiveEpoch = task.activeSessionEpochDay ?: selectedEpoch
+        val key = task.id to effectiveEpoch
+        val nowRealtime = android.os.SystemClock.elapsedRealtime()
         viewModelScope.launch {
             val mergedShortBurst = repository.pauseTaskSession(
                 task = task,
                 targetEpochDay = selectedEpoch
             )
-            navState.update {
-                it.copy(
+            navState.update { state ->
+                val existingSnap = state.focusTimersByTaskDay[key] ?: FocusTimerSnapshot()
+                val deltaSec = if (existingSnap.activeRunAnchorRealtimeMs != 0L) {
+                    ((nowRealtime - existingSnap.activeRunAnchorRealtimeMs) / 1000L).coerceAtLeast(0L)
+                } else {
+                    0L
+                }
+                val nextSnap = FocusTimerSnapshot(
+                    accumulatedSeconds = existingSnap.accumulatedSeconds + deltaSec,
+                    activeRunAnchorRealtimeMs = 0L
+                )
+                state.copy(
+                    focusTimersByTaskDay = state.focusTimersByTaskDay + (key to nextSnap),
                     statusBannerMessage = if (mergedShortBurst) {
                         "Paused"
                     } else {
@@ -1072,6 +1117,23 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
                     }
                 )
             }
+        }
+    }
+
+    fun resetFocusTimer(task: TaskEntity) {
+        val selectedEpoch = navState.value.selectedDateEpochDay
+        val effectiveEpoch = task.activeSessionEpochDay ?: selectedEpoch
+        val key = task.id to effectiveEpoch
+        val isRunning = task.activeSessionStartMinForDay(effectiveEpoch) != null || task.activeSessionStartMin != null
+        val nowRealtime = android.os.SystemClock.elapsedRealtime()
+        navState.update { state ->
+            val resetSnap = FocusTimerSnapshot(
+                accumulatedSeconds = 0L,
+                activeRunAnchorRealtimeMs = if (isRunning) nowRealtime else 0L
+            )
+            state.copy(
+                focusTimersByTaskDay = state.focusTimersByTaskDay + (key to resetSnap)
+            )
         }
     }
 
@@ -1120,10 +1182,12 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
                 targetEpochDay = selectedEpoch,
                 todayEpochDay = todayEpoch
             )
+            val effectiveEpoch = if (pulledFromFuture) todayEpoch else selectedEpoch
             navState.update {
                 it.copy(
-                    selectedDateEpochDay = if (pulledFromFuture) todayEpoch else it.selectedDateEpochDay,
+                    selectedDateEpochDay = effectiveEpoch,
                     focusedTaskId = null,
+                    focusTimersByTaskDay = it.focusTimersByTaskDay - (currentFocus.task.id to effectiveEpoch) - (currentFocus.task.id to selectedEpoch),
                     statusBannerMessage = if (pulledFromFuture) {
                         "Completed & pulled into Today's Flow"
                     } else {

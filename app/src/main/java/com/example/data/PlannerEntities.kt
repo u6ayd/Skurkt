@@ -48,6 +48,15 @@ fun nextDaySortOrder(currentMaxOrder: Int?): Int {
     return (normalizeTaskSortOrder(maxOrder) + 1).coerceIn(1, 99)
 }
 
+fun computeSessionEndMinute(startMin: Int, currentClockMin: Int): Int {
+    val unwrappedClockMin = if (currentClockMin < startMin) {
+        currentClockMin + 1440
+    } else {
+        currentClockMin
+    }
+    return unwrappedClockMin.coerceAtLeast(startMin + 1)
+}
+
 @Immutable
 @Entity(
     tableName = "tasks",

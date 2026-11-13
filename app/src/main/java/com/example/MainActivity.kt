@@ -536,8 +536,10 @@ private fun TabletLandscapeSplitLayout(
                     }
 
                     StruktDestination.FOCUS -> {
+                        val activeFocus = uiState.activeFocusTask
                         AntiParalysisFocusScreen(
-                            focusItem = uiState.activeFocusTask,
+                            focusItem = activeFocus,
+                            timerSnapshot = uiState.timerSnapshotFor(activeFocus?.task?.id ?: 0L),
                             totalDayTasksCount = uiState.totalDayTasksCount,
                             completedDayTasksCount = uiState.completedDayTasksCount,
                             onBackToFlow = { viewModel.setDestination(StruktDestination.FLOW) },
@@ -549,6 +551,7 @@ private fun TabletLandscapeSplitLayout(
                             },
                             onStartOrResumeSession = viewModel::startOrResumeFocusTimer,
                             onPauseSession = viewModel::pauseFocusTimer,
+                            onResetTimer = viewModel::resetFocusTimer,
                             onExtendDurationMinutes = viewModel::extendFocusTaskDuration,
                             onToggleSubtask = viewModel::toggleSubtaskDone,
                             onAddQuickSubtask = viewModel::addQuickSubtask,
@@ -635,8 +638,10 @@ private fun PortraitHandheldLayout(
                     }
 
                     StruktDestination.FOCUS -> {
+                        val activeFocus = uiState.activeFocusTask
                         AntiParalysisFocusScreen(
-                            focusItem = uiState.activeFocusTask,
+                            focusItem = activeFocus,
+                            timerSnapshot = uiState.timerSnapshotFor(activeFocus?.task?.id ?: 0L),
                             totalDayTasksCount = uiState.totalDayTasksCount,
                             completedDayTasksCount = uiState.completedDayTasksCount,
                             onBackToFlow = { viewModel.setDestination(StruktDestination.FLOW) },
@@ -648,6 +653,7 @@ private fun PortraitHandheldLayout(
                             },
                             onStartOrResumeSession = viewModel::startOrResumeFocusTimer,
                             onPauseSession = viewModel::pauseFocusTimer,
+                            onResetTimer = viewModel::resetFocusTimer,
                             onExtendDurationMinutes = viewModel::extendFocusTaskDuration,
                             onToggleSubtask = viewModel::toggleSubtaskDone,
                             onAddQuickSubtask = viewModel::addQuickSubtask,

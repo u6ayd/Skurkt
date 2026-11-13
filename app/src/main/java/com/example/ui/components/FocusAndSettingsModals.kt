@@ -63,6 +63,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.example.data.SubtaskEntity
 import com.example.data.TaskEntity
 import com.example.data.TaskWithSubtasks
+import com.example.ui.FocusTimerSnapshot
 import com.example.ui.theme.InkBlack
 import com.example.ui.theme.InkMuted
 import com.example.ui.theme.NeoCoral
@@ -492,12 +493,14 @@ fun OverlapConflictModal(
 @Composable
 fun AntiParalysisFocusScreen(
     focusItem: TaskWithSubtasks?,
+    timerSnapshot: FocusTimerSnapshot = FocusTimerSnapshot(),
     totalDayTasksCount: Int = 0,
     completedDayTasksCount: Int = 0,
     onBackToFlow: () -> Unit,
     onAddTaskToFlow: () -> Unit = {},
     onStartOrResumeSession: (TaskEntity) -> Unit,
     onPauseSession: (TaskEntity) -> Unit,
+    onResetTimer: (TaskEntity) -> Unit = {},
     onExtendDurationMinutes: (TaskEntity, Int) -> Unit = { _, _ -> },
     onToggleSubtask: (SubtaskEntity) -> Unit,
     onAddQuickSubtask: (Long, String) -> Unit,
@@ -645,6 +648,7 @@ fun AntiParalysisFocusScreen(
                     isStopwatch = isStopwatch,
                     targetSeconds = targetSeconds,
                     isRunning = isRunning,
+                    timerSnapshot = timerSnapshot,
                     onTogglePlayPause = {
                         if (isRunning) {
                             isRunning = false
@@ -654,6 +658,7 @@ fun AntiParalysisFocusScreen(
                             onStartOrResumeSession(task)
                         }
                     },
+                    onResetTimer = { onResetTimer(task) },
                     onExtendDurationMinutes = { deltaMins ->
                         onExtendDurationMinutes(task, deltaMins)
                     },
@@ -685,7 +690,9 @@ private fun FocusHeroAndTimerCard(
     isStopwatch: Boolean,
     targetSeconds: Long,
     isRunning: Boolean,
+    timerSnapshot: FocusTimerSnapshot,
     onTogglePlayPause: () -> Unit,
+    onResetTimer: () -> Unit,
     onExtendDurationMinutes: (Int) -> Unit,
     onCompleteAndAdvance: () -> Unit
 ) {
@@ -734,7 +741,9 @@ private fun FocusHeroAndTimerCard(
                 isStopwatch = isStopwatch,
                 targetSeconds = targetSeconds,
                 isRunning = isRunning,
+                timerSnapshot = timerSnapshot,
                 onTogglePlayPause = onTogglePlayPause,
+                onResetTimer = onResetTimer,
                 onExtendDurationMinutes = onExtendDurationMinutes
             )
 
@@ -744,10 +753,10 @@ private fun FocusHeroAndTimerCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(52.sdp)
+                    .smoothPressClickable(role = Role.Button, onClick = onCompleteAndAdvance)
                     .clip(RoundedCornerShape(16.sdp))
                     .background(NeoMintGreen)
                     .border(1.5.dp, InkBlack, RoundedCornerShape(16.sdp))
-                    .clickable(onClick = onCompleteAndAdvance)
                     .testTag("complete_and_advance_button"),
                 contentAlignment = Alignment.Center
             ) {
@@ -775,50 +784,12 @@ private fun FocusLiveTimerReadoutCard(
     isStopwatch: Boolean,
     targetSeconds: Long,
     isRunning: Boolean,
+    timerSnapshot: FocusTimerSnapshot,
     onTogglePlayPause: () -> Unit,
+    onResetTimer: () -> Unit,
     onExtendDurationMinutes: (Int) -> Unit
 ) {
-    val lifecycleOwner = LocalLifecycleOwner.current
-    var accumulatedElapsedSeconds by remember(task.id) { mutableLongStateOf(0L) }
-    var activeRunAnchorRealtimeMs by remember(task.id) {
-        mutableLongStateOf(if (isRunning) SystemClock.elapsedRealtime() else 0L)
-    }
-    var displayElapsedSeconds by remember(task.id) { mutableLongStateOf(0L) }
-
-    LaunchedEffect(task.id, isRunning, lifecycleOwner) {
-        if (isRunning) {
-            if (activeRunAnchorRealtimeMs == 0L) {
-                activeRunAnchorRealtimeMs = SystemClock.elapsedRealtime()
-            }
-            lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                while (true) {
-                    val deltaSec = ((SystemClock.elapsedRealtime() - activeRunAnchorRealtimeMs) / 1000L).coerceAtLeast(0L)
-                    displayElapsedSeconds = accumulatedElapsedSeconds + deltaSec
-                    delay(1000L)
-                }
-            }
-        } else {
-            if (activeRunAnchorRealtimeMs != 0L) {
-                val deltaSec = ((SystemClock.elapsedRealtime() - activeRunAnchorRealtimeMs) / 1000L).coerceAtLeast(0L)
-                accumulatedElapsedSeconds += deltaSec
-                activeRunAnchorRealtimeMs = 0L
-            }
-            displayElapsedSeconds = accumulatedElapsedSeconds
-        }
-    }
-
-    val shownSeconds = if (isStopwatch) {
-        displayElapsedSeconds
-    } else {
-        (targetSeconds - displayElapsedSeconds).coerceAtLeast(0L)
-    }
-    val mins = shownSeconds / 60L
-    val secs = shownSeconds % 60L
-    val progress = if (isStopwatch) {
-        ((displayElapsedSeconds % 1500L).toFloat() / 1500f).coerceIn(0f, 1f)
-    } else {
-        (displayElapsedSeconds.toFloat() / targetSeconds.toFloat()).coerceIn(0f, 1f)
-    }
+    var localResetGeneration by remember(task.id) { mutableIntStateOf(0) }
 
     NeoCard(
         modifier = Modifier.fillMaxWidth(),
@@ -847,17 +818,14 @@ private fun FocusLiveTimerReadoutCard(
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            Text(
-                text = String.format(Locale.US, "%02d:%02d", mins, secs),
-                style = MaterialTheme.typography.displayLarge.copy(
-                    fontSize = 46.ssp,
-                    fontWeight = FontWeight.Bold,
-                    fontFeatureSettings = "tnum"
-                ),
-                color = InkBlack
+            FocusLiveClockAndProgressLeaf(
+                taskId = task.id,
+                isStopwatch = isStopwatch,
+                targetSeconds = targetSeconds,
+                isRunning = isRunning,
+                timerSnapshot = timerSnapshot,
+                localResetGeneration = localResetGeneration
             )
-            Spacer(modifier = Modifier.height(10.dp))
-            NeoProgressBar(progress = progress, fillColor = InkBlack, height = 10.sdp)
 
             if (!isStopwatch) {
                 Spacer(modifier = Modifier.height(12.dp))
@@ -886,7 +854,7 @@ private fun FocusLiveTimerReadoutCard(
                 NeoPillButton(
                     text = when {
                         isRunning -> "Pause (Break)"
-                        task.parsedSessionSegments.isNotEmpty() -> "Resume"
+                        task.parsedSessionSegments.isNotEmpty() || timerSnapshot.accumulatedSeconds > 0L -> "Resume"
                         else -> "Play Timer"
                     },
                     icon = if (isRunning) Icons.Default.Pause else Icons.Default.PlayArrow,
@@ -899,14 +867,116 @@ private fun FocusLiveTimerReadoutCard(
                     text = "Reset",
                     icon = Icons.Default.Refresh,
                     onClick = {
-                        accumulatedElapsedSeconds = 0L
-                        activeRunAnchorRealtimeMs = if (isRunning) SystemClock.elapsedRealtime() else 0L
-                        displayElapsedSeconds = 0L
+                        localResetGeneration++
+                        onResetTimer()
                     }
                 )
             }
         }
     }
+}
+
+@Composable
+private fun FocusLiveClockAndProgressLeaf(
+    taskId: Long,
+    isStopwatch: Boolean,
+    targetSeconds: Long,
+    isRunning: Boolean,
+    timerSnapshot: FocusTimerSnapshot,
+    localResetGeneration: Int
+) {
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var fallbackAccumulatedSeconds by remember(taskId, localResetGeneration) {
+        mutableLongStateOf(timerSnapshot.accumulatedSeconds)
+    }
+    var fallbackAnchorRealtimeMs by remember(taskId, localResetGeneration) {
+        mutableLongStateOf(
+            when {
+                timerSnapshot.activeRunAnchorRealtimeMs != 0L -> timerSnapshot.activeRunAnchorRealtimeMs
+                isRunning -> SystemClock.elapsedRealtime()
+                else -> 0L
+            }
+        )
+    }
+
+    val effectiveAccumulatedSeconds = if (timerSnapshot.accumulatedSeconds > 0L || localResetGeneration > 0) {
+        timerSnapshot.accumulatedSeconds
+    } else {
+        fallbackAccumulatedSeconds
+    }
+
+    val effectiveAnchorMs = when {
+        !isRunning -> 0L
+        timerSnapshot.activeRunAnchorRealtimeMs != 0L -> timerSnapshot.activeRunAnchorRealtimeMs
+        fallbackAnchorRealtimeMs != 0L -> fallbackAnchorRealtimeMs
+        else -> SystemClock.elapsedRealtime()
+    }
+
+    var displayElapsedSeconds by remember(taskId, localResetGeneration) {
+        val initialDelta = if (isRunning && effectiveAnchorMs != 0L) {
+            ((SystemClock.elapsedRealtime() - effectiveAnchorMs) / 1000L).coerceAtLeast(0L)
+        } else {
+            0L
+        }
+        mutableLongStateOf(effectiveAccumulatedSeconds + initialDelta)
+    }
+
+    LaunchedEffect(
+        taskId,
+        isRunning,
+        effectiveAccumulatedSeconds,
+        effectiveAnchorMs,
+        localResetGeneration,
+        lifecycleOwner
+    ) {
+        if (isRunning) {
+            val anchor = if (effectiveAnchorMs != 0L) effectiveAnchorMs else SystemClock.elapsedRealtime()
+            fallbackAnchorRealtimeMs = anchor
+            lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (true) {
+                    val deltaSec = ((SystemClock.elapsedRealtime() - anchor) / 1000L).coerceAtLeast(0L)
+                    displayElapsedSeconds = effectiveAccumulatedSeconds + deltaSec
+                    delay(1000L)
+                }
+            }
+        } else {
+            if (fallbackAnchorRealtimeMs != 0L && timerSnapshot.accumulatedSeconds == 0L) {
+                val deltaSec = ((SystemClock.elapsedRealtime() - fallbackAnchorRealtimeMs) / 1000L).coerceAtLeast(0L)
+                fallbackAccumulatedSeconds += deltaSec
+                fallbackAnchorRealtimeMs = 0L
+            }
+            displayElapsedSeconds = if (timerSnapshot.accumulatedSeconds > 0L) {
+                timerSnapshot.accumulatedSeconds
+            } else {
+                fallbackAccumulatedSeconds
+            }
+        }
+    }
+
+    val shownSeconds = if (isStopwatch) {
+        displayElapsedSeconds
+    } else {
+        (targetSeconds - displayElapsedSeconds).coerceAtLeast(0L)
+    }
+    val mins = shownSeconds / 60L
+    val secs = shownSeconds % 60L
+    val progress = if (isStopwatch) {
+        ((displayElapsedSeconds % 1500L).toFloat() / 1500f).coerceIn(0f, 1f)
+    } else {
+        (displayElapsedSeconds.toFloat() / targetSeconds.toFloat()).coerceIn(0f, 1f)
+    }
+
+    Text(
+        text = String.format(Locale.US, "%02d:%02d", mins, secs),
+        style = MaterialTheme.typography.displayLarge.copy(
+            fontSize = 46.ssp,
+            fontWeight = FontWeight.Bold,
+            fontFeatureSettings = "tnum"
+        ),
+        color = InkBlack
+    )
+    Spacer(modifier = Modifier.height(10.dp))
+    NeoProgressBar(progress = progress, fillColor = InkBlack, height = 10.sdp)
 }
 
 @Composable
@@ -939,7 +1009,7 @@ private fun FocusSubtasksAndSessionCard(
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(12.dp))
                             .background(SoftSheetSurface)
-                            .clickable { onToggleSubtask(sub) }
+                            .smoothPressClickable { onToggleSubtask(sub) }
                             .padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {

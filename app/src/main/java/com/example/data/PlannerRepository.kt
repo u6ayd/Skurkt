@@ -561,12 +561,18 @@ class PlannerRepository(private val dao: PlannerDao) {
             return true to isFutureDatedOneTime
         }
 
+        val resolvedActiveStartMin = if (existingSegs.isNotEmpty() && currentClockMin < existingSegs.last().second) {
+            currentClockMin + 1440
+        } else {
+            currentClockMin
+        }
+
         dao.updateTask(
             task
                 .withUpdatedDaySession(
                     epochDay = effectiveEpochDay,
                     newSegments = task.sessionSegmentsForDay(effectiveEpochDay),
-                    newActiveStartMin = currentClockMin
+                    newActiveStartMin = resolvedActiveStartMin
                 )
                 .copy(
                     dateEpochDay = targetDateEpoch,
@@ -596,7 +602,7 @@ class PlannerRepository(private val dao: PlannerDao) {
 
         if (isShortBurst) {
             val prevSegStart = existingSegs.last().first
-            val prevSegEnd = maxOf(existingSegs.last().second, currentClockMin.coerceAtLeast(prevSegStart + 1))
+            val prevSegEnd = maxOf(existingSegs.last().second, computeSessionEndMinute(prevSegStart, currentClockMin))
             val mergedList = existingSegs.dropLast(1) + (prevSegStart to prevSegEnd)
             val updatedSegments = mergedList.joinToString("||") { "${it.first}-${it.second}" }
             dao.updateTask(
@@ -609,7 +615,7 @@ class PlannerRepository(private val dao: PlannerDao) {
             return true
         }
 
-        val endMin = currentClockMin.coerceAtLeast(startMin + 1)
+        val endMin = computeSessionEndMinute(startMin, currentClockMin)
         val newSeg = "$startMin-$endMin"
         val daySegments = task.sessionSegmentsForDay(effectiveEpochDay)
         val updatedSegments = if (daySegments.isBlank()) {
@@ -651,7 +657,7 @@ class PlannerRepository(private val dao: PlannerDao) {
         val startMin = task.activeSessionStartMinForDay(effectiveEpochDay) ?: task.activeSessionStartMin
         val daySegments = task.sessionSegmentsForDay(effectiveEpochDay)
         val updatedSegments = if (startMin != null) {
-            val endMin = currentClockMin.coerceAtLeast(startMin + 1)
+            val endMin = computeSessionEndMinute(startMin, currentClockMin)
             val newSeg = "$startMin-$endMin"
             if (daySegments.isBlank()) newSeg else "$daySegments||$newSeg"
         } else {
