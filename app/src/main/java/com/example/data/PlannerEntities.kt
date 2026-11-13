@@ -8,6 +8,7 @@ import androidx.room.Ignore
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import androidx.room.Relation
+import java.time.LocalDate
 
 enum class TaskMode {
     TIMELESS_STEP,
@@ -84,6 +85,9 @@ data class TaskEntity(
     @Ignore
     val recurrenceEnum: RecurrenceRule =
         runCatching { RecurrenceRule.valueOf(recurrence) }.getOrDefault(RecurrenceRule.NONE)
+
+    @Ignore
+    val originLocalDate: LocalDate? = dateEpochDay?.let { LocalDate.ofEpochDay(it) }
 
     @Ignore
     val effectiveStepNumber: Int = normalizeTaskSortOrder(sortOrder)

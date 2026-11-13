@@ -14,10 +14,14 @@ import com.example.data.TaskEntity
 import com.example.data.TaskMode
 import com.example.data.TaskWithSubtasks
 import com.example.ui.components.GlobalClockFormat
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -60,6 +64,7 @@ data class PlannerUiState(
     val searchQuery: String = "",
     val topBubbles: List<TaskWithSubtasks> = emptyList(),
     val spineFlowTasks: List<TaskWithSubtasks> = emptyList(),
+    val unfilteredSpineTasks: List<TaskWithSubtasks> = emptyList(),
     val simultaneousTaskIds: Set<Long> = emptySet(),
     val freeGapMinutesBeforeIndex: Map<Int, Int> = emptyMap(),
     val upNextTask: TaskWithSubtasks? = null,
@@ -150,15 +155,83 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    val uiState: StateFlow<PlannerUiState> = combine(
+    private data class DayScheduleKey(
+        val selectedDateEpochDay: Long,
+        val flowFilter: FlowFilterMode
+    )
+
+    private data class ComputedDaySchedule(
+        val selectedDateEpochDay: Long,
+        val selectedLocalDate: LocalDate,
+        val flowFilter: FlowFilterMode,
+        val projectedAllTasks: List<TaskWithSubtasks>,
+        val topBubbles: List<TaskWithSubtasks>,
+        val unfilteredSpine: List<TaskWithSubtasks>,
+        val filteredSpine: List<TaskWithSubtasks>,
+        val simultaneousTaskIds: Set<Long>,
+        val freeGapMinutesBeforeIndex: Map<Int, Int>,
+        val upNextTask: TaskWithSubtasks?,
+        val weekDotColorsByEpochDay: Map<Long, List<String>>,
+        val totalDayTasksCount: Int,
+        val completedDayTasksCount: Int,
+        val dayReadinessPercent: Int
+    )
+
+    private val weekDotColorsFlow = combine(
         repository.allTasksFlow,
-        repository.allFoldersFlow,
         navState
-    ) { allTasks, folders, nav ->
-        val selectedDate = LocalDate.ofEpochDay(nav.selectedDateEpochDay)
+            .map { nav ->
+                val selectedDate = LocalDate.ofEpochDay(nav.selectedDateEpochDay)
+                selectedDate.minusDays((selectedDate.dayOfWeek.value - 1).toLong()).toEpochDay()
+            }
+            .distinctUntilChanged()
+    ) { allTasks, startOfWeekEpochDay ->
+        val startOfCurrentWeek = LocalDate.ofEpochDay(startOfWeekEpochDay)
+        val scheduledTasks = allTasks.filter { it.task.dateEpochDay != null }
+        val nonRecurringByDay = scheduledTasks
+            .filter { it.task.recurrenceEnum == RecurrenceRule.NONE }
+            .groupBy { it.task.dateEpochDay!! }
+        val recurringTasks = scheduledTasks
+            .filter { it.task.recurrenceEnum != RecurrenceRule.NONE }
+
+        buildMap<Long, List<String>> {
+            for (dayOffset in -56L..56L) {
+                val day = startOfCurrentWeek.plusDays(dayOffset)
+                val dayEpoch = day.toEpochDay()
+                val direct = nonRecurringByDay[dayEpoch].orEmpty()
+                val colors = ArrayList<String>(4)
+                for (item in direct) {
+                    if (colors.size >= 4) break
+                    if (dayEpoch !in item.task.excludedEpochDays) {
+                        colors.add(item.task.colorKey)
+                    }
+                }
+                if (colors.size < 4) {
+                    for (rec in recurringTasks) {
+                        if (colors.size >= 4) break
+                        if (rec.task.dateEpochDay != dayEpoch && matchesDate(rec.task, day)) {
+                            colors.add(rec.task.colorKey)
+                        }
+                    }
+                }
+                if (colors.isNotEmpty()) {
+                    put(dayEpoch, colors)
+                }
+            }
+        }
+    }.flowOn(Dispatchers.Default)
+
+    private val computedDayScheduleFlow = combine(
+        repository.allTasksFlow,
+        weekDotColorsFlow,
+        navState
+            .map { DayScheduleKey(it.selectedDateEpochDay, it.flowFilter) }
+            .distinctUntilChanged()
+    ) { allTasks, weekDots, key ->
+        val selectedDate = LocalDate.ofEpochDay(key.selectedDateEpochDay)
 
         val projectedAllTasks = allTasks.map { item ->
-            item.forEpochDay(nav.selectedDateEpochDay)
+            item.forEpochDay(key.selectedDateEpochDay)
         }
 
         val tasksForSelectedDay = projectedAllTasks.filter { item ->
@@ -196,7 +269,7 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
             }
         }
 
-        val filteredSpine = when (nav.flowFilter) {
+        val filteredSpine = when (key.flowFilter) {
             FlowFilterMode.ALL -> fullSpine
             FlowFilterMode.TIMELESS_ONLY -> fullSpine.filter { it.task.modeEnum == TaskMode.TIMELESS_STEP }
             FlowFilterMode.TIMED_ONLY -> fullSpine.filter { it.task.modeEnum == TaskMode.TIMED_BLOCK }
@@ -241,7 +314,34 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
         val nextUp = fullSpine.firstOrNull { !it.task.isCompleted }
             ?: bubbles.firstOrNull { !it.task.isCompleted }
 
-        val inbox = projectedAllTasks
+        val totalDayCount = bubbles.size + filteredSpine.size
+        val completedDayCount = bubbles.count { it.task.isCompleted } + filteredSpine.count { it.task.isCompleted }
+        val readinessPct = if (totalDayCount == 0) 0 else ((completedDayCount * 100f) / totalDayCount).toInt()
+
+        ComputedDaySchedule(
+            selectedDateEpochDay = key.selectedDateEpochDay,
+            selectedLocalDate = selectedDate,
+            flowFilter = key.flowFilter,
+            projectedAllTasks = projectedAllTasks,
+            topBubbles = bubbles,
+            unfilteredSpine = fullSpine,
+            filteredSpine = filteredSpine,
+            simultaneousTaskIds = simultaneousIds,
+            freeGapMinutesBeforeIndex = freeGapsByIndex,
+            upNextTask = nextUp,
+            weekDotColorsByEpochDay = weekDots,
+            totalDayTasksCount = totalDayCount,
+            completedDayTasksCount = completedDayCount,
+            dayReadinessPercent = readinessPct
+        )
+    }.flowOn(Dispatchers.Default)
+
+    val uiState: StateFlow<PlannerUiState> = combine(
+        computedDayScheduleFlow,
+        repository.allFoldersFlow,
+        navState
+    ) { schedule, folders, nav ->
+        val inbox = schedule.projectedAllTasks
             .filter { it.task.dateEpochDay == null }
             .filter {
                 nav.searchQuery.isBlank() ||
@@ -249,64 +349,27 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
                     it.task.folderName.contains(nav.searchQuery, ignoreCase = true)
             }
 
-        val scheduledTasks = projectedAllTasks.filter { it.task.dateEpochDay != null }
-        val nonRecurringByDay = scheduledTasks
-            .filter { it.task.recurrenceEnum == RecurrenceRule.NONE }
-            .groupBy { it.task.dateEpochDay!! }
-        val recurringTasks = scheduledTasks
-            .filter { it.task.recurrenceEnum != RecurrenceRule.NONE }
-
-        val startOfCurrentWeek = selectedDate.minusDays((selectedDate.dayOfWeek.value - 1).toLong())
-        val weekDots = buildMap<Long, List<String>> {
-            for (dayOffset in -56L..56L) {
-                val day = startOfCurrentWeek.plusDays(dayOffset)
-                val dayEpoch = day.toEpochDay()
-                val direct = nonRecurringByDay[dayEpoch].orEmpty()
-                val colors = ArrayList<String>(4)
-                for (item in direct) {
-                    if (colors.size >= 4) break
-                    if (dayEpoch !in item.task.excludedEpochDays) {
-                        colors.add(item.task.colorKey)
-                    }
-                }
-                if (colors.size < 4) {
-                    for (rec in recurringTasks) {
-                        if (colors.size >= 4) break
-                        if (rec.task.dateEpochDay != dayEpoch && matchesDate(rec.task, day)) {
-                            colors.add(rec.task.colorKey)
-                        }
-                    }
-                }
-                if (colors.isNotEmpty()) {
-                    put(dayEpoch, colors)
-                }
-            }
-        }
-
         val inspected = nav.inspectingTaskId?.let { id ->
-            projectedAllTasks.firstOrNull { it.task.id == id }
+            schedule.projectedAllTasks.firstOrNull { it.task.id == id }
         }
-
-        val totalDayCount = bubbles.size + filteredSpine.size
-        val completedDayCount = bubbles.count { it.task.isCompleted } + filteredSpine.count { it.task.isCompleted }
-        val readinessPct = if (totalDayCount == 0) 0 else ((completedDayCount * 100f) / totalDayCount).toInt()
 
         PlannerUiState(
-            selectedDateEpochDay = nav.selectedDateEpochDay,
-            selectedLocalDate = selectedDate,
+            selectedDateEpochDay = schedule.selectedDateEpochDay,
+            selectedLocalDate = schedule.selectedLocalDate,
             activeDestination = nav.activeDestination,
-            flowFilter = nav.flowFilter,
+            flowFilter = schedule.flowFilter,
             searchQuery = nav.searchQuery,
-            topBubbles = bubbles,
-            spineFlowTasks = filteredSpine,
-            simultaneousTaskIds = simultaneousIds,
-            freeGapMinutesBeforeIndex = freeGapsByIndex,
-            upNextTask = nextUp,
+            topBubbles = schedule.topBubbles,
+            spineFlowTasks = schedule.filteredSpine,
+            unfilteredSpineTasks = schedule.unfilteredSpine,
+            simultaneousTaskIds = schedule.simultaneousTaskIds,
+            freeGapMinutesBeforeIndex = schedule.freeGapMinutesBeforeIndex,
+            upNextTask = schedule.upNextTask,
             inboxTasks = inbox,
-            allTasks = projectedAllTasks,
+            allTasks = schedule.projectedAllTasks,
             folders = folders,
             selectedFolderId = nav.selectedFolderId,
-            weekDotColorsByEpochDay = weekDots,
+            weekDotColorsByEpochDay = schedule.weekDotColorsByEpochDay,
             editingTask = nav.editingTask,
             isEditorVisible = nav.isEditorVisible,
             editorDefaultMode = nav.editorDefaultMode,
@@ -318,9 +381,9 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
             pendingOverlapConflict = nav.pendingOverlapConflict,
             focusedTaskId = nav.focusedTaskId,
             statusBannerMessage = nav.statusBannerMessage,
-            totalDayTasksCount = totalDayCount,
-            completedDayTasksCount = completedDayCount,
-            dayReadinessPercent = readinessPct,
+            totalDayTasksCount = schedule.totalDayTasksCount,
+            completedDayTasksCount = schedule.completedDayTasksCount,
+            dayReadinessPercent = schedule.dayReadinessPercent,
             isSettingsVisible = nav.isSettingsVisible,
             isCleanupExportVisible = nav.isCleanupExportVisible,
             isMultiSelectActive = nav.isMultiSelectActive,
@@ -329,18 +392,20 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
             startOfDayMinutes = nav.startOfDayMinutes,
             endOfDayMinutes = nav.endOfDayMinutes
         )
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = PlannerUiState()
-    )
+    }
+        .flowOn(Dispatchers.Default)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = PlannerUiState()
+        )
 
     private fun matchesDate(task: TaskEntity, targetDate: LocalDate): Boolean {
         val taskEpoch = task.dateEpochDay ?: return false
         val targetEpoch = targetDate.toEpochDay()
         if (targetEpoch in task.excludedEpochDays) return false
         if (taskEpoch == targetEpoch) return true
-        val originDate = LocalDate.ofEpochDay(taskEpoch)
+        val originDate = task.originLocalDate ?: LocalDate.ofEpochDay(taskEpoch)
         return when (task.recurrenceEnum) {
             RecurrenceRule.NONE -> false
             RecurrenceRule.DAILY -> targetEpoch >= taskEpoch
@@ -1033,9 +1098,10 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun updateTaskStepNumber(task: TaskEntity, newStepNumber: Int) {
-        val totalSpine = uiState.value.spineFlowTasks.size.coerceAtLeast(1)
+        val fullSpine = uiState.value.unfilteredSpineTasks.ifEmpty { uiState.value.spineFlowTasks }
+        val totalSpine = fullSpine.size.coerceAtLeast(1)
         val clamped = newStepNumber.coerceIn(1, totalSpine)
-        val currentSpineTasks = uiState.value.spineFlowTasks.map { it.task }
+        val currentSpineTasks = fullSpine.map { it.task }
         viewModelScope.launch {
             repository.reorderDaySpineTask(currentSpineTasks, task, clamped)
             navState.update {

@@ -253,8 +253,9 @@ fun StruktPlannerApp(
             }
 
             uiState.inspectingTask?.let { inspected ->
-                val spineIdx = uiState.spineFlowTasks.indexOfFirst { it.task.id == inspected.task.id }
-                val currentStep = if (spineIdx >= 0) spineIdx + 1 else 1
+                val fullSpine = uiState.unfilteredSpineTasks.ifEmpty { uiState.spineFlowTasks }
+                val spineIdx = fullSpine.indexOfFirst { it.task.id == inspected.task.id }
+                val currentStep = if (spineIdx >= 0) spineIdx + 1 else inspected.task.effectiveStepNumber
                 TaskDetailPopupModal(
                     item = inspected,
                     currentStepNumber = currentStep,
