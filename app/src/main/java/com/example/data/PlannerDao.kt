@@ -32,6 +32,9 @@ interface PlannerDao {
     @Query("DELETE FROM tasks WHERE id = :taskId")
     suspend fun deleteTaskById(taskId: Long)
 
+    @Query("DELETE FROM tasks WHERE id IN (:taskIds)")
+    suspend fun deleteTasksByIds(taskIds: List<Long>)
+
     @Query("DELETE FROM subtasks WHERE taskId = :taskId")
     suspend fun deleteSubtasksForTask(taskId: Long)
 

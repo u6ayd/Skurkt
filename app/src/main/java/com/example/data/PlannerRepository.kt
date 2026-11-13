@@ -432,6 +432,15 @@ class PlannerRepository(private val dao: PlannerDao) {
         dao.deleteTaskById(taskId)
     }
 
+    suspend fun deleteTasksByIds(taskIds: List<Long>) {
+        if (taskIds.isEmpty()) return
+        taskIds.forEach { id ->
+            lastPauseRealtimeByTaskId.remove(id)
+            lastStartRealtimeByTaskId.remove(id)
+        }
+        dao.deleteTasksByIds(taskIds)
+    }
+
     /**
      * Live Focus Session Logging with <60s Micro-Pause Filtering and Future-Date Pull-to-Today:
      * - When Play is tapped, notes current device clock time and feeds it to the timeline.

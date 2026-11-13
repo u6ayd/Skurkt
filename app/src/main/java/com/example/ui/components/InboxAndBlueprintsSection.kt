@@ -29,8 +29,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CreateNewFolder
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
@@ -49,6 +52,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
@@ -75,12 +79,6 @@ import com.example.ui.theme.neoColorForKey
 import com.example.ui.theme.sdp
 import com.example.ui.theme.ssp
 
-/**
- * Clean Inbox Panel:
- * - Removed "+ Detailed" button per user feedback.
- * - Placeholder shortened to simply "Brain dump".
- * - Clicking "+" on an Inbox item opens a compact Schedule into Flow mini-popup.
- */
 @Composable
 fun NeoInboxPane(
     inboxTasks: List<TaskWithSubtasks>,
@@ -90,6 +88,11 @@ fun NeoInboxPane(
     onQuickAddInbox: (String) -> Unit,
     onOpenSchedulePopup: (TaskEntity) -> Unit,
     onEditInboxTask: (TaskWithSubtasks) -> Unit,
+    isMultiSelectActive: Boolean = false,
+    selectedTaskIds: Set<Long> = emptySet(),
+    onToggleMultiSelectMode: () -> Unit = {},
+    onToggleSelectTask: (Long) -> Unit = {},
+    onEnterMultiSelectWithTask: (Long) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var brainDumpText by remember { mutableStateOf("") }
@@ -101,30 +104,46 @@ fun NeoInboxPane(
             .padding(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 0.dp)
     ) {
         Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(14.dp))
-                .background(NeoCoral)
-                .border(1.5.dp, InkBlack, RoundedCornerShape(14.dp))
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = Icons.Default.Inbox,
-                contentDescription = null,
-                tint = PureWhiteSurface,
-                modifier = Modifier.size(18.sdp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = "Inbox",
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = PureWhiteSurface
-            )
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(NeoCoral)
+                    .border(1.5.dp, InkBlack, RoundedCornerShape(14.dp))
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Inbox,
+                    contentDescription = null,
+                    tint = PureWhiteSurface,
+                    modifier = Modifier.size(18.sdp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Inbox",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = PureWhiteSurface
+                )
+            }
+
+            if (inboxTasks.isNotEmpty() || isMultiSelectActive) {
+                NeoPillButton(
+                    text = if (isMultiSelectActive) "Done" else "Select",
+                    icon = Icons.Default.Checklist,
+                    selected = isMultiSelectActive,
+                    activeColor = NeoYellow,
+                    onClick = onToggleMultiSelectMode,
+                    modifier = Modifier.testTag("inbox_multi_select_toggle")
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        // Symmetrical 18.dp rounded summary boxes with normal 1.5.dp lines
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -193,7 +212,6 @@ fun NeoInboxPane(
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        // Symmetrical "Brain dump" box + "+" button (identical 52.sdp height, 18.dp corner radius, 1.5.dp ink border)
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -271,11 +289,23 @@ fun NeoInboxPane(
             ) { item ->
                 val task = item.task
                 val color = neoColorForKey(task.colorKey)
+                val isSelected = task.id in selectedTaskIds
                 NeoCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    backgroundColor = PureWhiteSurface,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .smoothCombinedClickable(
+                            role = Role.Button,
+                            onLongClick = { onEnterMultiSelectWithTask(task.id) },
+                            onClick = {
+                                if (isMultiSelectActive) {
+                                    onToggleSelectTask(task.id)
+                                } else {
+                                    onEditInboxTask(item)
+                                }
+                            }
+                        ),
+                    backgroundColor = if (isSelected) NeoYellow else PureWhiteSurface,
                     cornerRadius = 18.dp,
-                    onClick = { onEditInboxTask(item) },
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)
                 ) {
                     Row(
@@ -291,12 +321,12 @@ fun NeoInboxPane(
                                 modifier = Modifier
                                     .size(42.dp)
                                     .clip(RoundedCornerShape(14.dp))
-                                    .background(color)
+                                    .background(if (isSelected) PureWhiteSurface else color)
                                     .border(1.5.dp, InkBlack, RoundedCornerShape(14.dp)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
-                                    imageVector = iconForKey(task.iconKey),
+                                    imageVector = if (isSelected) Icons.Default.Check else iconForKey(task.iconKey),
                                     contentDescription = null,
                                     tint = InkBlack,
                                     modifier = Modifier.size(20.dp)
@@ -322,23 +352,31 @@ fun NeoInboxPane(
                             }
                         }
 
-                        Box(
-                            modifier = Modifier
-                                .minimumInteractiveComponentSize()
-                                .size(38.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(SoftSheetSurface)
-                                .border(1.5.dp, InkBlack, RoundedCornerShape(12.dp))
-                                .clickable { onOpenSchedulePopup(task) }
-                                .testTag("schedule_inbox_task_${task.id}"),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Add,
-                                contentDescription = "Schedule into Flow",
-                                tint = InkBlack,
-                                modifier = Modifier.size(20.dp)
+                        if (isMultiSelectActive) {
+                            NeoCircleCheckbox(
+                                checked = isSelected,
+                                accentColor = NeoMintGreen,
+                                onCheckedChange = { onToggleSelectTask(task.id) }
                             )
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .minimumInteractiveComponentSize()
+                                    .size(38.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(SoftSheetSurface)
+                                    .border(1.5.dp, InkBlack, RoundedCornerShape(12.dp))
+                                    .clickable { onOpenSchedulePopup(task) }
+                                    .testTag("schedule_inbox_task_${task.id}"),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Add,
+                                    contentDescription = "Schedule into Flow",
+                                    tint = InkBlack,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -489,12 +527,6 @@ fun ScheduleInboxMiniPopup(
     }
 }
 
-/**
- * Folders & Sections Screen (Replaces static Templates/Blueprints per user feedback):
- * - Equal-sized 2x2 minimal stat cards (only Title + Number, zero subtitle clutter).
- * - Short "Search..." placeholder.
- * - Create Folders (e.g. Physics, Reading, Sports) and Sections inside Folders, and inspect tasks by Folder & Section.
- */
 @Composable
 fun FoldersAndSectionsScreen(
     allTasks: List<TaskWithSubtasks>,
@@ -505,6 +537,13 @@ fun FoldersAndSectionsScreen(
     onSelectFolder: (Long?) -> Unit,
     onCreateFolder: (String, String, String, String, List<String>) -> Unit,
     onAddSectionToFolder: (FolderEntity, String) -> Unit,
+    onCreateTaskInFolderSection: (folderName: String, sectionName: String) -> Unit = { _, _ -> },
+    onOpenCleanupExport: () -> Unit = {},
+    isMultiSelectActive: Boolean = false,
+    selectedTaskIds: Set<Long> = emptySet(),
+    onToggleMultiSelectMode: () -> Unit = {},
+    onToggleSelectTask: (Long) -> Unit = {},
+    onEnterMultiSelectWithTask: (Long) -> Unit = {},
     onTaskClick: (TaskWithSubtasks) -> Unit,
     onToggleTaskDone: (TaskEntity) -> Unit,
     modifier: Modifier = Modifier
@@ -577,7 +616,6 @@ fun FoldersAndSectionsScreen(
             .fillMaxSize()
             .padding(horizontal = 14.dp)
     ) {
-        // Keep the vertical single-column list of folder cards intact across all devices (centered within 680.dp)
         val useTwoColumnFolderGrid = false
 
         LazyColumn(
@@ -586,7 +624,6 @@ fun FoldersAndSectionsScreen(
             contentPadding = PaddingValues(top = 10.dp, bottom = 100.dp)
         ) {
             if (selectedFolder == null) {
-                // 1. Equal-Height 2x2 Minimal Stat Grid (Title + Value only, symmetrical 18.dp corners)
                 item(key = "folders_stat_grid", contentType = "stat_grid") {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Row(
@@ -733,53 +770,66 @@ fun FoldersAndSectionsScreen(
                     }
                 }
 
-                // 2. Clean Search Bar + "+ Folder" Button
                 item(key = "folders_search_bar", contentType = "search_bar") {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OutlinedTextField(
-                            value = searchQuery,
-                            onValueChange = onSearchQueryChange,
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Default.Search,
-                                    contentDescription = null,
-                                    tint = InkBlack
-                                )
-                            },
-                            placeholder = {
-                                Text(
-                                    "Search...",
-                                    style = MaterialTheme.typography.bodyMedium.copy(
-                                        fontSize = 13.4.ssp,
-                                        fontWeight = FontWeight.Normal
-                                    ),
-                                    color = InkMuted
-                                )
-                            },
-                            textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.4.ssp),
-                            singleLine = true,
-                            shape = RoundedCornerShape(18.dp),
-                            modifier = Modifier
-                                .weight(1f)
-                                .background(PureWhiteSurface, RoundedCornerShape(18.dp))
-                        )
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutlinedTextField(
+                                value = searchQuery,
+                                onValueChange = onSearchQueryChange,
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Search,
+                                        contentDescription = null,
+                                        tint = InkBlack
+                                    )
+                                },
+                                placeholder = {
+                                    Text(
+                                        "Search...",
+                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                            fontSize = 13.4.ssp,
+                                            fontWeight = FontWeight.Normal
+                                        ),
+                                        color = InkMuted
+                                    )
+                                },
+                                textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.4.ssp),
+                                singleLine = true,
+                                shape = RoundedCornerShape(18.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .background(PureWhiteSurface, RoundedCornerShape(18.dp))
+                            )
 
-                        NeoPillButton(
-                            text = "+ Folder",
-                            icon = Icons.Default.CreateNewFolder,
-                            selected = true,
-                            activeColor = NeoYellow,
-                            onClick = { showCreateFolderPopup = true },
-                            modifier = Modifier.testTag("create_folder_button")
-                        )
+                            NeoPillButton(
+                                text = "+ Folder",
+                                icon = Icons.Default.CreateNewFolder,
+                                selected = true,
+                                activeColor = NeoYellow,
+                                onClick = { showCreateFolderPopup = true },
+                                modifier = Modifier.testTag("create_folder_button")
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            NeoPillButton(
+                                text = "Cleanup & Export (PDF / CSV)",
+                                icon = Icons.Default.Description,
+                                selected = false,
+                                onClick = onOpenCleanupExport,
+                                modifier = Modifier.testTag("open_cleanup_export_button")
+                            )
+                        }
                     }
                 }
 
-                // 3. Symmetrical Learnify-Style Folders Grid / List with generous 18.dp spacing
                 if (useTwoColumnFolderGrid) {
                     val folderRows = filteredFolders.chunked(2)
                     items(
@@ -833,10 +883,12 @@ fun FoldersAndSectionsScreen(
                     }
                 }
             } else {
-                // Inside a Selected Folder: Symmetrical Learnify Folder Header + Spaced Section Cards
                 val (folderTaskCount, folderDone, folderPct) = folderStatsByKey[selectedFolder.name.trim().lowercase()]
                     ?: Triple(0, 0, 0)
                 val accent = neoColorForKey(selectedFolder.colorKey)
+                val defaultSection = selectedFolderSectionsList.firstOrNull()
+                    ?: selectedFolder.sections.firstOrNull()
+                    ?: "Core"
 
                 item(key = "selected_folder_header_${selectedFolder.id}", contentType = "folder_header") {
                     NeoCard(
@@ -870,12 +922,23 @@ fun FoldersAndSectionsScreen(
                                     )
                                 }
 
-                                NeoPillButton(
-                                    text = "+ Section",
-                                    selected = true,
-                                    activeColor = NeoYellow,
-                                    onClick = { showAddSectionPopup = true }
-                                )
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    if (selectedFolderTasks.isNotEmpty() || isMultiSelectActive) {
+                                        NeoPillButton(
+                                            text = if (isMultiSelectActive) "Done" else "Select",
+                                            icon = Icons.Default.Checklist,
+                                            selected = isMultiSelectActive,
+                                            activeColor = NeoYellow,
+                                            onClick = onToggleMultiSelectMode
+                                        )
+                                    }
+                                    NeoPillButton(
+                                        text = "+ Section",
+                                        selected = true,
+                                        activeColor = NeoYellow,
+                                        onClick = { showAddSectionPopup = true }
+                                    )
+                                }
                             }
 
                             Row(
@@ -883,7 +946,7 @@ fun FoldersAndSectionsScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Column {
+                                Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         text = selectedFolder.name,
                                         style = MaterialTheme.typography.headlineMedium.copy(
@@ -903,21 +966,38 @@ fun FoldersAndSectionsScreen(
                                         color = InkCharcoal
                                     )
                                 }
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(50))
-                                        .background(PureWhiteSurface)
-                                        .border(1.5.dp, InkBlack, RoundedCornerShape(50))
-                                        .padding(horizontal = 10.dp, vertical = 4.dp)
+
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(
-                                        text = "$folderPct%",
-                                        style = MaterialTheme.typography.labelLarge.copy(
-                                            fontSize = 12.4.ssp,
-                                            fontWeight = FontWeight.Medium
-                                        ),
-                                        color = InkBlack
+                                    NeoPillButton(
+                                        text = "+ Add Task",
+                                        icon = Icons.Default.Add,
+                                        selected = true,
+                                        activeColor = PureWhiteSurface,
+                                        onClick = {
+                                            onCreateTaskInFolderSection(selectedFolder.name, defaultSection)
+                                        },
+                                        modifier = Modifier.testTag("folder_header_add_task_${selectedFolder.id}")
                                     )
+
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(50))
+                                            .background(PureWhiteSurface)
+                                            .border(1.5.dp, InkBlack, RoundedCornerShape(50))
+                                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                                    ) {
+                                        Text(
+                                            text = "$folderPct%",
+                                            style = MaterialTheme.typography.labelLarge.copy(
+                                                fontSize = 12.4.ssp,
+                                                fontWeight = FontWeight.Medium
+                                            ),
+                                            color = InkBlack
+                                        )
+                                    }
                                 }
                             }
 
@@ -945,42 +1025,73 @@ fun FoldersAndSectionsScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(9.dp))
-                                        .background(accent)
-                                        .border(1.5.dp, InkBlack, RoundedCornerShape(9.dp))
-                                        .padding(horizontal = 12.dp, vertical = 5.dp)
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(9.dp))
+                                            .background(accent)
+                                            .border(1.5.dp, InkBlack, RoundedCornerShape(9.dp))
+                                            .padding(horizontal = 12.dp, vertical = 5.dp)
+                                    ) {
+                                        Text(
+                                            text = sectionName,
+                                            style = MaterialTheme.typography.labelLarge.copy(fontSize = 12.4.ssp),
+                                            color = InkBlack
+                                        )
+                                    }
                                     Text(
-                                        text = sectionName,
-                                        style = MaterialTheme.typography.labelLarge.copy(fontSize = 12.4.ssp),
-                                        color = InkBlack
+                                        text = "${sectionTasks.count { it.task.isCompleted }}/${sectionTasks.size} done",
+                                        style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.4.ssp),
+                                        color = InkMuted
                                     )
                                 }
-                                Text(
-                                    text = "${sectionTasks.count { it.task.isCompleted }}/${sectionTasks.size} done",
-                                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.4.ssp),
-                                    color = InkMuted
+
+                                NeoPillButton(
+                                    text = "+ Add Task",
+                                    icon = Icons.Default.Add,
+                                    selected = true,
+                                    activeColor = NeoYellow,
+                                    onClick = {
+                                        onCreateTaskInFolderSection(selectedFolder.name, sectionName)
+                                    },
+                                    modifier = Modifier.testTag("section_add_task_${sectionName.lowercase()}")
                                 )
                             }
 
                             if (sectionTasks.isEmpty()) {
                                 Text(
-                                    text = "No tasks in this section yet.",
+                                    text = "No tasks in this section yet. Tap '+ Add Task' to create one.",
                                     style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.4.ssp),
                                     color = InkMuted
                                 )
                             } else {
                                 sectionTasks.forEach { item ->
                                     val t = item.task
+                                    val isSelected = t.id in selectedTaskIds
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .clip(RoundedCornerShape(14.dp))
-                                            .background(SoftSheetSurface)
-                                            .border(1.dp, InkBlack.copy(alpha = 0.12f), RoundedCornerShape(14.dp))
-                                            .clickable { onTaskClick(item) }
+                                            .background(if (isSelected) NeoYellow else SoftSheetSurface)
+                                            .border(
+                                                if (isSelected) 1.5.dp else 1.dp,
+                                                if (isSelected) InkBlack else InkBlack.copy(alpha = 0.12f),
+                                                RoundedCornerShape(14.dp)
+                                            )
+                                            .smoothCombinedClickable(
+                                                role = Role.Button,
+                                                onLongClick = { onEnterMultiSelectWithTask(t.id) },
+                                                onClick = {
+                                                    if (isMultiSelectActive) {
+                                                        onToggleSelectTask(t.id)
+                                                    } else {
+                                                        onTaskClick(item)
+                                                    }
+                                                }
+                                            )
                                             .padding(horizontal = 14.dp, vertical = 12.dp),
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
@@ -1007,9 +1118,15 @@ fun FoldersAndSectionsScreen(
                                         }
                                         Spacer(modifier = Modifier.width(10.dp))
                                         NeoCircleCheckbox(
-                                            checked = t.isCompleted,
-                                            accentColor = accent,
-                                            onCheckedChange = { onToggleTaskDone(t) }
+                                            checked = if (isMultiSelectActive) isSelected else t.isCompleted,
+                                            accentColor = if (isMultiSelectActive) NeoMintGreen else accent,
+                                            onCheckedChange = {
+                                                if (isMultiSelectActive) {
+                                                    onToggleSelectTask(t.id)
+                                                } else {
+                                                    onToggleTaskDone(t)
+                                                }
+                                            }
                                         )
                                     }
                                 }

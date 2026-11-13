@@ -326,12 +326,6 @@ fun DateAndWeekHeader(
     }
 }
 
-/**
- * Top Anytime Daily Quick-Bubbles (e.g., "Structure Tomorrow", "Water Plants", "Call Mum"):
- * - Single tap on the circular icon smoothly dims/animates the circle color and toggles Done/Undone.
- * - Long-press on the circular icon (or tap on its text label below) opens a clean quick-action popup
- *   with Delete, Edit, and Toggle Done options!
- */
 @Composable
 fun TopAnytimeBubblesRow(
     bubbles: List<TaskWithSubtasks>,
@@ -339,6 +333,10 @@ fun TopAnytimeBubblesRow(
     onInspectBubble: (TaskWithSubtasks) -> Unit,
     onEditBubble: (TaskWithSubtasks) -> Unit = {},
     onDeleteBubble: (Long) -> Unit = {},
+    isMultiSelectActive: Boolean = false,
+    selectedTaskIds: Set<Long> = emptySet(),
+    onToggleSelectTask: (Long) -> Unit = {},
+    onEnterMultiSelectWithTask: (Long) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     if (bubbles.isEmpty()) return
@@ -353,9 +351,14 @@ fun TopAnytimeBubblesRow(
     ) {
         bubbles.forEach { item ->
             val task = item.task
+            val isSelected = task.id in selectedTaskIds
             val baseColor = neoColorForKey(task.colorKey)
             val animatedBubbleFill by animateColorAsState(
-                targetValue = if (task.isCompleted) SoftSheetSurface else baseColor,
+                targetValue = when {
+                    isSelected -> NeoYellow
+                    task.isCompleted -> SoftSheetSurface
+                    else -> baseColor
+                },
                 animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
                 label = "top_bubble_fill_${task.id}"
             )
@@ -369,17 +372,23 @@ fun TopAnytimeBubblesRow(
                         .size(52.sdp)
                         .smoothCombinedClickable(
                             role = Role.Checkbox,
-                            onLongClick = { onInspectBubble(item) },
-                            onClick = { onToggleBubbleDone(item) }
+                            onLongClick = { onEnterMultiSelectWithTask(task.id) },
+                            onClick = {
+                                if (isMultiSelectActive) {
+                                    onToggleSelectTask(task.id)
+                                } else {
+                                    onToggleBubbleDone(item)
+                                }
+                            }
                         )
                         .clip(CircleShape)
                         .background(animatedBubbleFill, CircleShape)
-                        .border(1.5.dp, InkBlack, CircleShape)
+                        .border(if (isSelected) 2.2.dp else 1.5.dp, InkBlack, CircleShape)
                         .testTag("top_bubble_${task.id}"),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = if (task.isCompleted) Icons.Default.Check else iconForKey(task.iconKey),
+                        imageVector = if (isSelected || task.isCompleted) Icons.Default.Check else iconForKey(task.iconKey),
                         contentDescription = task.title,
                         tint = InkBlack,
                         modifier = Modifier.size(22.sdp)
@@ -398,7 +407,11 @@ fun TopAnytimeBubblesRow(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.smoothPressClickable(role = Role.Button) {
-                        onInspectBubble(item)
+                        if (isMultiSelectActive) {
+                            onToggleSelectTask(task.id)
+                        } else {
+                            onInspectBubble(item)
+                        }
                     }
                 )
             }
@@ -406,37 +419,44 @@ fun TopAnytimeBubblesRow(
     }
 }
 
-/**
- * Minimal Filter Bar (All / Timeless / Timed).
- */
 @Composable
 fun FlowStructureFilterBar(
     currentFilter: FlowFilterMode,
     onSelectFilter: (FlowFilterMode) -> Unit,
+    isMultiSelectActive: Boolean = false,
+    onToggleMultiSelectMode: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Row(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        FlowFilterMode.entries.forEach { mode ->
-            NeoPillButton(
-                text = mode.label,
-                selected = currentFilter == mode,
-                activeColor = NeoYellow,
-                onClick = { onSelectFilter(mode) }
-            )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            FlowFilterMode.entries.forEach { mode ->
+                NeoPillButton(
+                    text = mode.label,
+                    selected = currentFilter == mode,
+                    activeColor = NeoYellow,
+                    onClick = { onSelectFilter(mode) }
+                )
+            }
         }
+
+        NeoPillButton(
+            text = if (isMultiSelectActive) "Done" else "Select",
+            icon = Icons.Default.Checklist,
+            selected = isMultiSelectActive,
+            activeColor = NeoYellow,
+            onClick = onToggleMultiSelectMode,
+            modifier = Modifier.testTag("timeline_multi_select_toggle")
+        )
     }
 }
 
-/**
- * Spine Connector Line between consecutive tasks:
- * - Aligned with the left-shifted capsule column (TIME_COLUMN_WIDTH + TIME_TO_CAPSULE_GAP).
- * - Solid vertical line when tasks flow continuously back-to-back.
- * - Dotted vertical break line when there is a time gap between tasks.
- */
 @Composable
 fun SpineConnectorSegment(
     isDottedBreak: Boolean,
@@ -501,12 +521,6 @@ fun SpineConnectorSegment(
     }
 }
 
-/**
- * Smooth Aesthetic Roller-Coaster Dotted Loop Canvas (cached via drawWithCache for 60fps scrolling):
- * - Starts directly at (cx, 0f) touching the bottom of the top half-oval (zero gap!).
- * - Flows straight down briefly, sweeps smoothly out to the right, loops gracefully over the top,
- *   and flows straight down into (cx, height) touching the top of the bottom half-oval!
- */
 @Composable
 fun DottedBreakLoopCanvas(
     modifier: Modifier = Modifier,
@@ -558,16 +572,16 @@ fun DottedBreakLoopCanvas(
     )
 }
 
-/**
- * Shifted-Left Timeline Task Row with 100% Connected Spine, Oval Bubble Capsules,
- * and Seamless Halved Oval + Smooth Dotted Loop + Task Icon in Both Halves on Break:
- */
 @Composable
 fun HybridSpineTaskRow(
     item: TaskWithSubtasks,
     sequenceNumber: Int,
     isUpNext: Boolean,
     isSimultaneous: Boolean = false,
+    isMultiSelectActive: Boolean = false,
+    isSelected: Boolean = false,
+    onToggleSelect: () -> Unit = {},
+    onLongPressSelect: () -> Unit = {},
     onToggleComplete: () -> Unit,
     onOpenTaskDetail: () -> Unit,
     modifier: Modifier = Modifier
@@ -575,7 +589,11 @@ fun HybridSpineTaskRow(
     val task = item.task
     val accentColor = neoColorForKey(task.colorKey)
     val capsuleFill by animateColorAsState(
-        targetValue = if (task.isCompleted) SoftSheetSurface else accentColor,
+        targetValue = when {
+            isSelected -> NeoYellow
+            task.isCompleted -> SoftSheetSurface
+            else -> accentColor
+        },
         animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
         label = "capsule_fill_${task.id}"
     )
@@ -602,12 +620,17 @@ fun HybridSpineTaskRow(
                 .height(ovalHeight)
                 .smoothCombinedClickable(
                     role = Role.Button,
-                    onLongClick = onOpenTaskDetail,
-                    onClick = onOpenTaskDetail
+                    onLongClick = onLongPressSelect,
+                    onClick = {
+                        if (isMultiSelectActive) {
+                            onToggleSelect()
+                        } else {
+                            onOpenTaskDetail()
+                        }
+                    }
                 ),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 1. Left-shifted Time / Sequence (#1, #2, #3...) Column
             Column(
                 modifier = Modifier
                     .width(TIME_COLUMN_WIDTH)
@@ -646,18 +669,17 @@ fun HybridSpineTaskRow(
 
             Spacer(modifier = Modifier.width(TIME_TO_CAPSULE_GAP))
 
-            // 2. Smooth Vertical Oval Bubble Capsule (fills full row height -> zero gap to spine lines)
             Box(
                 modifier = Modifier
                     .width(CAPSULE_COLUMN_WIDTH)
                     .fillMaxHeight()
                     .clip(ovalShape)
                     .background(capsuleFill, ovalShape)
-                    .border(1.5.dp, InkBlack, ovalShape),
+                    .border(if (isSelected) 2.2.dp else 1.5.dp, InkBlack, ovalShape),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = iconForKey(task.iconKey),
+                    imageVector = if (isSelected) Icons.Default.Check else iconForKey(task.iconKey),
                     contentDescription = task.title,
                     tint = InkBlack,
                     modifier = Modifier.size(22.sdp)
@@ -666,22 +688,24 @@ fun HybridSpineTaskRow(
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            // 3. Right Content: Task Title + Checkbox
             TaskRightTitleAndCheckRow(
                 item = item,
                 isUpNext = isUpNext,
                 isSimultaneous = isSimultaneous || (isTimed && task.allowSimultaneous),
+                isMultiSelectActive = isMultiSelectActive,
+                isSelected = isSelected,
                 accentColor = accentColor,
-                onToggleComplete = onToggleComplete,
+                onToggleComplete = {
+                    if (isMultiSelectActive) {
+                        onToggleSelect()
+                    } else {
+                        onToggleComplete()
+                    }
+                },
                 modifier = Modifier.weight(1f)
             )
         }
     } else {
-        // =========================================================================
-        // CASE B: Task WITH 1 or More Breaks -> Condenses onto 1 Unified Split Break Loop
-        // on the Center Spine Column (Top Half-Oval + Dotted Loop + Bottom Half-Oval)
-        // and extends Timed task end time by totalBreakMinutes!
-        // =========================================================================
         val firstSegStart = segments.firstOrNull()?.first ?: startMin
         val firstSegEnd = segments.firstOrNull()?.second ?: (startMin + task.durationMinutes / 2)
         val secondSegStart = task.activeSessionStartMin ?: segments.lastOrNull()?.first ?: (firstSegEnd + 10)
@@ -696,14 +720,12 @@ fun HybridSpineTaskRow(
         val bottomHalfHeight = 52.sdp
         val totalSplitHeight = topHalfHeight + loopHeight + bottomHalfHeight
 
-        // Top half of the oval: rounded oval top, abrupt flat cut at bottom
         val topHalfOvalShape = RoundedCornerShape(
             topStart = 22.sdp,
             topEnd = 22.sdp,
             bottomStart = 4.sdp,
             bottomEnd = 4.sdp
         )
-        // Bottom half of the oval: abrupt flat cut at top, rounded oval at bottom
         val bottomHalfOvalShape = RoundedCornerShape(
             topStart = 4.sdp,
             topEnd = 4.sdp,
@@ -717,12 +739,17 @@ fun HybridSpineTaskRow(
                 .height(totalSplitHeight)
                 .smoothCombinedClickable(
                     role = Role.Button,
-                    onLongClick = onOpenTaskDetail,
-                    onClick = onOpenTaskDetail
+                    onLongClick = onLongPressSelect,
+                    onClick = {
+                        if (isMultiSelectActive) {
+                            onToggleSelect()
+                        } else {
+                            onOpenTaskDetail()
+                        }
+                    }
                 ),
             verticalAlignment = Alignment.Top
         ) {
-            // 1. Left Time / Sequence Column aligned with Top Half-Oval and Bottom Half-Oval
             Column(
                 modifier = Modifier
                     .width(TIME_COLUMN_WIDTH)
@@ -820,49 +847,45 @@ fun HybridSpineTaskRow(
 
             Spacer(modifier = Modifier.width(TIME_TO_CAPSULE_GAP))
 
-            // 2. Uninterrupted Center Spine Column (0px gap between incoming line, top half, loop, bottom half, and outgoing line!)
             Column(
                 modifier = Modifier
                     .width(CAPSULE_COLUMN_WIDTH)
                     .fillMaxHeight(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Top Half-Oval Tube with Task Icon
                 Box(
                     modifier = Modifier
                         .width(CAPSULE_COLUMN_WIDTH)
                         .height(topHalfHeight)
                         .clip(topHalfOvalShape)
                         .background(capsuleFill, topHalfOvalShape)
-                        .border(1.5.dp, InkBlack, topHalfOvalShape),
+                        .border(if (isSelected) 2.2.dp else 1.5.dp, InkBlack, topHalfOvalShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = iconForKey(task.iconKey),
+                        imageVector = if (isSelected) Icons.Default.Check else iconForKey(task.iconKey),
                         contentDescription = task.title,
                         tint = InkBlack,
                         modifier = Modifier.size(20.sdp)
                     )
                 }
 
-                // Smooth Flowing Dotted Loop directly connecting Top Half and Bottom Half
                 DottedBreakLoopCanvas(
                     height = loopHeight,
                     color = InkBlack
                 )
 
-                // Bottom Half-Oval Tube with the SAME Task Icon (not a dot!)
                 Box(
                     modifier = Modifier
                         .width(CAPSULE_COLUMN_WIDTH)
                         .height(bottomHalfHeight)
                         .clip(bottomHalfOvalShape)
                         .background(capsuleFill, bottomHalfOvalShape)
-                        .border(1.5.dp, InkBlack, bottomHalfOvalShape),
+                        .border(if (isSelected) 2.2.dp else 1.5.dp, InkBlack, bottomHalfOvalShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = iconForKey(task.iconKey),
+                        imageVector = if (isSelected) Icons.Default.Check else iconForKey(task.iconKey),
                         contentDescription = "${task.title} Continued",
                         tint = InkBlack,
                         modifier = Modifier.size(20.sdp)
@@ -872,7 +895,6 @@ fun HybridSpineTaskRow(
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            // 3. Right Content Column aligned with Top Half-Oval (allows 2-line task titles cleanly)
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -883,8 +905,16 @@ fun HybridSpineTaskRow(
                     item = item,
                     isUpNext = isUpNext,
                     isSimultaneous = isSimultaneous || (isTimed && task.allowSimultaneous),
+                    isMultiSelectActive = isMultiSelectActive,
+                    isSelected = isSelected,
                     accentColor = accentColor,
-                    onToggleComplete = onToggleComplete,
+                    onToggleComplete = {
+                        if (isMultiSelectActive) {
+                            onToggleSelect()
+                        } else {
+                            onToggleComplete()
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -897,6 +927,8 @@ private fun TaskRightTitleAndCheckRow(
     item: TaskWithSubtasks,
     isUpNext: Boolean,
     isSimultaneous: Boolean = false,
+    isMultiSelectActive: Boolean = false,
+    isSelected: Boolean = false,
     accentColor: Color,
     onToggleComplete: () -> Unit,
     modifier: Modifier = Modifier
@@ -908,14 +940,24 @@ private fun TaskRightTitleAndCheckRow(
     Row(
         modifier = modifier
             .then(
-                if (isUpNext && !task.isCompleted) {
-                    Modifier
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(neoSoftColorForKey(task.colorKey))
-                        .border(1.5.dp, InkBlack, RoundedCornerShape(16.dp))
-                        .padding(horizontal = 14.dp, vertical = 9.dp)
-                } else {
-                    Modifier.padding(vertical = 6.dp)
+                when {
+                    isSelected -> {
+                        Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(NeoYellow)
+                            .border(1.5.dp, InkBlack, RoundedCornerShape(16.dp))
+                            .padding(horizontal = 14.dp, vertical = 9.dp)
+                    }
+                    isUpNext && !task.isCompleted -> {
+                        Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(neoSoftColorForKey(task.colorKey))
+                            .border(1.5.dp, InkBlack, RoundedCornerShape(16.dp))
+                            .padding(horizontal = 14.dp, vertical = 9.dp)
+                    }
+                    else -> {
+                        Modifier.padding(vertical = 6.dp)
+                    }
                 }
             ),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -1043,8 +1085,8 @@ private fun TaskRightTitleAndCheckRow(
         Spacer(modifier = Modifier.width(10.dp))
 
         NeoCircleCheckbox(
-            checked = task.isCompleted,
-            accentColor = accentColor,
+            checked = if (isMultiSelectActive) isSelected else task.isCompleted,
+            accentColor = if (isMultiSelectActive) NeoMintGreen else accentColor,
             onCheckedChange = onToggleComplete,
             modifier = Modifier.testTag("toggle_task_${task.id}")
         )

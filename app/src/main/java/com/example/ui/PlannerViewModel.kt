@@ -79,6 +79,8 @@ data class PlannerUiState(
     val isEditorVisible: Boolean = false,
     val editorDefaultMode: TaskMode = TaskMode.TIMELESS_STEP,
     val editorTargetInbox: Boolean = false,
+    val editorPreselectedFolder: String? = null,
+    val editorPreselectedSection: String? = null,
     val inspectingTask: TaskWithSubtasks? = null,
     val schedulingInboxTask: TaskEntity? = null,
     val pendingOverlapConflict: PendingOverlapConflict? = null,
@@ -89,6 +91,9 @@ data class PlannerUiState(
     val completedDayTasksCount: Int = 0,
     val dayReadinessPercent: Int = 0,
     val isSettingsVisible: Boolean = false,
+    val isCleanupExportVisible: Boolean = false,
+    val isMultiSelectActive: Boolean = false,
+    val selectedTaskIds: Set<Long> = emptySet(),
     val use24HourFormat: Boolean = true,
     val startOfDayMinutes: Int = 8 * 60,
     val endOfDayMinutes: Int = 22 * 60
@@ -112,6 +117,8 @@ private data class LocalNavState(
     val isEditorVisible: Boolean = false,
     val editorDefaultMode: TaskMode = TaskMode.TIMELESS_STEP,
     val editorTargetInbox: Boolean = false,
+    val editorPreselectedFolder: String? = null,
+    val editorPreselectedSection: String? = null,
     val inspectingTaskId: Long? = null,
     val schedulingInboxTask: TaskEntity? = null,
     val pendingOverlapConflict: PendingOverlapConflict? = null,
@@ -119,6 +126,9 @@ private data class LocalNavState(
     val forceSplitPreview: Boolean? = null,
     val statusBannerMessage: String? = null,
     val isSettingsVisible: Boolean = false,
+    val isCleanupExportVisible: Boolean = false,
+    val isMultiSelectActive: Boolean = false,
+    val selectedTaskIds: Set<Long> = emptySet(),
     val use24HourFormat: Boolean = true,
     val startOfDayMinutes: Int = 8 * 60,
     val endOfDayMinutes: Int = 22 * 60
@@ -312,6 +322,8 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
             isEditorVisible = nav.isEditorVisible,
             editorDefaultMode = nav.editorDefaultMode,
             editorTargetInbox = nav.editorTargetInbox,
+            editorPreselectedFolder = nav.editorPreselectedFolder,
+            editorPreselectedSection = nav.editorPreselectedSection,
             inspectingTask = inspected,
             schedulingInboxTask = nav.schedulingInboxTask,
             pendingOverlapConflict = nav.pendingOverlapConflict,
@@ -322,6 +334,9 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
             completedDayTasksCount = completedDayCount,
             dayReadinessPercent = readinessPct,
             isSettingsVisible = nav.isSettingsVisible,
+            isCleanupExportVisible = nav.isCleanupExportVisible,
+            isMultiSelectActive = nav.isMultiSelectActive,
+            selectedTaskIds = nav.selectedTaskIds,
             use24HourFormat = nav.use24HourFormat,
             startOfDayMinutes = nav.startOfDayMinutes,
             endOfDayMinutes = nav.endOfDayMinutes
@@ -381,7 +396,6 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
             requestedStartMin < exEnd && exStart < reqEnd
         } ?: return null
 
-        // Calculate the earliest conflict-free start time right after the conflicting block(s)
         var candidateStart = (firstConflict.startTimeMinutes ?: requestedStartMin) +
             firstConflict.durationMinutes.coerceAtLeast(5)
         for (existing in dayTimedTasks) {
@@ -412,7 +426,13 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun setDestination(destination: StruktDestination) {
-        navState.update { it.copy(activeDestination = destination) }
+        navState.update {
+            it.copy(
+                activeDestination = destination,
+                isMultiSelectActive = false,
+                selectedTaskIds = emptySet()
+            )
+        }
     }
 
     fun setFlowFilter(filter: FlowFilterMode) {
@@ -424,7 +444,13 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun selectFolder(folderId: Long?) {
-        navState.update { it.copy(selectedFolderId = folderId) }
+        navState.update {
+            it.copy(
+                selectedFolderId = folderId,
+                isMultiSelectActive = false,
+                selectedTaskIds = emptySet()
+            )
+        }
     }
 
     fun toggleSplitViewMode(currentlySplit: Boolean) {
@@ -433,7 +459,9 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
 
     fun openCreateTaskSheet(
         defaultMode: TaskMode = TaskMode.TIMELESS_STEP,
-        forInbox: Boolean = false
+        forInbox: Boolean = false,
+        preselectedFolder: String? = null,
+        preselectedSection: String? = null
     ) {
         navState.update {
             it.copy(
@@ -441,6 +469,8 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
                 isEditorVisible = true,
                 editorDefaultMode = defaultMode,
                 editorTargetInbox = forInbox,
+                editorPreselectedFolder = preselectedFolder,
+                editorPreselectedSection = preselectedSection,
                 inspectingTaskId = null
             )
         }
@@ -453,16 +483,29 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
                 isEditorVisible = true,
                 editorDefaultMode = taskWithSubtasks.task.modeEnum,
                 editorTargetInbox = taskWithSubtasks.task.dateEpochDay == null,
+                editorPreselectedFolder = null,
+                editorPreselectedSection = null,
                 inspectingTaskId = null
             )
         }
     }
 
     fun closeTaskSheet() {
-        navState.update { it.copy(isEditorVisible = false, editingTask = null) }
+        navState.update {
+            it.copy(
+                isEditorVisible = false,
+                editingTask = null,
+                editorPreselectedFolder = null,
+                editorPreselectedSection = null
+            )
+        }
     }
 
     fun openInspectTaskModal(taskId: Long) {
+        if (navState.value.isMultiSelectActive) {
+            toggleTaskSelection(taskId)
+            return
+        }
         navState.update { it.copy(inspectingTaskId = taskId) }
     }
 
@@ -476,6 +519,114 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
 
     fun closeSettingsModal() {
         navState.update { it.copy(isSettingsVisible = false) }
+    }
+
+    fun openCleanupExportModal() {
+        navState.update {
+            it.copy(
+                isSettingsVisible = false,
+                isCleanupExportVisible = true
+            )
+        }
+    }
+
+    fun closeCleanupExportModal() {
+        navState.update { it.copy(isCleanupExportVisible = false) }
+    }
+
+    fun showStatusBanner(message: String) {
+        navState.update { it.copy(statusBannerMessage = message) }
+    }
+
+    fun toggleMultiSelectMode() {
+        navState.update {
+            val next = !it.isMultiSelectActive
+            it.copy(
+                isMultiSelectActive = next,
+                selectedTaskIds = if (next) it.selectedTaskIds else emptySet()
+            )
+        }
+    }
+
+    fun enterMultiSelectWithTask(taskId: Long) {
+        navState.update {
+            it.copy(
+                isMultiSelectActive = true,
+                selectedTaskIds = it.selectedTaskIds + taskId,
+                inspectingTaskId = null
+            )
+        }
+    }
+
+    fun toggleTaskSelection(taskId: Long) {
+        navState.update { state ->
+            val updated = if (taskId in state.selectedTaskIds) {
+                state.selectedTaskIds - taskId
+            } else {
+                state.selectedTaskIds + taskId
+            }
+            state.copy(
+                isMultiSelectActive = true,
+                selectedTaskIds = updated
+            )
+        }
+    }
+
+    fun selectOrDeselectAllTasks(visibleTaskIds: List<Long>) {
+        if (visibleTaskIds.isEmpty()) return
+        navState.update { state ->
+            val allSelected = visibleTaskIds.all { it in state.selectedTaskIds }
+            val nextSelected = if (allSelected) {
+                state.selectedTaskIds - visibleTaskIds.toSet()
+            } else {
+                state.selectedTaskIds + visibleTaskIds
+            }
+            state.copy(
+                isMultiSelectActive = true,
+                selectedTaskIds = nextSelected
+            )
+        }
+    }
+
+    fun exitMultiSelectMode() {
+        navState.update {
+            it.copy(
+                isMultiSelectActive = false,
+                selectedTaskIds = emptySet()
+            )
+        }
+    }
+
+    fun bulkDeleteSelectedTasks() {
+        val idsToDelete = navState.value.selectedTaskIds.toList()
+        if (idsToDelete.isEmpty()) return
+        viewModelScope.launch {
+            repository.deleteTasksByIds(idsToDelete)
+            navState.update {
+                it.copy(
+                    isMultiSelectActive = false,
+                    selectedTaskIds = emptySet(),
+                    focusedTaskId = if (it.focusedTaskId in idsToDelete) null else it.focusedTaskId,
+                    inspectingTaskId = if (it.inspectingTaskId in idsToDelete) null else it.inspectingTaskId,
+                    statusBannerMessage = "Deleted ${idsToDelete.size} task(s)"
+                )
+            }
+        }
+    }
+
+    fun purgeCompletedTasks(taskIds: List<Long>) {
+        if (taskIds.isEmpty()) return
+        viewModelScope.launch {
+            repository.deleteTasksByIds(taskIds)
+            navState.update {
+                it.copy(
+                    focusedTaskId = if (it.focusedTaskId in taskIds) null else it.focusedTaskId,
+                    inspectingTaskId = if (it.inspectingTaskId in taskIds) null else it.inspectingTaskId,
+                    selectedTaskIds = it.selectedTaskIds - taskIds.toSet(),
+                    statusBannerMessage = "Cleaned up ${taskIds.size} completed task(s)"
+                )
+            }
+        }
     }
 
     fun updateGlobalSettings(
@@ -648,6 +799,8 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
                 it.copy(
                     isEditorVisible = false,
                     editingTask = null,
+                    editorPreselectedFolder = null,
+                    editorPreselectedSection = null,
                     statusBannerMessage = if (toInbox) "Saved to Inbox" else "Saved to Flow"
                 )
             }

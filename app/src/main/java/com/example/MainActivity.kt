@@ -57,6 +57,7 @@ import com.example.ui.PlannerUiState
 import com.example.ui.PlannerViewModel
 import com.example.ui.StruktDestination
 import com.example.ui.components.AntiParalysisFocusScreen
+import com.example.ui.components.CleanupAndExportModal
 import com.example.ui.components.DateAndWeekHeader
 import com.example.ui.components.DayThresholdMarkerRow
 import com.example.ui.components.DotGridBackground
@@ -75,6 +76,7 @@ import com.example.ui.components.SpineConnectorSegment
 import com.example.ui.components.StructuredTaskEditorDialog
 import com.example.ui.components.TaskDetailPopupModal
 import com.example.ui.components.TopAnytimeBubblesRow
+import com.example.ui.components.UniversalBulkSelectBar
 import com.example.ui.components.formatFreeGapLabel
 import com.example.ui.components.smoothPressClickable
 import com.example.ui.theme.InkBlack
@@ -127,19 +129,23 @@ fun StruktPlannerApp(
 
     BackHandler(
         enabled = uiState.pendingOverlapConflict != null ||
+            uiState.isCleanupExportVisible ||
             uiState.isSettingsVisible ||
             uiState.isEditorVisible ||
             uiState.inspectingTask != null ||
             uiState.schedulingInboxTask != null ||
+            uiState.isMultiSelectActive ||
             uiState.selectedFolderId != null ||
             uiState.activeDestination != StruktDestination.FLOW
     ) {
         when {
             uiState.pendingOverlapConflict != null -> viewModel.dismissOverlapConflict()
+            uiState.isCleanupExportVisible -> viewModel.closeCleanupExportModal()
             uiState.isSettingsVisible -> viewModel.closeSettingsModal()
             uiState.isEditorVisible -> viewModel.closeTaskSheet()
             uiState.inspectingTask != null -> viewModel.closeInspectTaskModal()
             uiState.schedulingInboxTask != null -> viewModel.closeScheduleInboxPopup()
+            uiState.isMultiSelectActive -> viewModel.exitMultiSelectMode()
             uiState.selectedFolderId != null -> viewModel.selectFolder(null)
             else -> viewModel.setDestination(StruktDestination.FLOW)
         }
@@ -156,8 +162,6 @@ fun StruktPlannerApp(
         modifier = Modifier.fillMaxSize()
     ) {
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-            // Portrait (maxWidth <= maxHeight) ALWAYS shows the 1-screen vertical layout with the bottom bar (on both phone and tablet).
-            // Landscape (maxWidth > maxHeight) shows the 2-column split screen (Left Dark Rail + Persistent Inbox + Main Workspace).
             val isLandscapeSplitLayout = maxWidth > maxHeight
             val isTabletDevice = minOf(maxWidth, maxHeight) >= 600.dp
 
@@ -174,7 +178,50 @@ fun StruktPlannerApp(
                 )
             }
 
-            // Minimal Toast Banner
+            if (uiState.isMultiSelectActive) {
+                val visibleIds = when (uiState.activeDestination) {
+                    StruktDestination.INBOX -> uiState.inboxTasks.map { it.task.id }
+                    StruktDestination.FOLDERS -> {
+                        val activeFolder = uiState.folders.firstOrNull { it.id == uiState.selectedFolderId }
+                        if (activeFolder != null) {
+                            uiState.allTasks
+                                .filter { it.task.folderName.equals(activeFolder.name, ignoreCase = true) }
+                                .map { it.task.id }
+                        } else {
+                            uiState.allTasks.map { it.task.id }
+                        }
+                    }
+                    else -> {
+                        val flowIds = uiState.topBubbles.map { it.task.id } + uiState.spineFlowTasks.map { it.task.id }
+                        if (isLandscapeSplitLayout) {
+                            (flowIds + uiState.inboxTasks.map { it.task.id }).distinct()
+                        } else {
+                            flowIds
+                        }
+                    }
+                }
+                val allVisibleSelected = visibleIds.isNotEmpty() && visibleIds.all { it in uiState.selectedTaskIds }
+
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .navigationBarsPadding()
+                        .padding(
+                            start = 16.dp,
+                            end = 16.dp,
+                            bottom = if (isLandscapeSplitLayout) 16.dp else 76.sdp
+                        )
+                ) {
+                    UniversalBulkSelectBar(
+                        selectedCount = uiState.selectedTaskIds.size,
+                        totalVisibleCount = visibleIds.size,
+                        onSelectAll = { viewModel.selectOrDeselectAllTasks(visibleIds) },
+                        onDeleteSelected = viewModel::bulkDeleteSelectedTasks,
+                        onCancel = viewModel::exitMultiSelectMode
+                    )
+                }
+            }
+
             AnimatedVisibility(
                 visible = uiState.statusBannerMessage != null,
                 modifier = Modifier
@@ -196,7 +243,6 @@ fun StruktPlannerApp(
                 }
             }
 
-            // 1. Unified Schedule Popup from Inbox "+"
             uiState.schedulingInboxTask?.let { inboxTask ->
                 ScheduleInboxMiniPopup(
                     task = inboxTask,
@@ -207,7 +253,6 @@ fun StruktPlannerApp(
                 )
             }
 
-            // 2. Clean Task & Subtasks Detail Modal when clicking a task on the timeline
             uiState.inspectingTask?.let { inspected ->
                 val spineIdx = uiState.spineFlowTasks.indexOfFirst { it.task.id == inspected.task.id }
                 val currentStep = if (spineIdx >= 0) spineIdx + 1 else 1
@@ -233,7 +278,6 @@ fun StruktPlannerApp(
                 )
             }
 
-            // 3. Single-Window In-Place Task Editor Sheet
             if (uiState.isEditorVisible) {
                 StructuredTaskEditorDialog(
                     selectedDate = uiState.selectedLocalDate,
@@ -241,6 +285,8 @@ fun StruktPlannerApp(
                     editingItem = uiState.editingTask,
                     defaultMode = uiState.editorDefaultMode,
                     defaultToInbox = uiState.editorTargetInbox,
+                    preselectedFolderName = uiState.editorPreselectedFolder,
+                    preselectedSectionName = uiState.editorPreselectedSection,
                     onDismiss = { viewModel.closeTaskSheet() },
                     onSave = { id, title, notes, toInbox, mode, startMin, duration, color, icon, folder, section, recur, dayOfMonth, intervalDays, subs, order ->
                         viewModel.saveTaskFromEditor(
@@ -268,18 +314,27 @@ fun StruktPlannerApp(
                 )
             }
 
-            // 4. Global Settings Modal (12h/24h Clock Format + Start/End of Day Thresholds)
             if (uiState.isSettingsVisible) {
                 GlobalSettingsPopupModal(
                     use24HourFormat = uiState.use24HourFormat,
                     startOfDayMinutes = uiState.startOfDayMinutes,
                     endOfDayMinutes = uiState.endOfDayMinutes,
                     onUpdateSettings = viewModel::updateGlobalSettings,
+                    onOpenCleanupExport = viewModel::openCleanupExportModal,
                     onDismiss = viewModel::closeSettingsModal
                 )
             }
 
-            // 5. Overlap Conflict Resolution Modal (Auto-Shift vs Allow Simultaneous)
+            if (uiState.isCleanupExportVisible) {
+                CleanupAndExportModal(
+                    allTasks = uiState.allTasks,
+                    folders = uiState.folders,
+                    onPurgeTasks = viewModel::purgeCompletedTasks,
+                    onExportStatusMessage = viewModel::showStatusBanner,
+                    onDismiss = viewModel::closeCleanupExportModal
+                )
+            }
+
             uiState.pendingOverlapConflict?.let { conflict ->
                 val reqStart = conflict.requestedStartMin
                 val reqEnd = reqStart + conflict.requestedDurationMin.coerceAtLeast(5)
@@ -301,11 +356,6 @@ fun StruktPlannerApp(
     }
 }
 
-/**
- * Redmi Pad Pro 5G Tablet Layout (Inspired by Learnify Left Dark Rail + Structured Split-View):
- * - Left Dark Navigation Rail with larger (26.dp) icons and yellow active badge.
- * - Persistent Inbox Column + Main Right Workspace.
- */
 @Composable
 private fun TabletLandscapeSplitLayout(
     uiState: PlannerUiState,
@@ -316,7 +366,6 @@ private fun TabletLandscapeSplitLayout(
     val inboxWidth = if (isTabletDevice) 380.dp else 310.dp
 
     Row(modifier = Modifier.fillMaxSize()) {
-        // Learnify-Inspired Permanent Left Navigation Rail (extends edge-to-edge vertically)
         Column(
             modifier = Modifier
                 .width(railWidth)
@@ -358,7 +407,6 @@ private fun TabletLandscapeSplitLayout(
                 }
             }
 
-            // Bottom Settings + "+" Add Action inside the Permanent Rail
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(14.sdp)
@@ -385,9 +433,16 @@ private fun TabletLandscapeSplitLayout(
                     modifier = Modifier
                         .size(48.sdp)
                         .smoothPressClickable(role = Role.Button) {
+                            val selectedFolderObj = if (uiState.activeDestination == StruktDestination.FOLDERS) {
+                                uiState.folders.firstOrNull { it.id == uiState.selectedFolderId }
+                            } else {
+                                null
+                            }
                             viewModel.openCreateTaskSheet(
                                 defaultMode = TaskMode.TIMELESS_STEP,
-                                forInbox = false
+                                forInbox = false,
+                                preselectedFolder = selectedFolderObj?.name,
+                                preselectedSection = selectedFolderObj?.sections?.firstOrNull()
                             )
                         }
                         .clip(RoundedCornerShape(14.sdp))
@@ -406,7 +461,6 @@ private fun TabletLandscapeSplitLayout(
             }
         }
 
-        // Left Inbox Column (380.dp on tablet, 310.dp on phone landscape)
         Box(
             modifier = Modifier
                 .width(inboxWidth)
@@ -421,11 +475,15 @@ private fun TabletLandscapeSplitLayout(
                 totalCount = uiState.totalDayTasksCount,
                 onQuickAddInbox = { title -> viewModel.quickAddInboxTask(title) },
                 onOpenSchedulePopup = { task -> viewModel.openScheduleInboxPopup(task) },
-                onEditInboxTask = { item -> viewModel.openEditTaskSheet(item) }
+                onEditInboxTask = { item -> viewModel.openEditTaskSheet(item) },
+                isMultiSelectActive = uiState.isMultiSelectActive,
+                selectedTaskIds = uiState.selectedTaskIds,
+                onToggleMultiSelectMode = viewModel::toggleMultiSelectMode,
+                onToggleSelectTask = viewModel::toggleTaskSelection,
+                onEnterMultiSelectWithTask = viewModel::enterMultiSelectWithTask
             )
         }
 
-        // Crisp 1.5.dp Solid InkBlack Vertical Divider Line between Left Inbox and Right Workspace
         Box(
             modifier = Modifier
                 .width(1.5.dp)
@@ -433,7 +491,6 @@ private fun TabletLandscapeSplitLayout(
                 .background(InkBlack)
         )
 
-        // Right Main Workspace (centered within max 680.dp so single-column cards never over-stretch)
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -459,6 +516,20 @@ private fun TabletLandscapeSplitLayout(
                             onSelectFolder = viewModel::selectFolder,
                             onCreateFolder = viewModel::createNewFolder,
                             onAddSectionToFolder = viewModel::addSectionToFolder,
+                            onCreateTaskInFolderSection = { folderName, sectionName ->
+                                viewModel.openCreateTaskSheet(
+                                    defaultMode = TaskMode.TIMELESS_STEP,
+                                    forInbox = false,
+                                    preselectedFolder = folderName,
+                                    preselectedSection = sectionName
+                                )
+                            },
+                            onOpenCleanupExport = viewModel::openCleanupExportModal,
+                            isMultiSelectActive = uiState.isMultiSelectActive,
+                            selectedTaskIds = uiState.selectedTaskIds,
+                            onToggleMultiSelectMode = viewModel::toggleMultiSelectMode,
+                            onToggleSelectTask = viewModel::toggleTaskSelection,
+                            onEnterMultiSelectWithTask = viewModel::enterMultiSelectWithTask,
                             onTaskClick = { item -> viewModel.openInspectTaskModal(item.task.id) },
                             onToggleTaskDone = viewModel::toggleTaskDone
                         )
@@ -497,17 +568,12 @@ private fun TabletLandscapeSplitLayout(
     }
 }
 
-/**
- * Portrait Handheld Layout with a Permanent Full-Width Straight Bottom Bar & Larger (26.dp) Icons.
- */
 @Composable
 private fun PortraitHandheldLayout(
     uiState: PlannerUiState,
     viewModel: PlannerViewModel
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
-        // Main Content takes remaining height flush to the permanent bottom bar's top line,
-        // centered within max 680.dp so tablet portrait (800.dp) has balanced margins while phone fills 100%.
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -530,7 +596,12 @@ private fun PortraitHandheldLayout(
                             totalCount = uiState.totalDayTasksCount,
                             onQuickAddInbox = { title -> viewModel.quickAddInboxTask(title) },
                             onOpenSchedulePopup = { task -> viewModel.openScheduleInboxPopup(task) },
-                            onEditInboxTask = { item -> viewModel.openEditTaskSheet(item) }
+                            onEditInboxTask = { item -> viewModel.openEditTaskSheet(item) },
+                            isMultiSelectActive = uiState.isMultiSelectActive,
+                            selectedTaskIds = uiState.selectedTaskIds,
+                            onToggleMultiSelectMode = viewModel::toggleMultiSelectMode,
+                            onToggleSelectTask = viewModel::toggleTaskSelection,
+                            onEnterMultiSelectWithTask = viewModel::enterMultiSelectWithTask
                         )
                     }
 
@@ -544,6 +615,20 @@ private fun PortraitHandheldLayout(
                             onSelectFolder = viewModel::selectFolder,
                             onCreateFolder = viewModel::createNewFolder,
                             onAddSectionToFolder = viewModel::addSectionToFolder,
+                            onCreateTaskInFolderSection = { folderName, sectionName ->
+                                viewModel.openCreateTaskSheet(
+                                    defaultMode = TaskMode.TIMELESS_STEP,
+                                    forInbox = false,
+                                    preselectedFolder = folderName,
+                                    preselectedSection = sectionName
+                                )
+                            },
+                            onOpenCleanupExport = viewModel::openCleanupExportModal,
+                            isMultiSelectActive = uiState.isMultiSelectActive,
+                            selectedTaskIds = uiState.selectedTaskIds,
+                            onToggleMultiSelectMode = viewModel::toggleMultiSelectMode,
+                            onToggleSelectTask = viewModel::toggleTaskSelection,
+                            onEnterMultiSelectWithTask = viewModel::enterMultiSelectWithTask,
                             onTaskClick = { item -> viewModel.openInspectTaskModal(item.task.id) },
                             onToggleTaskDone = viewModel::toggleTaskDone
                         )
@@ -580,24 +665,26 @@ private fun PortraitHandheldLayout(
             }
         }
 
-        // Permanent Full-Width Straight Docked Bottom Navigation Bar with Proportional Scaling
         PermanentStraightBottomBar(
             activeDestination = uiState.activeDestination,
             onSelectDestination = viewModel::setDestination,
             onAddTaskClick = {
+                val selectedFolderObj = if (uiState.activeDestination == StruktDestination.FOLDERS) {
+                    uiState.folders.firstOrNull { it.id == uiState.selectedFolderId }
+                } else {
+                    null
+                }
                 viewModel.openCreateTaskSheet(
                     defaultMode = TaskMode.TIMELESS_STEP,
-                    forInbox = uiState.activeDestination == StruktDestination.INBOX
+                    forInbox = uiState.activeDestination == StruktDestination.INBOX,
+                    preselectedFolder = selectedFolderObj?.name,
+                    preselectedSection = selectedFolderObj?.sections?.firstOrNull()
                 )
             }
         )
     }
 }
 
-/**
- * Permanent, full-width straight docked bottom bar separated by a clean 1.5.dp line,
- * featuring proportionally scaled icons (26.sdp) and a dedicated "+" button.
- */
 @Composable
 private fun PermanentStraightBottomBar(
     activeDestination: StruktDestination,
@@ -618,7 +705,6 @@ private fun PermanentStraightBottomBar(
             .navigationBarsPadding(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Straight full-width horizontal line separating the permanent bar
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -659,7 +745,6 @@ private fun PermanentStraightBottomBar(
                 }
             }
 
-            // Symmetrical 48.sdp Coral "+" Button inside the permanent bar
             Box(
                 modifier = Modifier
                     .size(48.sdp)
@@ -745,7 +830,11 @@ private fun DayFlowSheetContent(
                             },
                             onDeleteBubble = { taskId ->
                                 viewModel.deleteTask(taskId)
-                            }
+                            },
+                            isMultiSelectActive = uiState.isMultiSelectActive,
+                            selectedTaskIds = uiState.selectedTaskIds,
+                            onToggleSelectTask = viewModel::toggleTaskSelection,
+                            onEnterMultiSelectWithTask = viewModel::enterMultiSelectWithTask
                         )
                         Spacer(modifier = Modifier.height(10.dp))
                     }
@@ -758,13 +847,13 @@ private fun DayFlowSheetContent(
                 item(key = "flow_filter_bar", contentType = "filter_bar") {
                     FlowStructureFilterBar(
                         currentFilter = uiState.flowFilter,
-                        onSelectFilter = viewModel::setFlowFilter
+                        onSelectFilter = viewModel::setFlowFilter,
+                        isMultiSelectActive = uiState.isMultiSelectActive,
+                        onToggleMultiSelectMode = viewModel::toggleMultiSelectMode
                     )
-                    // Pushed downwards for clean breathing room before the vertical timeline spine begins
                     Spacer(modifier = Modifier.height(18.dp))
                 }
 
-                // Start-of-Day (Wake-Up) Threshold Marker
                 item(key = "flow_start_of_day_marker", contentType = "threshold_marker") {
                     DayThresholdMarkerRow(
                         timeMinutes = uiState.startOfDayMinutes,
@@ -813,6 +902,7 @@ private fun DayFlowSheetContent(
                     ) { index, item ->
                         val isUpNext = uiState.upNextTask?.task?.id == item.task.id
                         val isSimultaneous = item.task.id in uiState.simultaneousTaskIds
+                        val isSelected = item.task.id in uiState.selectedTaskIds
 
                         if (index > 0) {
                             val gapMinutes = uiState.freeGapMinutesBeforeIndex[index]
@@ -831,13 +921,16 @@ private fun DayFlowSheetContent(
                             sequenceNumber = index + 1,
                             isUpNext = isUpNext,
                             isSimultaneous = isSimultaneous,
+                            isMultiSelectActive = uiState.isMultiSelectActive,
+                            isSelected = isSelected,
+                            onToggleSelect = { viewModel.toggleTaskSelection(item.task.id) },
+                            onLongPressSelect = { viewModel.enterMultiSelectWithTask(item.task.id) },
                             onToggleComplete = { viewModel.toggleTaskDone(item.task) },
                             onOpenTaskDetail = { viewModel.openInspectTaskModal(item.task.id) }
                         )
                     }
                 }
 
-                // End-of-Day (Wind-Down) Threshold Marker
                 item(key = "flow_end_of_day_marker", contentType = "threshold_marker") {
                     SpineConnectorSegment(
                         isDottedBreak = true,
