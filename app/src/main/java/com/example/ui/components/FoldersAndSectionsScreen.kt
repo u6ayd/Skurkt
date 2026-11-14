@@ -1,5 +1,7 @@
 package com.example.ui.components
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
@@ -296,6 +298,14 @@ fun FoldersAndSectionsScreen(
                         fillColor = neoColorForKey(folder.colorKey),
                         onCardClick = { onSelectFolder(folder.id) },
                         modifier = Modifier
+                            .animateItem(
+                                fadeInSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                                placementSpec = spring(
+                                    dampingRatio = Spring.DampingRatioNoBouncy,
+                                    stiffness = Spring.StiffnessMediumLow
+                                ),
+                                fadeOutSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                            )
                             .testTag("folder_card_${folder.id}")
                     )
                 }
@@ -431,7 +441,16 @@ fun FoldersAndSectionsScreen(
                     val sectionTasks = selectedSectionTasksByKey[sectionName.trim().lowercase()].orEmpty()
 
                     NeoCard(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .animateItem(
+                                fadeInSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                                placementSpec = spring(
+                                    dampingRatio = Spring.DampingRatioNoBouncy,
+                                    stiffness = Spring.StiffnessMediumLow
+                                ),
+                                fadeOutSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                            ),
                         backgroundColor = PureWhiteSurface,
                         cornerRadius = 20.dp,
                         contentPadding = PaddingValues(18.dp)

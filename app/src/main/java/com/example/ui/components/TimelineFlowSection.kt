@@ -1,6 +1,7 @@
 package com.example.ui.components
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
@@ -216,21 +217,31 @@ fun HybridSpineTaskRow(
     val segments = task.parsedSessionSegments
     val hasPauseBreak = task.hasBreakLoop
 
-    if (!hasPauseBreak) {
-        val ovalHeight = when {
-            task.durationMinutes >= 90 -> 92.sdp
-            task.durationMinutes >= 60 -> 88.sdp
-            task.durationMinutes >= 45 -> 80.sdp
-            task.durationMinutes >= 30 -> 74.sdp
-            else -> 70.sdp
-        }
-        val ovalShape = RoundedCornerShape(percent = 50)
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .animateContentSize(
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioNoBouncy,
+                    stiffness = Spring.StiffnessMediumLow
+                )
+            )
+    ) {
+        if (!hasPauseBreak) {
+            val ovalHeight = when {
+                task.durationMinutes >= 90 -> 92.sdp
+                task.durationMinutes >= 60 -> 88.sdp
+                task.durationMinutes >= 45 -> 80.sdp
+                task.durationMinutes >= 30 -> 74.sdp
+                else -> 70.sdp
+            }
+            val ovalShape = RoundedCornerShape(percent = 50)
 
-        Row(
-            modifier = modifier
-                .fillMaxWidth()
-                .height(ovalHeight)
-                .smoothCombinedClickable(
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(ovalHeight)
+                    .smoothCombinedClickable(
                     role = Role.Button,
                     onLongClick = onLongPressSelect,
                     onClick = {
@@ -346,7 +357,7 @@ fun HybridSpineTaskRow(
         )
 
         Row(
-            modifier = modifier
+            modifier = Modifier
                 .fillMaxWidth()
                 .height(totalSplitHeight)
                 .smoothCombinedClickable(
@@ -530,6 +541,7 @@ fun HybridSpineTaskRow(
                     modifier = Modifier.fillMaxWidth()
                 )
             }
+        }
         }
     }
 }

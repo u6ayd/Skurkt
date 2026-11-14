@@ -1,5 +1,7 @@
 package com.example.ui.components
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -252,6 +254,14 @@ fun NeoInboxPane(
                 NeoCard(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .animateItem(
+                            fadeInSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                            placementSpec = spring(
+                                dampingRatio = Spring.DampingRatioNoBouncy,
+                                stiffness = Spring.StiffnessMediumLow
+                            ),
+                            fadeOutSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                        )
                         .smoothCombinedClickable(
                             role = Role.Button,
                             onLongClick = { onEnterMultiSelectWithTask(task.id) },

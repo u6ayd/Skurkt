@@ -9,6 +9,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -909,30 +911,43 @@ private fun DayFlowSheetContent(
                         val isSimultaneous = item.task.id in uiState.simultaneousTaskIds
                         val isSelected = item.task.id in uiState.selectedTaskIds
 
-                        if (index > 0) {
-                            val gapMinutes = uiState.freeGapMinutesBeforeIndex[index]
-                            val freeTimeLabel = gapMinutes?.let { formatFreeGapLabel(it) }
-                            val hasTimeGap = gapMinutes != null && gapMinutes > 0
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .animateItem(
+                                    fadeInSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                                    placementSpec = spring(
+                                        dampingRatio = Spring.DampingRatioNoBouncy,
+                                        stiffness = Spring.StiffnessMediumLow
+                                    ),
+                                    fadeOutSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                                )
+                        ) {
+                            if (index > 0) {
+                                val gapMinutes = uiState.freeGapMinutesBeforeIndex[index]
+                                val freeTimeLabel = gapMinutes?.let { formatFreeGapLabel(it) }
+                                val hasTimeGap = gapMinutes != null && gapMinutes > 0
 
-                            SpineConnectorSegment(
-                                isDottedBreak = hasTimeGap,
-                                height = if (hasTimeGap) 34.sdp else 16.sdp,
-                                freeTimeLabel = freeTimeLabel
+                                SpineConnectorSegment(
+                                    isDottedBreak = hasTimeGap,
+                                    height = if (hasTimeGap) 34.sdp else 16.sdp,
+                                    freeTimeLabel = freeTimeLabel
+                                )
+                            }
+
+                            HybridSpineTaskRow(
+                                item = item,
+                                sequenceNumber = index + 1,
+                                isUpNext = isUpNext,
+                                isSimultaneous = isSimultaneous,
+                                isMultiSelectActive = uiState.isMultiSelectActive,
+                                isSelected = isSelected,
+                                onToggleSelect = { viewModel.toggleTaskSelection(item.task.id) },
+                                onLongPressSelect = { viewModel.enterMultiSelectWithTask(item.task.id) },
+                                onToggleComplete = { viewModel.toggleTaskDone(item.task) },
+                                onOpenTaskDetail = { viewModel.openInspectTaskModal(item.task.id) }
                             )
                         }
-
-                        HybridSpineTaskRow(
-                            item = item,
-                            sequenceNumber = index + 1,
-                            isUpNext = isUpNext,
-                            isSimultaneous = isSimultaneous,
-                            isMultiSelectActive = uiState.isMultiSelectActive,
-                            isSelected = isSelected,
-                            onToggleSelect = { viewModel.toggleTaskSelection(item.task.id) },
-                            onLongPressSelect = { viewModel.enterMultiSelectWithTask(item.task.id) },
-                            onToggleComplete = { viewModel.toggleTaskDone(item.task) },
-                            onOpenTaskDetail = { viewModel.openInspectTaskModal(item.task.id) }
-                        )
                     }
                 }
 

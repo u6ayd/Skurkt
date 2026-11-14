@@ -453,6 +453,14 @@ fun NeoProgressBar(
     height: Dp = 8.sdp
 ) {
     val clamped = progress.coerceIn(0f, 1f)
+    val animatedProgress by animateFloatAsState(
+        targetValue = clamped,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "neo_progress_width"
+    )
     val shape = RoundedCornerShape(50)
     Box(
         modifier = modifier
@@ -462,10 +470,10 @@ fun NeoProgressBar(
             .background(trackColor, shape)
             .border(1.2.dp, InkBlack, shape)
     ) {
-        if (clamped > 0f) {
+        if (animatedProgress > 0.001f) {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth(clamped)
+                    .fillMaxWidth(animatedProgress)
                     .fillMaxHeight()
                     .background(fillColor, shape)
             )
@@ -485,6 +493,19 @@ fun NeoSquareCheckbox(
         animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
         label = "square_check_bg"
     )
+    val checkScale by animateFloatAsState(
+        targetValue = if (checked) 1f else 0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "square_check_scale"
+    )
+    val checkAlpha by animateFloatAsState(
+        targetValue = if (checked) 1f else 0f,
+        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        label = "square_check_alpha"
+    )
     val shape = RoundedCornerShape(8.sdp)
     Box(
         modifier = modifier
@@ -500,12 +521,18 @@ fun NeoSquareCheckbox(
                 .border(1.5.dp, InkBlack, shape),
             contentAlignment = Alignment.Center
         ) {
-            if (checked) {
+            if (checkAlpha > 0.01f) {
                 Icon(
                     imageVector = Icons.Default.Check,
                     contentDescription = "Completed",
                     tint = InkBlack,
-                    modifier = Modifier.size(15.sdp)
+                    modifier = Modifier
+                        .size(15.sdp)
+                        .graphicsLayer {
+                            scaleX = checkScale
+                            scaleY = checkScale
+                            alpha = checkAlpha
+                        }
                 )
             }
         }
@@ -524,6 +551,19 @@ fun NeoCircleCheckbox(
         animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
         label = "circle_check_bg"
     )
+    val checkScale by animateFloatAsState(
+        targetValue = if (checked) 1f else 0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "circle_check_scale"
+    )
+    val checkAlpha by animateFloatAsState(
+        targetValue = if (checked) 1f else 0f,
+        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        label = "circle_check_alpha"
+    )
     Box(
         modifier = modifier
             .minimumInteractiveComponentSize()
@@ -538,12 +578,18 @@ fun NeoCircleCheckbox(
                 .border(1.8.dp, if (checked) InkBlack else accentColor, CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            if (checked) {
+            if (checkAlpha > 0.01f) {
                 Icon(
                     imageVector = Icons.Default.Check,
                     contentDescription = "Completed",
                     tint = InkBlack,
-                    modifier = Modifier.size(16.sdp)
+                    modifier = Modifier
+                        .size(16.sdp)
+                        .graphicsLayer {
+                            scaleX = checkScale
+                            scaleY = checkScale
+                            alpha = checkAlpha
+                        }
                 )
             }
         }
