@@ -45,6 +45,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -71,6 +72,9 @@ import com.example.ui.theme.PureWhiteSurface
 import com.example.ui.theme.SoftSheetSurface
 import com.example.ui.theme.sdp
 import com.example.ui.theme.ssp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 import java.time.LocalDate
@@ -132,13 +136,19 @@ fun CleanupAndExportModal(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val today = remember { LocalDate.now() }
     var selectedFilter by remember { mutableStateOf(ExportTimeframeFilter.LAST_MONTH) }
     var confirmPurge by remember { mutableStateOf(false) }
+    var isExporting by remember { mutableStateOf(false) }
 
-    val matchedTasks = remember(allTasks, selectedFilter, today) {
-        filterCompletedTasksForExport(allTasks, selectedFilter, today)
+    val tasksByFilter = remember(allTasks, today) {
+        ExportTimeframeFilter.entries.associateWith { filter ->
+            filterCompletedTasksForExport(allTasks, filter, today)
+        }
     }
+
+    val matchedTasks = tasksByFilter[selectedFilter].orEmpty()
 
     val totalWorkedMinutes = remember(matchedTasks) {
         matchedTasks.sumOf { item ->
@@ -162,30 +172,38 @@ fun CleanupAndExportModal(
         contract = ActivityResultContracts.CreateDocument("application/pdf")
     ) { uri ->
         val src = pendingPdfFile
-        if (uri != null && src != null) {
-            val saved = runCatching {
-                context.contentResolver.openOutputStream(uri)?.use { out ->
-                    src.inputStream().use { input -> input.copyTo(out) }
-                }
-            }.isSuccess
-            onExportStatusMessage(if (saved) "Saved PDF: ${src.name}" else "Failed to save PDF")
-        }
         pendingPdfFile = null
+        if (uri != null && src != null) {
+            coroutineScope.launch {
+                val saved = withContext(Dispatchers.IO) {
+                    runCatching {
+                        context.contentResolver.openOutputStream(uri)?.use { out ->
+                            src.inputStream().use { input -> input.copyTo(out) }
+                        } != null
+                    }.getOrDefault(false)
+                }
+                onExportStatusMessage(if (saved) "Saved PDF: ${src.name}" else "Failed to save PDF")
+            }
+        }
     }
 
     val createCsvLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("text/csv")
     ) { uri ->
         val src = pendingCsvFile
-        if (uri != null && src != null) {
-            val saved = runCatching {
-                context.contentResolver.openOutputStream(uri)?.use { out ->
-                    src.inputStream().use { input -> input.copyTo(out) }
-                }
-            }.isSuccess
-            onExportStatusMessage(if (saved) "Saved CSV: ${src.name}" else "Failed to save CSV")
-        }
         pendingCsvFile = null
+        if (uri != null && src != null) {
+            coroutineScope.launch {
+                val saved = withContext(Dispatchers.IO) {
+                    runCatching {
+                        context.contentResolver.openOutputStream(uri)?.use { out ->
+                            src.inputStream().use { input -> input.copyTo(out) }
+                        } != null
+                    }.getOrDefault(false)
+                }
+                onExportStatusMessage(if (saved) "Saved CSV: ${src.name}" else "Failed to save CSV")
+            }
+        }
     }
 
     Dialog(
@@ -250,7 +268,7 @@ fun CleanupAndExportModal(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         ExportTimeframeFilter.entries.forEach { filter ->
-                            val count = filterCompletedTasksForExport(allTasks, filter, today).size
+                            val count = tasksByFilter[filter]?.size ?: 0
                             NeoPillButton(
                                 text = "${filter.label} ($count)",
                                 selected = selectedFilter == filter,
@@ -294,31 +312,38 @@ fun CleanupAndExportModal(
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     NeoPillButton(
-                        text = "Export PDF",
+                        text = if (isExporting) "Generating..." else "Export PDF",
                         icon = Icons.Default.Description,
                         selected = true,
                         activeColor = NeoYellow,
                         onClick = {
-                            val file = generateProgressPdfFile(
-                                context = context,
-                                filter = selectedFilter,
-                                matchedTasks = matchedTasks,
-                                allTasks = allTasks,
-                                folders = folders,
-                                totalWorkedMinutes = totalWorkedMinutes,
-                                totalBreakMinutes = totalBreakMinutes
-                            )
-                            if (file != null) {
-                                pendingPdfFile = file
-                                val launched = runCatching {
-                                    createPdfLauncher.launch(file.name)
-                                }.isSuccess
-                                if (!launched) {
-                                    shareExportedFile(context, file, "application/pdf")
-                                    onExportStatusMessage("PDF exported: ${file.name}")
+                            if (isExporting) return@NeoPillButton
+                            isExporting = true
+                            coroutineScope.launch {
+                                val file = withContext(Dispatchers.IO) {
+                                    generateProgressPdfFile(
+                                        context = context,
+                                        filter = selectedFilter,
+                                        matchedTasks = matchedTasks,
+                                        allTasks = allTasks,
+                                        folders = folders,
+                                        totalWorkedMinutes = totalWorkedMinutes,
+                                        totalBreakMinutes = totalBreakMinutes
+                                    )
                                 }
-                            } else {
-                                onExportStatusMessage("Failed to generate PDF")
+                                isExporting = false
+                                if (file != null) {
+                                    pendingPdfFile = file
+                                    val launched = runCatching {
+                                        createPdfLauncher.launch(file.name)
+                                    }.isSuccess
+                                    if (!launched) {
+                                        shareExportedFile(context, file, "application/pdf")
+                                        onExportStatusMessage("PDF exported: ${file.name}")
+                                    }
+                                } else {
+                                    onExportStatusMessage("Failed to generate PDF")
+                                }
                             }
                         },
                         modifier = Modifier
@@ -327,27 +352,34 @@ fun CleanupAndExportModal(
                     )
 
                     NeoPillButton(
-                        text = "Export CSV",
+                        text = if (isExporting) "Generating..." else "Export CSV",
                         icon = Icons.Default.TableChart,
                         selected = true,
                         activeColor = NeoSkyBlue,
                         onClick = {
-                            val file = generateProgressCsvFile(
-                                context = context,
-                                filter = selectedFilter,
-                                matchedTasks = matchedTasks
-                            )
-                            if (file != null) {
-                                pendingCsvFile = file
-                                val launched = runCatching {
-                                    createCsvLauncher.launch(file.name)
-                                }.isSuccess
-                                if (!launched) {
-                                    shareExportedFile(context, file, "text/csv")
-                                    onExportStatusMessage("CSV exported: ${file.name}")
+                            if (isExporting) return@NeoPillButton
+                            isExporting = true
+                            coroutineScope.launch {
+                                val file = withContext(Dispatchers.IO) {
+                                    generateProgressCsvFile(
+                                        context = context,
+                                        filter = selectedFilter,
+                                        matchedTasks = matchedTasks
+                                    )
                                 }
-                            } else {
-                                onExportStatusMessage("Failed to generate CSV")
+                                isExporting = false
+                                if (file != null) {
+                                    pendingCsvFile = file
+                                    val launched = runCatching {
+                                        createCsvLauncher.launch(file.name)
+                                    }.isSuccess
+                                    if (!launched) {
+                                        shareExportedFile(context, file, "text/csv")
+                                        onExportStatusMessage("CSV exported: ${file.name}")
+                                    }
+                                } else {
+                                    onExportStatusMessage("Failed to generate CSV")
+                                }
                             }
                         },
                         modifier = Modifier
@@ -503,9 +535,6 @@ private fun generateProgressPdfFile(
         val exportDir = File(context.cacheDir, "exports").apply { mkdirs() }
         val file = File(exportDir, "strukt_progress_${filter.name.lowercase(Locale.US)}.pdf")
         val document = PdfDocument()
-        val pageInfo = PdfDocument.PageInfo.Builder(595, 842, 1).create()
-        val page = document.startPage(pageInfo)
-        val canvas: Canvas = page.canvas
 
         val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = AndroidColor.rgb(26, 26, 26)
@@ -522,12 +551,49 @@ private fun generateProgressPdfFile(
             textSize = 11f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
         }
+        val footerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = AndroidColor.rgb(110, 110, 110)
+            textSize = 9.5f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+        }
         val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = AndroidColor.rgb(26, 26, 26)
             strokeWidth = 1.5f
         }
 
+        val pageWidth = 595
+        val pageHeight = 842
+        val maxContentY = 790f
+
+        var pageNumber = 1
+        var currentPage = document.startPage(
+            PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+        )
+        var canvas: Canvas = currentPage.canvas
         var y = 48f
+
+        fun startNextPageIfNeeded(requiredSpace: Float = 18f) {
+            if (y + requiredSpace > maxContentY) {
+                canvas.drawText("Strukt Progress Report • Page $pageNumber", 40f, 818f, footerPaint)
+                document.finishPage(currentPage)
+                pageNumber++
+                currentPage = document.startPage(
+                    PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+                )
+                canvas = currentPage.canvas
+                y = 44f
+                canvas.drawText(
+                    "STRUKT • PROGRESS & CLEANUP REPORT (CONT.)",
+                    40f,
+                    y,
+                    sectionPaint
+                )
+                y += 10f
+                canvas.drawLine(40f, y, 555f, y, linePaint)
+                y += 20f
+            }
+        }
+
         canvas.drawText("STRUKT • PROGRESS & CLEANUP REPORT", 40f, y, titlePaint)
         y += 20f
         val dateStr = LocalDate.now().format(DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.ENGLISH))
@@ -551,9 +617,10 @@ private fun generateProgressPdfFile(
 
         canvas.drawText("FOLDER READINESS SUMMARY", 40f, y, sectionPaint)
         y += 16f
+        val tasksByFolderLower = allTasks.groupBy { it.task.folderName.trim().lowercase(Locale.US) }
         folders.forEach { folder ->
-            if (y > 780f) return@forEach
-            val folderTasks = allTasks.filter { it.task.folderName.equals(folder.name, ignoreCase = true) }
+            startNextPageIfNeeded(18f)
+            val folderTasks = tasksByFolderLower[folder.name.trim().lowercase(Locale.US)].orEmpty()
             val doneCount = folderTasks.count { it.task.isCompleted }
             val pct = if (folderTasks.isEmpty()) 0 else ((doneCount * 100f) / folderTasks.size).toInt()
             canvas.drawText(
@@ -565,17 +632,20 @@ private fun generateProgressPdfFile(
             y += 15f
         }
 
+        startNextPageIfNeeded(48f)
         y += 14f
         canvas.drawLine(40f, y, 555f, y, linePaint)
         y += 20f
         canvas.drawText("COMPLETED TASKS LOG (${matchedTasks.size})", 40f, y, sectionPaint)
         y += 18f
 
-        matchedTasks.take(28).forEachIndexed { idx, item ->
-            if (y > 800f) return@forEachIndexed
+        matchedTasks.forEachIndexed { idx, item ->
+            startNextPageIfNeeded(18f)
             val t = item.task
             val dateLabel = t.dateEpochDay?.let { LocalDate.ofEpochDay(it).toString() } ?: "Inbox"
-            val durLabel = formatDurationBadge(if (t.totalWorkedMinutes > 0) t.totalWorkedMinutes else t.durationMinutes)
+            val durLabel = formatDurationBadge(
+                if (t.totalWorkedMinutes > 0) t.totalWorkedMinutes else t.durationMinutes
+            )
             canvas.drawText(
                 "${idx + 1}. [$dateLabel] ${t.title} (${t.folderName} • ${t.sectionName}) — $durLabel",
                 48f,
@@ -585,7 +655,8 @@ private fun generateProgressPdfFile(
             y += 15f
         }
 
-        document.finishPage(page)
+        canvas.drawText("Strukt Progress Report • Page $pageNumber", 40f, 818f, footerPaint)
+        document.finishPage(currentPage)
         FileOutputStream(file).use { out ->
             document.writeTo(out)
         }
