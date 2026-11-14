@@ -1,7 +1,15 @@
 package com.example.ui.components
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
@@ -22,6 +30,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -134,23 +143,10 @@ fun FoldersAndSectionsScreen(
         }
     }
 
-    val selectedFolderTasks = remember(selectedFolder, tasksByFolderKey) {
-        selectedFolder?.let { tasksByFolderKey[it.name.trim().lowercase()].orEmpty() }.orEmpty()
-    }
+    val folderGridListState = rememberLazyListState()
 
-    val selectedFolderSectionsList = remember(selectedFolder, selectedFolderTasks) {
-        if (selectedFolder == null) {
-            emptyList()
-        } else {
-            (selectedFolder.sections + selectedFolderTasks.map { it.task.sectionName })
-                .map { it.trim() }
-                .filter { it.isNotEmpty() }
-                .distinct()
-        }
-    }
-
-    val selectedSectionTasksByKey = remember(selectedFolderTasks) {
-        selectedFolderTasks.groupBy { it.task.sectionName.trim().lowercase() }
+    BackHandler(enabled = selectedFolder != null) {
+        onSelectFolder(null)
     }
 
     BoxWithConstraints(
@@ -158,172 +154,215 @@ fun FoldersAndSectionsScreen(
             .fillMaxSize()
             .padding(horizontal = 14.dp)
     ) {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(18.dp),
-            contentPadding = PaddingValues(top = 10.dp, bottom = 100.dp)
-        ) {
-            if (selectedFolder == null) {
-                item(key = "folders_stat_grid", contentType = "stat_grid") {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(IntrinsicSize.Min),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            NeoStatCard(
-                                label = "OVERALL READINESS",
-                                primaryValue = "$overallReadiness%",
-                                backgroundColor = NeoYellow,
-                                contentPadding = PaddingValues(16.dp),
+        AnimatedContent(
+            targetState = selectedFolder,
+            transitionSpec = {
+                if (targetState != null && initialState == null) {
+                    (slideInHorizontally(animationSpec = tween(220)) { fullWidth -> fullWidth / 6 } +
+                        fadeIn(animationSpec = tween(200)))
+                        .togetherWith(
+                            slideOutHorizontally(animationSpec = tween(180)) { fullWidth -> -fullWidth / 8 } +
+                                fadeOut(animationSpec = tween(150))
+                        )
+                } else {
+                    (slideInHorizontally(animationSpec = tween(220)) { fullWidth -> -fullWidth / 6 } +
+                        fadeIn(animationSpec = tween(200)))
+                        .togetherWith(
+                            slideOutHorizontally(animationSpec = tween(180)) { fullWidth -> fullWidth / 8 } +
+                                fadeOut(animationSpec = tween(150))
+                        )
+                }
+            },
+            contentKey = { it?.id },
+            label = "folders_drilldown_transition"
+        ) { activeFolder ->
+            if (activeFolder == null) {
+                LazyColumn(
+                    state = folderGridListState,
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(18.dp),
+                    contentPadding = PaddingValues(top = 10.dp, bottom = 100.dp)
+                ) {
+                    item(key = "folders_stat_grid", contentType = "stat_grid") {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Row(
                                 modifier = Modifier
-                                    .weight(1f)
-                                    .height(94.sdp)
-                            )
+                                    .fillMaxWidth()
+                                    .height(IntrinsicSize.Min),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                NeoStatCard(
+                                    label = "OVERALL READINESS",
+                                    primaryValue = "$overallReadiness%",
+                                    backgroundColor = NeoYellow,
+                                    contentPadding = PaddingValues(16.dp),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(94.sdp)
+                                )
 
-                            NeoStatCard(
-                                label = "MILESTONES DONE",
-                                primaryValue = "$doneSubtasks / $totalSubtasksCount",
-                                backgroundColor = NeoSkyBlue,
-                                contentPadding = PaddingValues(16.dp),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(94.sdp)
-                            )
-                        }
+                                NeoStatCard(
+                                    label = "MILESTONES DONE",
+                                    primaryValue = "$doneSubtasks / $totalSubtasksCount",
+                                    backgroundColor = NeoSkyBlue,
+                                    contentPadding = PaddingValues(16.dp),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(94.sdp)
+                                )
+                            }
 
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(IntrinsicSize.Min),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            NeoStatCard(
-                                label = "TASKS COMPLETED",
-                                primaryValue = "$completedTasks / ${allTasks.size}",
-                                backgroundColor = NeoMintGreen,
-                                contentPadding = PaddingValues(16.dp),
+                            Row(
                                 modifier = Modifier
-                                    .weight(1f)
-                                    .height(94.sdp)
-                            )
+                                    .fillMaxWidth()
+                                    .height(IntrinsicSize.Min),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                NeoStatCard(
+                                    label = "TASKS COMPLETED",
+                                    primaryValue = "$completedTasks / ${allTasks.size}",
+                                    backgroundColor = NeoMintGreen,
+                                    contentPadding = PaddingValues(16.dp),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(94.sdp)
+                                )
 
-                            NeoStatCard(
-                                label = "FOLDERS",
-                                primaryValue = "${folders.size}",
-                                backgroundColor = NeoRosePink,
-                                contentPadding = PaddingValues(16.dp),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(94.sdp)
-                            )
+                                NeoStatCard(
+                                    label = "FOLDERS",
+                                    primaryValue = "${folders.size}",
+                                    backgroundColor = NeoRosePink,
+                                    contentPadding = PaddingValues(16.dp),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(94.sdp)
+                                )
+                            }
                         }
                     }
-                }
 
-                item(key = "folders_search_bar", contentType = "search_bar") {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            OutlinedTextField(
-                                value = searchQuery,
-                                onValueChange = onSearchQueryChange,
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.Search,
-                                        contentDescription = null,
-                                        tint = InkBlack
-                                    )
-                                },
-                                placeholder = {
-                                    Text(
-                                        "Search...",
-                                        style = MaterialTheme.typography.bodyMedium.copy(
-                                            fontSize = 13.4.ssp,
-                                            fontWeight = FontWeight.Normal
-                                        ),
-                                        color = InkMuted
-                                    )
-                                },
-                                textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.4.ssp),
-                                singleLine = true,
-                                shape = RoundedCornerShape(18.dp),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .background(PureWhiteSurface, RoundedCornerShape(18.dp))
-                            )
+                    item(key = "folders_search_bar", contentType = "search_bar") {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                OutlinedTextField(
+                                    value = searchQuery,
+                                    onValueChange = onSearchQueryChange,
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Default.Search,
+                                            contentDescription = null,
+                                            tint = InkBlack
+                                        )
+                                    },
+                                    placeholder = {
+                                        Text(
+                                            "Search...",
+                                            style = MaterialTheme.typography.bodyMedium.copy(
+                                                fontSize = 13.4.ssp,
+                                                fontWeight = FontWeight.Normal
+                                            ),
+                                            color = InkMuted
+                                        )
+                                    },
+                                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.4.ssp),
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(18.dp),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .background(PureWhiteSurface, RoundedCornerShape(18.dp))
+                                )
 
-                            NeoPillButton(
-                                text = "+ Folder",
-                                icon = Icons.Default.CreateNewFolder,
-                                selected = true,
-                                activeColor = NeoYellow,
-                                onClick = { showCreateFolderPopup = true },
-                                modifier = Modifier.testTag("create_folder_button")
-                            )
-                        }
+                                NeoPillButton(
+                                    text = "+ Folder",
+                                    icon = Icons.Default.CreateNewFolder,
+                                    selected = true,
+                                    activeColor = NeoYellow,
+                                    onClick = { showCreateFolderPopup = true },
+                                    modifier = Modifier.testTag("create_folder_button")
+                                )
+                            }
 
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End
-                        ) {
-                            NeoPillButton(
-                                text = "Cleanup & Export (PDF / CSV)",
-                                icon = Icons.Default.Description,
-                                selected = false,
-                                onClick = onOpenCleanupExport,
-                                modifier = Modifier.testTag("open_cleanup_export_button")
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                NeoPillButton(
+                                    text = "Cleanup & Export (PDF / CSV)",
+                                    icon = Icons.Default.Description,
+                                    selected = false,
+                                    onClick = onOpenCleanupExport,
+                                    modifier = Modifier.testTag("open_cleanup_export_button")
+                                )
+                            }
                         }
                     }
-                }
 
-                items(
-                    items = filteredFolders,
-                    key = { it.id },
-                    contentType = { "folder_card" }
-                ) { folder ->
-                    val (folderTaskCount, _, folderPct) = folderStatsByKey[folder.name.trim().lowercase()]
-                        ?: Triple(0, 0, 0)
+                    items(
+                        items = filteredFolders,
+                        key = { it.id },
+                        contentType = { "folder_card" }
+                    ) { folder ->
+                        val (folderTaskCount, _, folderPct) = folderStatsByKey[folder.name.trim().lowercase()]
+                            ?: Triple(0, 0, 0)
 
-                    NeoFolderCard(
-                        tabCode = folder.codeTag,
-                        title = folder.name,
-                        subtitle = "${folder.sections.size} Sections • $folderTaskCount Tasks",
-                        progressPercent = folderPct,
-                        fillColor = neoColorForKey(folder.colorKey),
-                        onCardClick = { onSelectFolder(folder.id) },
-                        modifier = Modifier
-                            .animateItem(
-                                fadeInSpec = spring(stiffness = Spring.StiffnessMediumLow),
-                                placementSpec = spring(
-                                    dampingRatio = Spring.DampingRatioNoBouncy,
-                                    stiffness = Spring.StiffnessMediumLow
-                                ),
-                                fadeOutSpec = spring(stiffness = Spring.StiffnessMediumLow)
-                            )
-                            .testTag("folder_card_${folder.id}")
-                    )
+                        NeoFolderCard(
+                            tabCode = folder.codeTag,
+                            title = folder.name,
+                            subtitle = "${folder.sections.size} Sections • $folderTaskCount Tasks",
+                            progressPercent = folderPct,
+                            fillColor = neoColorForKey(folder.colorKey),
+                            onCardClick = { onSelectFolder(folder.id) },
+                            modifier = Modifier
+                                .animateItem(
+                                    fadeInSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                                    placementSpec = spring(
+                                        dampingRatio = Spring.DampingRatioNoBouncy,
+                                        stiffness = Spring.StiffnessMediumLow
+                                    ),
+                                    fadeOutSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                                )
+                                .testTag("folder_card_${folder.id}")
+                        )
+                    }
                 }
             } else {
-                val (folderTaskCount, folderDone, folderPct) = folderStatsByKey[selectedFolder.name.trim().lowercase()]
+                val detailListState = rememberLazyListState()
+                val activeFolderTasks = remember(activeFolder, tasksByFolderKey) {
+                    tasksByFolderKey[activeFolder.name.trim().lowercase()].orEmpty()
+                }
+                val activeFolderSectionsList = remember(activeFolder, activeFolderTasks) {
+                    (activeFolder.sections + activeFolderTasks.map { it.task.sectionName })
+                        .map { it.trim() }
+                        .filter { it.isNotEmpty() }
+                        .distinct()
+                }
+                val activeSectionTasksByKey = remember(activeFolderTasks) {
+                    activeFolderTasks.groupBy { it.task.sectionName.trim().lowercase() }
+                }
+                val (folderTaskCount, folderDone, folderPct) = folderStatsByKey[activeFolder.name.trim().lowercase()]
                     ?: Triple(0, 0, 0)
-                val accent = neoColorForKey(selectedFolder.colorKey)
-                val defaultSection = selectedFolderSectionsList.firstOrNull()
-                    ?: selectedFolder.sections.firstOrNull()
+                val accent = neoColorForKey(activeFolder.colorKey)
+                val defaultSection = activeFolderSectionsList.firstOrNull()
+                    ?: activeFolder.sections.firstOrNull()
                     ?: "Core"
 
-                item(key = "selected_folder_header_${selectedFolder.id}", contentType = "folder_header") {
-                    NeoCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        backgroundColor = accent,
-                        cornerRadius = 22.dp,
-                        contentPadding = PaddingValues(18.dp)
-                    ) {
+                LazyColumn(
+                    state = detailListState,
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(18.dp),
+                    contentPadding = PaddingValues(top = 10.dp, bottom = 100.dp)
+                ) {
+                    item(key = "selected_folder_header_${activeFolder.id}", contentType = "folder_header") {
+                        NeoCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            backgroundColor = accent,
+                            cornerRadius = 22.dp,
+                            contentPadding = PaddingValues(18.dp)
+                        ) {
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -343,14 +382,14 @@ fun FoldersAndSectionsScreen(
                                         .padding(horizontal = 11.dp, vertical = 5.dp)
                                 ) {
                                     Text(
-                                        text = selectedFolder.codeTag.uppercase(),
+                                        text = activeFolder.codeTag.uppercase(),
                                         style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium),
                                         color = PureWhiteSurface
                                     )
                                 }
 
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    if (selectedFolderTasks.isNotEmpty() || isMultiSelectActive) {
+                                    if (activeFolderTasks.isNotEmpty() || isMultiSelectActive) {
                                         NeoPillButton(
                                             text = if (isMultiSelectActive) "Done" else "Select",
                                             icon = Icons.Default.Checklist,
@@ -375,7 +414,7 @@ fun FoldersAndSectionsScreen(
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = selectedFolder.name,
+                                        text = activeFolder.name,
                                         style = MaterialTheme.typography.headlineMedium.copy(
                                             fontSize = 18.5.ssp,
                                             lineHeight = 24.ssp,
@@ -404,9 +443,9 @@ fun FoldersAndSectionsScreen(
                                         selected = true,
                                         activeColor = PureWhiteSurface,
                                         onClick = {
-                                            onCreateTaskInFolderSection(selectedFolder.name, defaultSection)
+                                            onCreateTaskInFolderSection(activeFolder.name, defaultSection)
                                         },
-                                        modifier = Modifier.testTag("folder_header_add_task_${selectedFolder.id}")
+                                        modifier = Modifier.testTag("folder_header_add_task_${activeFolder.id}")
                                     )
 
                                     Box(
@@ -434,11 +473,11 @@ fun FoldersAndSectionsScreen(
                 }
 
                 items(
-                    items = selectedFolderSectionsList,
-                    key = { "section_${selectedFolder.id}_$it" },
+                    items = activeFolderSectionsList,
+                    key = { "section_${activeFolder.id}_$it" },
                     contentType = { "folder_section" }
                 ) { sectionName ->
-                    val sectionTasks = selectedSectionTasksByKey[sectionName.trim().lowercase()].orEmpty()
+                    val sectionTasks = activeSectionTasksByKey[sectionName.trim().lowercase()].orEmpty()
 
                     NeoCard(
                         modifier = Modifier
@@ -491,7 +530,7 @@ fun FoldersAndSectionsScreen(
                                     selected = true,
                                     activeColor = NeoYellow,
                                     onClick = {
-                                        onCreateTaskInFolderSection(selectedFolder.name, sectionName)
+                                        onCreateTaskInFolderSection(activeFolder.name, sectionName)
                                     },
                                     modifier = Modifier.testTag("section_add_task_${sectionName.lowercase()}")
                                 )
@@ -569,6 +608,7 @@ fun FoldersAndSectionsScreen(
                             }
                         }
                     }
+                }
                 }
             }
         }
