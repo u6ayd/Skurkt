@@ -7,10 +7,14 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -177,6 +181,12 @@ fun StruktPlannerApp(
             val isLandscapeSplitLayout = maxWidth > maxHeight
             val isTabletDevice = minOf(maxWidth, maxHeight) >= 600.dp
 
+            LaunchedEffect(isLandscapeSplitLayout, uiState.activeDestination) {
+                if (isLandscapeSplitLayout && uiState.activeDestination == StruktDestination.INBOX) {
+                    viewModel.setDestination(StruktDestination.FLOW)
+                }
+            }
+
             if (isLandscapeSplitLayout) {
                 TabletLandscapeSplitLayout(
                     uiState = uiState,
@@ -191,7 +201,12 @@ fun StruktPlannerApp(
             }
 
             if (uiState.isMultiSelectActive) {
-                val visibleIds = when (uiState.activeDestination) {
+                val effectiveDestination = if (isLandscapeSplitLayout && uiState.activeDestination == StruktDestination.INBOX) {
+                    StruktDestination.FLOW
+                } else {
+                    uiState.activeDestination
+                }
+                val visibleIds = when (effectiveDestination) {
                     StruktDestination.INBOX -> uiState.inboxTasks.map { it.task.id }
                     StruktDestination.FOLDERS -> {
                         val activeFolder = uiState.folders.firstOrNull { it.id == uiState.selectedFolderId }
@@ -394,13 +409,18 @@ private fun TabletLandscapeSplitLayout(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(18.sdp)
             ) {
+                val effectiveRailDestination = if (uiState.activeDestination == StruktDestination.INBOX) {
+                    StruktDestination.FLOW
+                } else {
+                    uiState.activeDestination
+                }
                 val railItems = listOf(
                     Triple(StruktDestination.FLOW, "Timeline", Icons.Default.ViewTimeline),
                     Triple(StruktDestination.FOLDERS, "Folders", Icons.Default.Folder),
                     Triple(StruktDestination.FOCUS, "Focus", Icons.Default.CenterFocusStrong)
                 )
                 railItems.forEach { (dest, desc, icon) ->
-                    val selected = uiState.activeDestination == dest
+                    val selected = effectiveRailDestination == dest
                     Box(
                         modifier = Modifier
                             .size(48.sdp)
@@ -481,19 +501,9 @@ private fun TabletLandscapeSplitLayout(
                 .statusBarsPadding()
                 .navigationBarsPadding()
         ) {
-            NeoInboxPane(
-                inboxTasks = uiState.inboxTasks,
-                dayReadinessPercent = uiState.dayReadinessPercent,
-                completedCount = uiState.completedDayTasksCount,
-                totalCount = uiState.totalDayTasksCount,
-                onQuickAddInbox = { title -> viewModel.quickAddInboxTask(title) },
-                onOpenSchedulePopup = { task -> viewModel.openScheduleInboxPopup(task) },
-                onEditInboxTask = { item -> viewModel.openEditTaskSheet(item) },
-                isMultiSelectActive = uiState.isMultiSelectActive,
-                selectedTaskIds = uiState.selectedTaskIds,
-                onToggleMultiSelectMode = viewModel::toggleMultiSelectMode,
-                onToggleSelectTask = viewModel::toggleTaskSelection,
-                onEnterMultiSelectWithTask = viewModel::enterMultiSelectWithTask
+            StruktInboxWorkspacePane(
+                uiState = uiState,
+                viewModel = viewModel
             )
         }
 
@@ -518,67 +528,16 @@ private fun TabletLandscapeSplitLayout(
                     .widthIn(max = 680.dp)
                     .fillMaxSize()
             ) {
-                when (uiState.activeDestination) {
-                    StruktDestination.FOLDERS -> {
-                        FoldersAndSectionsScreen(
-                            allTasks = uiState.allTasks,
-                            folders = uiState.folders,
-                            selectedFolderId = uiState.selectedFolderId,
-                            searchQuery = uiState.searchQuery,
-                            onSearchQueryChange = viewModel::setSearchQuery,
-                            onSelectFolder = viewModel::selectFolder,
-                            onCreateFolder = viewModel::createNewFolder,
-                            onAddSectionToFolder = viewModel::addSectionToFolder,
-                            onCreateTaskInFolderSection = { folderName, sectionName ->
-                                viewModel.openCreateTaskSheet(
-                                    defaultMode = TaskMode.TIMELESS_STEP,
-                                    forInbox = false,
-                                    preselectedFolder = folderName,
-                                    preselectedSection = sectionName
-                                )
-                            },
-                            onOpenCleanupExport = viewModel::openCleanupExportModal,
-                            isMultiSelectActive = uiState.isMultiSelectActive,
-                            selectedTaskIds = uiState.selectedTaskIds,
-                            onToggleMultiSelectMode = viewModel::toggleMultiSelectMode,
-                            onToggleSelectTask = viewModel::toggleTaskSelection,
-                            onEnterMultiSelectWithTask = viewModel::enterMultiSelectWithTask,
-                            onTaskClick = { item -> viewModel.openInspectTaskModal(item.task.id) },
-                            onToggleTaskDone = viewModel::toggleTaskDone
-                        )
-                    }
-
-                    StruktDestination.FOCUS -> {
-                        val activeFocus = uiState.activeFocusTask
-                        AntiParalysisFocusScreen(
-                            focusItem = activeFocus,
-                            timerSnapshot = uiState.timerSnapshotFor(activeFocus?.task?.id ?: 0L),
-                            totalDayTasksCount = uiState.totalDayTasksCount,
-                            completedDayTasksCount = uiState.completedDayTasksCount,
-                            onBackToFlow = { viewModel.setDestination(StruktDestination.FLOW) },
-                            onAddTaskToFlow = {
-                                viewModel.openCreateTaskSheet(
-                                    defaultMode = TaskMode.TIMELESS_STEP,
-                                    forInbox = false
-                                )
-                            },
-                            onStartOrResumeSession = viewModel::startOrResumeFocusTimer,
-                            onPauseSession = viewModel::pauseFocusTimer,
-                            onResetTimer = viewModel::resetFocusTimer,
-                            onExtendDurationMinutes = viewModel::extendFocusTaskDuration,
-                            onToggleSubtask = viewModel::toggleSubtaskDone,
-                            onAddQuickSubtask = viewModel::addQuickSubtask,
-                            onCompleteAndAdvance = viewModel::completeFocusedTaskAndAdvance
-                        )
-                    }
-
-                    else -> {
-                        DayFlowSheetContent(
-                            uiState = uiState,
-                            viewModel = viewModel
-                        )
-                    }
+                val rightPaneDestination = if (uiState.activeDestination == StruktDestination.INBOX) {
+                    StruktDestination.FLOW
+                } else {
+                    uiState.activeDestination
                 }
+                StruktWorkspaceHost(
+                    destination = rightPaneDestination,
+                    uiState = uiState,
+                    viewModel = viewModel
+                )
             }
         }
     }
@@ -603,84 +562,11 @@ private fun PortraitHandheldLayout(
                     .widthIn(max = 680.dp)
                     .fillMaxSize()
             ) {
-                when (uiState.activeDestination) {
-                    StruktDestination.INBOX -> {
-                        NeoInboxPane(
-                            inboxTasks = uiState.inboxTasks,
-                            dayReadinessPercent = uiState.dayReadinessPercent,
-                            completedCount = uiState.completedDayTasksCount,
-                            totalCount = uiState.totalDayTasksCount,
-                            onQuickAddInbox = { title -> viewModel.quickAddInboxTask(title) },
-                            onOpenSchedulePopup = { task -> viewModel.openScheduleInboxPopup(task) },
-                            onEditInboxTask = { item -> viewModel.openEditTaskSheet(item) },
-                            isMultiSelectActive = uiState.isMultiSelectActive,
-                            selectedTaskIds = uiState.selectedTaskIds,
-                            onToggleMultiSelectMode = viewModel::toggleMultiSelectMode,
-                            onToggleSelectTask = viewModel::toggleTaskSelection,
-                            onEnterMultiSelectWithTask = viewModel::enterMultiSelectWithTask
-                        )
-                    }
-
-                    StruktDestination.FOLDERS -> {
-                        FoldersAndSectionsScreen(
-                            allTasks = uiState.allTasks,
-                            folders = uiState.folders,
-                            selectedFolderId = uiState.selectedFolderId,
-                            searchQuery = uiState.searchQuery,
-                            onSearchQueryChange = viewModel::setSearchQuery,
-                            onSelectFolder = viewModel::selectFolder,
-                            onCreateFolder = viewModel::createNewFolder,
-                            onAddSectionToFolder = viewModel::addSectionToFolder,
-                            onCreateTaskInFolderSection = { folderName, sectionName ->
-                                viewModel.openCreateTaskSheet(
-                                    defaultMode = TaskMode.TIMELESS_STEP,
-                                    forInbox = false,
-                                    preselectedFolder = folderName,
-                                    preselectedSection = sectionName
-                                )
-                            },
-                            onOpenCleanupExport = viewModel::openCleanupExportModal,
-                            isMultiSelectActive = uiState.isMultiSelectActive,
-                            selectedTaskIds = uiState.selectedTaskIds,
-                            onToggleMultiSelectMode = viewModel::toggleMultiSelectMode,
-                            onToggleSelectTask = viewModel::toggleTaskSelection,
-                            onEnterMultiSelectWithTask = viewModel::enterMultiSelectWithTask,
-                            onTaskClick = { item -> viewModel.openInspectTaskModal(item.task.id) },
-                            onToggleTaskDone = viewModel::toggleTaskDone
-                        )
-                    }
-
-                    StruktDestination.FOCUS -> {
-                        val activeFocus = uiState.activeFocusTask
-                        AntiParalysisFocusScreen(
-                            focusItem = activeFocus,
-                            timerSnapshot = uiState.timerSnapshotFor(activeFocus?.task?.id ?: 0L),
-                            totalDayTasksCount = uiState.totalDayTasksCount,
-                            completedDayTasksCount = uiState.completedDayTasksCount,
-                            onBackToFlow = { viewModel.setDestination(StruktDestination.FLOW) },
-                            onAddTaskToFlow = {
-                                viewModel.openCreateTaskSheet(
-                                    defaultMode = TaskMode.TIMELESS_STEP,
-                                    forInbox = false
-                                )
-                            },
-                            onStartOrResumeSession = viewModel::startOrResumeFocusTimer,
-                            onPauseSession = viewModel::pauseFocusTimer,
-                            onResetTimer = viewModel::resetFocusTimer,
-                            onExtendDurationMinutes = viewModel::extendFocusTaskDuration,
-                            onToggleSubtask = viewModel::toggleSubtaskDone,
-                            onAddQuickSubtask = viewModel::addQuickSubtask,
-                            onCompleteAndAdvance = viewModel::completeFocusedTaskAndAdvance
-                        )
-                    }
-
-                    StruktDestination.FLOW -> {
-                        DayFlowSheetContent(
-                            uiState = uiState,
-                            viewModel = viewModel
-                        )
-                    }
-                }
+                StruktWorkspaceHost(
+                    destination = uiState.activeDestination,
+                    uiState = uiState,
+                    viewModel = viewModel
+                )
             }
         }
 
@@ -701,6 +587,112 @@ private fun PortraitHandheldLayout(
                 )
             }
         )
+    }
+}
+
+@Composable
+private fun StruktInboxWorkspacePane(
+    uiState: PlannerUiState,
+    viewModel: PlannerViewModel
+) {
+    NeoInboxPane(
+        inboxTasks = uiState.inboxTasks,
+        dayReadinessPercent = uiState.dayReadinessPercent,
+        completedCount = uiState.completedDayTasksCount,
+        totalCount = uiState.totalDayTasksCount,
+        onQuickAddInbox = { title -> viewModel.quickAddInboxTask(title) },
+        onOpenSchedulePopup = { task -> viewModel.openScheduleInboxPopup(task) },
+        onEditInboxTask = { item -> viewModel.openEditTaskSheet(item) },
+        isMultiSelectActive = uiState.isMultiSelectActive,
+        selectedTaskIds = uiState.selectedTaskIds,
+        onToggleMultiSelectMode = viewModel::toggleMultiSelectMode,
+        onToggleSelectTask = viewModel::toggleTaskSelection,
+        onEnterMultiSelectWithTask = viewModel::enterMultiSelectWithTask
+    )
+}
+
+@Composable
+private fun StruktWorkspaceHost(
+    destination: StruktDestination,
+    uiState: PlannerUiState,
+    viewModel: PlannerViewModel
+) {
+    AnimatedContent(
+        targetState = destination,
+        transitionSpec = {
+            fadeIn(animationSpec = tween(durationMillis = 180)) togetherWith
+                fadeOut(animationSpec = tween(durationMillis = 140))
+        },
+        label = "strukt_workspace_host_transition"
+    ) { targetDestination ->
+        when (targetDestination) {
+            StruktDestination.INBOX -> {
+                StruktInboxWorkspacePane(
+                    uiState = uiState,
+                    viewModel = viewModel
+                )
+            }
+
+            StruktDestination.FOLDERS -> {
+                FoldersAndSectionsScreen(
+                    allTasks = uiState.allTasks,
+                    folders = uiState.folders,
+                    selectedFolderId = uiState.selectedFolderId,
+                    searchQuery = uiState.searchQuery,
+                    onSearchQueryChange = viewModel::setSearchQuery,
+                    onSelectFolder = viewModel::selectFolder,
+                    onCreateFolder = viewModel::createNewFolder,
+                    onAddSectionToFolder = viewModel::addSectionToFolder,
+                    onCreateTaskInFolderSection = { folderName, sectionName ->
+                        viewModel.openCreateTaskSheet(
+                            defaultMode = TaskMode.TIMELESS_STEP,
+                            forInbox = false,
+                            preselectedFolder = folderName,
+                            preselectedSection = sectionName
+                        )
+                    },
+                    onOpenCleanupExport = viewModel::openCleanupExportModal,
+                    isMultiSelectActive = uiState.isMultiSelectActive,
+                    selectedTaskIds = uiState.selectedTaskIds,
+                    onToggleMultiSelectMode = viewModel::toggleMultiSelectMode,
+                    onToggleSelectTask = viewModel::toggleTaskSelection,
+                    onEnterMultiSelectWithTask = viewModel::enterMultiSelectWithTask,
+                    onTaskClick = { item -> viewModel.openInspectTaskModal(item.task.id) },
+                    onToggleTaskDone = viewModel::toggleTaskDone
+                )
+            }
+
+            StruktDestination.FOCUS -> {
+                val activeFocus = uiState.activeFocusTask
+                AntiParalysisFocusScreen(
+                    focusItem = activeFocus,
+                    timerSnapshot = uiState.timerSnapshotFor(activeFocus?.task?.id ?: 0L),
+                    totalDayTasksCount = uiState.totalDayTasksCount,
+                    completedDayTasksCount = uiState.completedDayTasksCount,
+                    onBackToFlow = { viewModel.setDestination(StruktDestination.FLOW) },
+                    onAddTaskToFlow = {
+                        viewModel.openCreateTaskSheet(
+                            defaultMode = TaskMode.TIMELESS_STEP,
+                            forInbox = false
+                        )
+                    },
+                    onStartOrResumeSession = viewModel::startOrResumeFocusTimer,
+                    onPauseSession = viewModel::pauseFocusTimer,
+                    onResetTimer = viewModel::resetFocusTimer,
+                    onExtendDurationMinutes = viewModel::extendFocusTaskDuration,
+                    onToggleSubtask = viewModel::toggleSubtaskDone,
+                    onAddQuickSubtask = viewModel::addQuickSubtask,
+                    onCompleteAndAdvance = viewModel::completeFocusedTaskAndAdvance
+                )
+            }
+
+            StruktDestination.FLOW -> {
+                DayFlowSheetContent(
+                    uiState = uiState,
+                    viewModel = viewModel
+                )
+            }
+        }
     }
 }
 
