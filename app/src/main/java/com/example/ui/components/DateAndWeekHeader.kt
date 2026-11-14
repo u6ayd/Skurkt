@@ -29,11 +29,15 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,6 +50,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.data.TaskWithSubtasks
 import com.example.ui.FlowFilterMode
 import com.example.ui.theme.InkBlack
@@ -57,8 +64,11 @@ import com.example.ui.theme.SoftSheetSurface
 import com.example.ui.theme.neoColorForKey
 import com.example.ui.theme.sdp
 import com.example.ui.theme.ssp
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
+import java.time.Duration
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.format.TextStyle as JavaTextStyle
 import java.time.temporal.ChronoUnit
 import java.util.Locale
@@ -122,10 +132,35 @@ fun DateAndWeekHeader(
     onOpenSettings: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val today = remember { LocalDate.now() }
-    val baseMonday = remember { today.minusDays((today.dayOfWeek.value - 1).toLong()) }
-    val selectedMonday = selectedDate.minusDays((selectedDate.dayOfWeek.value - 1).toLong())
-    val targetPage = remember(selectedMonday) {
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var today by remember { mutableStateOf(LocalDate.now()) }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                val currentNow = LocalDate.now()
+                if (currentNow != today) {
+                    today = currentNow
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    LaunchedEffect(today) {
+        val now = LocalDateTime.now()
+        val nextMidnight = today.plusDays(1).atStartOfDay()
+        val millisUntilMidnight = Duration.between(now, nextMidnight).toMillis().coerceAtLeast(1_000L)
+        delay(millisUntilMidnight + 250L)
+        today = LocalDate.now()
+    }
+
+    val baseMonday = remember(today) { today.minusDays((today.dayOfWeek.value - 1).toLong()) }
+    val selectedMonday = remember(selectedDate) {
+        selectedDate.minusDays((selectedDate.dayOfWeek.value - 1).toLong())
+    }
+    val targetPage = remember(baseMonday, selectedMonday) {
         val weeksDiff = ChronoUnit.WEEKS.between(baseMonday, selectedMonday).toInt()
         (WEEK_PAGER_CENTER + weeksDiff).coerceIn(0, WEEK_PAGER_COUNT - 1)
     }
@@ -135,15 +170,25 @@ fun DateAndWeekHeader(
         pageCount = { WEEK_PAGER_COUNT }
     )
 
-    LaunchedEffect(pagerState) {
+    val currentSelectedDate by rememberUpdatedState(selectedDate)
+    val currentOnSelectDate by rememberUpdatedState(onSelectDate)
+
+    LaunchedEffect(targetPage) {
+        if (pagerState.settledPage != targetPage && !pagerState.isScrollInProgress) {
+            pagerState.animateScrollToPage(targetPage)
+        }
+    }
+
+    LaunchedEffect(pagerState, baseMonday) {
         snapshotFlow { pagerState.settledPage }
             .distinctUntilChanged()
             .collect { page ->
                 val weekOffset = (page - WEEK_PAGER_CENTER).toLong()
-                val currentDayOfWeekOffset = (selectedDate.dayOfWeek.value - 1).toLong()
+                val activeDate = currentSelectedDate
+                val currentDayOfWeekOffset = (activeDate.dayOfWeek.value - 1).toLong()
                 val newDate = baseMonday.plusWeeks(weekOffset).plusDays(currentDayOfWeekOffset)
-                if (newDate != selectedDate) {
-                    onSelectDate(newDate.toEpochDay())
+                if (newDate != activeDate) {
+                    currentOnSelectDate(newDate.toEpochDay())
                 }
             }
     }
