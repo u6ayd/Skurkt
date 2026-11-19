@@ -20,6 +20,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Checklist
@@ -299,16 +300,16 @@ fun DateAndWeekHeader(
                                 color = if (isSelected) PureWhiteSurface else InkBlack
                             )
                         }
-                        Spacer(modifier = Modifier.height(5.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(3.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.height(6.sdp)
+                            modifier = Modifier.height(5.sdp)
                         ) {
-                            dotColors.take(4).forEach { colorKey ->
+                            dotColors.take(3).forEach { colorKey ->
                                 Box(
                                     modifier = Modifier
-                                        .size(5.sdp)
+                                        .size(4.5.sdp)
                                         .clip(CircleShape)
                                         .background(neoColorForKey(colorKey))
                                 )
@@ -426,24 +427,58 @@ fun FlowStructureFilterBar(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .clip(RoundedCornerShape(50))
+                .background(SoftSheetSurface, RoundedCornerShape(50))
+                .border(1.dp, InkBlack.copy(alpha = 0.14f), RoundedCornerShape(50))
+                .padding(3.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             FlowFilterMode.entries.forEach { mode ->
-                NeoPillButton(
-                    text = mode.label,
-                    selected = currentFilter == mode,
-                    activeColor = NeoYellow,
-                    onClick = { onSelectFilter(mode) }
+                val isSelected = currentFilter == mode
+                val segmentBg by animateColorAsState(
+                    targetValue = if (isSelected) NeoYellow else Color.Transparent,
+                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                    label = "filter_seg_bg_${mode.name}"
                 )
+                Box(
+                    modifier = Modifier
+                        .height(32.sdp)
+                        .clip(RoundedCornerShape(50))
+                        .background(segmentBg, RoundedCornerShape(50))
+                        .then(
+                            if (isSelected) {
+                                Modifier.border(1.2.dp, InkBlack, RoundedCornerShape(50))
+                            } else {
+                                Modifier
+                            }
+                        )
+                        .smoothPressClickable(role = Role.Tab) { onSelectFilter(mode) }
+                        .padding(horizontal = 14.sdp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = mode.label,
+                        style = MaterialTheme.typography.labelLarge.copy(
+                            fontSize = 12.5.ssp,
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium
+                        ),
+                        color = if (isSelected) InkBlack else InkMuted,
+                        maxLines = 1
+                    )
+                }
             }
         }
 
-        NeoPillButton(
-            text = if (isMultiSelectActive) "Done" else "Select",
+        NeoIconCircleButton(
             icon = Icons.Default.Checklist,
+            contentDescription = if (isMultiSelectActive) "Exit Selection" else "Select Tasks",
             selected = isMultiSelectActive,
             activeColor = NeoYellow,
+            inactiveColor = SoftSheetSurface,
+            size = 36.sdp,
+            iconSize = 17.sdp,
             onClick = onToggleMultiSelectMode,
             modifier = Modifier.testTag("timeline_multi_select_toggle")
         )

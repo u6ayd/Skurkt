@@ -569,17 +569,17 @@ private fun TaskRightTitleAndCheckRow(
                             .clip(RoundedCornerShape(16.dp))
                             .background(NeoYellow)
                             .border(1.5.dp, InkBlack, RoundedCornerShape(16.dp))
-                            .padding(horizontal = 14.dp, vertical = 9.dp)
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
                     }
                     isUpNext && !task.isCompleted -> {
                         Modifier
                             .clip(RoundedCornerShape(16.dp))
-                            .background(neoSoftColorForKey(task.colorKey))
-                            .border(1.5.dp, InkBlack, RoundedCornerShape(16.dp))
-                            .padding(horizontal = 14.dp, vertical = 9.dp)
+                            .background(neoSoftColorForKey(task.colorKey).copy(alpha = 0.72f))
+                            .border(1.dp, InkBlack.copy(alpha = 0.14f), RoundedCornerShape(16.dp))
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
                     }
                     else -> {
-                        Modifier.padding(vertical = 6.dp)
+                        Modifier.padding(vertical = 4.dp)
                     }
                 }
             ),
@@ -589,7 +589,7 @@ private fun TaskRightTitleAndCheckRow(
         Column(modifier = Modifier.weight(1f)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
                 Text(
                     text = task.title,
@@ -609,103 +609,67 @@ private fun TaskRightTitleAndCheckRow(
                         imageVector = Icons.Default.Repeat,
                         contentDescription = task.recurrenceSummaryLabel(),
                         tint = InkMuted,
-                        modifier = Modifier.size(14.dp)
+                        modifier = Modifier.size(13.dp)
                     )
                 }
             }
 
-            val hasDurationBadge = task.durationMinutes > 0
-            val hasSubtasks = item.subtasks.isNotEmpty()
-            if (hasDurationBadge || hasSubtasks || isSimultaneous || hasPauseBreak) {
+            val metadataParts = buildList {
+                if (task.durationMinutes > 0) {
+                    add(formatDurationBadge(task.durationMinutes))
+                }
+                if (item.subtasks.isNotEmpty()) {
+                    add("${item.completedSubtasksCount}/${item.subtasks.size} steps")
+                }
+                if (hasPauseBreak) {
+                    val workedMin = task.totalWorkedMinutes.coerceAtLeast(1)
+                    val breakMin = task.totalBreakMinutes.coerceAtLeast(1)
+                    add("${formatDurationBadge(workedMin)} work · ${formatDurationBadge(breakMin)} break")
+                }
+            }
+
+            if (metadataParts.isNotEmpty() || isSimultaneous) {
                 Spacer(modifier = Modifier.height(3.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    if (hasDurationBadge) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(3.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Schedule,
-                                contentDescription = null,
-                                tint = InkMuted,
-                                modifier = Modifier.size(12.dp)
-                            )
-                            Text(
-                                text = formatDurationBadge(task.durationMinutes),
-                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Normal),
-                                color = InkMuted
-                            )
-                        }
-                    }
-
-                    if (hasSubtasks) {
-                        val done = item.completedSubtasksCount
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Checklist,
-                                contentDescription = null,
-                                tint = InkMuted,
-                                modifier = Modifier.size(13.dp)
-                            )
-                            Text(
-                                text = "$done/${item.subtasks.size}",
-                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Normal),
-                                color = InkMuted
-                            )
-                        }
+                    if (metadataParts.isNotEmpty()) {
+                        Text(
+                            text = metadataParts.joinToString(" · "),
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontSize = 11.5.ssp,
+                                fontWeight = FontWeight.Normal
+                            ),
+                            color = InkMuted,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
                     }
 
                     if (isSimultaneous) {
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(50))
-                                .background(NeoYellow)
-                                .border(1.dp, InkBlack, RoundedCornerShape(50))
+                                .background(NeoYellow.copy(alpha = 0.85f))
                                 .padding(horizontal = 6.dp, vertical = 1.dp)
                         ) {
                             Text(
-                                text = "Simultaneous",
+                                text = "Overlap",
                                 style = MaterialTheme.typography.labelSmall.copy(
                                     fontSize = 9.5.ssp,
-                                    fontWeight = FontWeight.Bold
+                                    fontWeight = FontWeight.SemiBold
                                 ),
                                 color = InkBlack
                             )
                         }
                     }
                 }
-
-                if (hasPauseBreak) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    val workedMin = task.totalWorkedMinutes.coerceAtLeast(1)
-                    val breakMin = task.totalBreakMinutes.coerceAtLeast(1)
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(50))
-                            .background(PureWhiteSurface)
-                            .border(1.dp, InkBlack.copy(alpha = 0.6f), RoundedCornerShape(50))
-                            .padding(horizontal = 8.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = "Worked ${formatDurationBadge(workedMin)} • Break ${formatDurationBadge(breakMin)}",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontSize = 9.5.ssp,
-                                fontWeight = FontWeight.SemiBold
-                            ),
-                            color = InkBlack
-                        )
-                    }
-                }
             }
         }
 
-        Spacer(modifier = Modifier.width(10.dp))
+        Spacer(modifier = Modifier.width(8.dp))
 
         NeoCircleCheckbox(
             checked = if (isMultiSelectActive) isSelected else task.isCompleted,
@@ -748,10 +712,10 @@ fun DayThresholdMarkerRow(
         ) {
             Box(
                 modifier = Modifier
-                    .size(12.sdp)
+                    .size(10.sdp)
                     .clip(CircleShape)
                     .background(if (isStartOfDay) NeoYellow else SoftSheetSurface, CircleShape)
-                    .border(1.5.dp, InkBlack, CircleShape)
+                    .border(1.2.dp, InkBlack.copy(alpha = 0.7f), CircleShape)
             )
         }
         Spacer(modifier = Modifier.width(12.dp))

@@ -697,9 +697,7 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
             it.copy(
                 use24HourFormat = use24Hour,
                 startOfDayMinutes = safeStart,
-                endOfDayMinutes = safeEnd,
-                isSettingsVisible = false,
-                statusBannerMessage = "Settings saved"
+                endOfDayMinutes = safeEnd
             )
         }
     }

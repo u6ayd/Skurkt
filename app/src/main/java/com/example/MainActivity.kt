@@ -14,6 +14,8 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -72,7 +74,6 @@ import com.example.ui.components.DayThresholdMarkerRow
 import com.example.ui.components.DotGridBackground
 import com.example.ui.components.FlowStructureFilterBar
 import com.example.ui.components.FoldersAndSectionsScreen
-import com.example.ui.components.GlobalSettingsPopupModal
 import com.example.ui.components.HybridSpineTaskRow
 import com.example.ui.components.LocalClockFormat
 import com.example.ui.components.NeoCard
@@ -82,6 +83,7 @@ import com.example.ui.components.NeoPillButton
 import com.example.ui.components.OverlapConflictModal
 import com.example.ui.components.ScheduleInboxMiniPopup
 import com.example.ui.components.SpineConnectorSegment
+import com.example.ui.components.StruktSettingsScreen
 import com.example.ui.components.StructuredTaskEditorDialog
 import com.example.ui.components.TaskDetailPopupModal
 import com.example.ui.components.TopAnytimeBubblesRow
@@ -343,8 +345,14 @@ fun StruktPlannerApp(
                 )
             }
 
-            if (uiState.isSettingsVisible) {
-                GlobalSettingsPopupModal(
+            AnimatedVisibility(
+                visible = uiState.isSettingsVisible,
+                enter = slideInHorizontally(animationSpec = tween(220)) { fullWidth -> fullWidth / 4 } +
+                    fadeIn(animationSpec = tween(180)),
+                exit = slideOutHorizontally(animationSpec = tween(180)) { fullWidth -> fullWidth / 4 } +
+                    fadeOut(animationSpec = tween(140))
+            ) {
+                StruktSettingsScreen(
                     use24HourFormat = uiState.use24HourFormat,
                     startOfDayMinutes = uiState.startOfDayMinutes,
                     endOfDayMinutes = uiState.endOfDayMinutes,

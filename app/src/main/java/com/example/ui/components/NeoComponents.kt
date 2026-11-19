@@ -31,6 +31,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.DirectionsBike
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.AccessAlarm
 import androidx.compose.material.icons.filled.AccountBalance
@@ -238,10 +239,10 @@ fun NeoFolderCard(
     NeoCard(
         modifier = modifier.fillMaxWidth(),
         backgroundColor = fillColor,
-        cornerRadius = 22.dp,
+        cornerRadius = 20.dp,
         borderWidth = 1.5.dp,
         onClick = onCardClick,
-        contentPadding = PaddingValues(20.dp)
+        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 16.dp)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             Row(
@@ -251,48 +252,50 @@ fun NeoFolderCard(
             ) {
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(9.dp))
+                        .clip(RoundedCornerShape(8.dp))
                         .background(InkBlack)
-                        .padding(horizontal = 11.dp, vertical = 5.dp)
+                        .padding(horizontal = 9.dp, vertical = 4.dp)
                 ) {
                     Text(
                         text = tabCode.uppercase(),
                         style = MaterialTheme.typography.labelMedium.copy(
-                            fontSize = 11.4.ssp,
-                            lineHeight = 15.5.ssp,
-                            fontWeight = FontWeight.Medium
+                            fontSize = 11.ssp,
+                            lineHeight = 14.ssp,
+                            fontWeight = FontWeight.SemiBold
                         ),
                         color = PureWhiteSurface,
                         maxLines = 1
                     )
                 }
 
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(50))
-                        .background(PureWhiteSurface)
-                        .border(1.5.dp, InkBlack, RoundedCornerShape(50))
-                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text(
                         text = "$progressPercent%",
                         style = MaterialTheme.typography.labelLarge.copy(
-                            fontSize = 12.4.ssp,
-                            lineHeight = 16.5.ssp,
-                            fontWeight = FontWeight.Medium
+                            fontSize = 13.ssp,
+                            fontWeight = FontWeight.Bold
                         ),
                         color = InkBlack
+                    )
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = "Open Folder",
+                        tint = InkBlack.copy(alpha = 0.7f),
+                        modifier = Modifier.size(18.sdp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             Text(
                 text = title,
                 style = MaterialTheme.typography.headlineMedium.copy(
-                    fontSize = 18.5.ssp,
-                    lineHeight = 24.ssp,
+                    fontSize = 18.ssp,
+                    lineHeight = 23.ssp,
                     fontWeight = FontWeight.SemiBold
                 ),
                 color = InkBlack,
@@ -300,89 +303,64 @@ fun NeoFolderCard(
                 overflow = TextOverflow.Ellipsis
             )
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(3.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Progress",
-                    style = MaterialTheme.typography.labelMedium.copy(
-                        fontSize = 11.4.ssp,
-                        lineHeight = 15.5.ssp,
-                        fontWeight = FontWeight.Normal
-                    ),
-                    color = InkCharcoal
-                )
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.labelMedium.copy(
-                        fontSize = 11.4.ssp,
-                        lineHeight = 15.5.ssp,
-                        fontWeight = FontWeight.Normal
-                    ),
-                    color = InkBlack
-                )
-            }
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontSize = 12.ssp,
+                    lineHeight = 16.ssp,
+                    fontWeight = FontWeight.Normal
+                ),
+                color = InkCharcoal,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
 
-            Spacer(modifier = Modifier.height(6.dp))
-            NeoProgressBar(progress = progressPercent / 100f)
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
+            NeoProgressBar(progress = progressPercent / 100f, height = 7.sdp)
+        }
+    }
+}
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.sdp)
-                            .clip(CircleShape)
-                            .background(InkBlack)
-                    )
-                    Text(
-                        text = if (progressPercent >= 100) "Completed" else "Active Folder",
-                        style = MaterialTheme.typography.labelMedium.copy(
-                            fontSize = 11.4.ssp,
-                            lineHeight = 15.5.ssp,
-                            fontWeight = FontWeight.Medium
-                        ),
-                        color = InkCharcoal
-                    )
-                }
-
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(11.sdp))
-                        .background(NeoCoral)
-                        .border(1.5.dp, InkBlack, RoundedCornerShape(11.sdp))
-                        .padding(horizontal = 14.sdp, vertical = 7.sdp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Text(
-                        text = "Continue",
-                        style = MaterialTheme.typography.labelLarge.copy(
-                            fontSize = 12.4.ssp,
-                            lineHeight = 16.5.ssp,
-                            fontWeight = FontWeight.SemiBold
-                        ),
-                        color = PureWhiteSurface
-                    )
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                        contentDescription = "Open Folder",
-                        tint = PureWhiteSurface,
-                        modifier = Modifier.size(14.sdp)
-                    )
-                }
-            }
+@Composable
+fun NeoIconCircleButton(
+    icon: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    selected: Boolean = false,
+    activeColor: Color = NeoYellow,
+    inactiveColor: Color = PureWhiteSurface,
+    iconTint: Color = InkBlack,
+    size: Dp = 38.sdp,
+    iconSize: Dp = 18.sdp
+) {
+    val bgColor by animateColorAsState(
+        targetValue = if (selected) activeColor else inactiveColor,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "icon_circle_bg"
+    )
+    Box(
+        modifier = modifier
+            .minimumInteractiveComponentSize()
+            .smoothPressClickable(role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(size)
+                .clip(CircleShape)
+                .background(bgColor, CircleShape)
+                .border(1.5.dp, InkBlack, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                tint = iconTint,
+                modifier = Modifier.size(iconSize)
+            )
         }
     }
 }
@@ -853,7 +831,7 @@ fun NeoSubtaskChecklistSection(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(16.dp))
                 .background(SoftSheetSurface)
-                .border(1.5.dp, InkBlack, RoundedCornerShape(16.dp))
+                .border(1.dp, InkBlack.copy(alpha = 0.14f), RoundedCornerShape(16.dp))
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
