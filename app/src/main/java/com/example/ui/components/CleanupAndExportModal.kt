@@ -9,14 +9,17 @@ import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -37,6 +40,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.TableChart
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -50,12 +54,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider
@@ -126,7 +133,6 @@ fun filterCompletedTasksForExport(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CleanupAndExportModal(
     allTasks: List<TaskWithSubtasks>,
@@ -206,6 +212,11 @@ fun CleanupAndExportModal(
         }
     }
 
+    val completedLabel = if (matchedTasks.size == 1) "1 task" else "${matchedTasks.size} tasks"
+    val milestoneLabel = if (totalSubtasksDone == 1) "1 milestone" else "$totalSubtasksDone milestones"
+    val focusedValue = if (totalWorkedMinutes > 0) formatDurationBadge(totalWorkedMinutes) else "0m"
+    val breaksSubtitle = if (totalBreakMinutes > 0) "Breaks: ${formatDurationBadge(totalBreakMinutes)}" else "No breaks"
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(
@@ -225,99 +236,127 @@ fun CleanupAndExportModal(
                 modifier = Modifier
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                // Header
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(end = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
                         Text(
-                            text = "Cleanup & Progress Export",
+                            text = "Cleanup & Export",
                             style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                             color = InkBlack
                         )
                         Text(
-                            text = "Export PDF/CSV report & purge completed tasks",
+                            text = "Export progress reports or purge completed tasks",
                             style = MaterialTheme.typography.bodySmall,
                             color = InkMuted
                         )
                     }
 
-                    NeoCircleCloseButton(onClick = onDismiss)
+                    Box(
+                        modifier = Modifier
+                            .minimumInteractiveComponentSize()
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(SoftSheetSurface, CircleShape)
+                            .smoothPressClickable(role = Role.Button, onClick = onDismiss)
+                            .testTag("close_cleanup_modal_button"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = InkBlack,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
 
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(SoftSheetSurface)
-                        .border(1.5.dp, InkBlack, RoundedCornerShape(16.dp))
-                        .padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
+                // Grouped timeframe selector
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "Timeframe Filter",
-                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-                        color = InkBlack
+                        text = "TIMEFRAME",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.8.sp
+                        ),
+                        color = InkMuted,
+                        modifier = Modifier.padding(horizontal = 2.dp)
                     )
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+
+                    val groupShape = RoundedCornerShape(16.dp)
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(groupShape)
+                            .background(SoftSheetSurface)
+                            .border(1.dp, InkBlack.copy(alpha = 0.08f), groupShape)
                     ) {
-                        ExportTimeframeFilter.entries.forEach { filter ->
+                        val filters = ExportTimeframeFilter.entries
+                        filters.forEachIndexed { index, filter ->
                             val count = tasksByFilter[filter]?.size ?: 0
-                            NeoPillButton(
-                                text = "${filter.label} ($count)",
-                                selected = selectedFilter == filter,
-                                activeColor = NeoYellow,
+                            val isSelected = selectedFilter == filter
+                            TimeframeRadioRow(
+                                label = filter.label,
+                                count = count,
+                                selected = isSelected,
                                 onClick = {
                                     selectedFilter = filter
                                     confirmPurge = false
                                 }
                             )
+                            if (index < filters.lastIndex) {
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(horizontal = 14.dp),
+                                    thickness = 1.dp,
+                                    color = InkBlack.copy(alpha = 0.07f)
+                                )
+                            }
                         }
                     }
                 }
 
+                // Calm 2-column summary strip
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    NeoStatCard(
-                        label = "COMPLETED",
-                        primaryValue = "${matchedTasks.size} tasks",
-                        subtitle = "$totalSubtasksDone milestones",
-                        backgroundColor = NeoMintGreen,
-                        cornerRadius = 16.dp,
-                        contentPadding = PaddingValues(12.dp),
+                    ExportSummaryTile(
+                        caption = "COMPLETED",
+                        value = completedLabel,
+                        subtitle = milestoneLabel,
+                        tint = NeoMintGreen.copy(alpha = 0.28f),
                         modifier = Modifier.weight(1f)
                     )
-
-                    NeoStatCard(
-                        label = "FOCUSED TIME",
-                        primaryValue = formatDurationBadge(totalWorkedMinutes),
-                        subtitle = "Breaks: ${formatDurationBadge(totalBreakMinutes)}",
-                        backgroundColor = NeoSkyBlue,
-                        cornerRadius = 16.dp,
-                        contentPadding = PaddingValues(12.dp),
+                    ExportSummaryTile(
+                        caption = "FOCUSED TIME",
+                        value = focusedValue,
+                        subtitle = breaksSubtitle,
+                        tint = NeoSkyBlue.copy(alpha = 0.28f),
                         modifier = Modifier.weight(1f)
                     )
                 }
 
+                // Export actions
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    NeoPillButton(
-                        text = if (isExporting) "Generating..." else "Export PDF",
+                    ExportActionButton(
+                        label = if (isExporting) "Generating..." else "Export PDF",
                         icon = Icons.Default.Description,
-                        selected = true,
-                        activeColor = NeoYellow,
+                        backgroundColor = NeoYellow,
                         onClick = {
-                            if (isExporting) return@NeoPillButton
+                            if (isExporting) return@ExportActionButton
                             isExporting = true
                             coroutineScope.launch {
                                 val file = withContext(Dispatchers.IO) {
@@ -351,13 +390,12 @@ fun CleanupAndExportModal(
                             .testTag("export_pdf_button")
                     )
 
-                    NeoPillButton(
-                        text = if (isExporting) "Generating..." else "Export CSV",
+                    ExportActionButton(
+                        label = if (isExporting) "Generating..." else "Export CSV",
                         icon = Icons.Default.TableChart,
-                        selected = true,
-                        activeColor = NeoSkyBlue,
+                        backgroundColor = NeoSkyBlue,
                         onClick = {
-                            if (isExporting) return@NeoPillButton
+                            if (isExporting) return@ExportActionButton
                             isExporting = true
                             coroutineScope.launch {
                                 val file = withContext(Dispatchers.IO) {
@@ -388,30 +426,36 @@ fun CleanupAndExportModal(
                     )
                 }
 
-                if (matchedTasks.isNotEmpty()) {
+                // Destructive purge control (only shown when tasks match the selected timeframe)
+                AnimatedVisibility(
+                    visible = matchedTasks.isNotEmpty(),
+                    enter = fadeIn() + expandVertically(),
+                    exit = fadeOut() + shrinkVertically()
+                ) {
                     if (!confirmPurge) {
-                        NeoPillButton(
-                            text = "Purge ${matchedTasks.size} Completed Tasks",
+                        ExportActionButton(
+                            label = "Purge $completedLabel",
                             icon = Icons.Default.Delete,
-                            selected = true,
-                            activeColor = NeoCoral,
+                            backgroundColor = NeoCoral,
+                            contentColor = PureWhiteSurface,
                             onClick = { confirmPurge = true },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("purge_completed_tasks_button")
                         )
                     } else {
+                        val confirmShape = RoundedCornerShape(14.dp)
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(SoftSheetSurface)
-                                .border(1.5.dp, InkBlack, RoundedCornerShape(14.dp))
+                                .clip(confirmShape)
+                                .background(NeoCoral.copy(alpha = 0.12f))
+                                .border(1.dp, NeoCoral.copy(alpha = 0.45f), confirmShape)
                                 .padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             Text(
-                                text = "Permanently remove ${matchedTasks.size} completed tasks (${selectedFilter.label}) from database?",
+                                text = "Permanently remove $completedLabel (${selectedFilter.label})?",
                                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                                 color = InkBlack
                             )
@@ -419,16 +463,28 @@ fun CleanupAndExportModal(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                NeoPillButton(
-                                    text = "Cancel",
-                                    onClick = { confirmPurge = false },
-                                    modifier = Modifier.weight(1f)
-                                )
-                                NeoPillButton(
-                                    text = "Confirm Purge",
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(42.dp)
+                                        .clip(RoundedCornerShape(50))
+                                        .background(PureWhiteSurface)
+                                        .border(1.dp, InkBlack.copy(alpha = 0.2f), RoundedCornerShape(50))
+                                        .smoothPressClickable(role = Role.Button) { confirmPurge = false },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "Cancel",
+                                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                                        color = InkCharcoal
+                                    )
+                                }
+                                ExportActionButton(
+                                    label = "Confirm Purge",
                                     icon = Icons.Default.Delete,
-                                    selected = true,
-                                    activeColor = NeoCoral,
+                                    backgroundColor = NeoCoral,
+                                    contentColor = PureWhiteSurface,
+                                    heightDp = 42,
                                     onClick = {
                                         val ids = matchedTasks.map { it.task.id }
                                         onPurgeTasks(ids)
@@ -444,6 +500,175 @@ fun CleanupAndExportModal(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun TimeframeRadioRow(
+    label: String,
+    count: Int,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val rowBg by animateColorAsState(
+        targetValue = if (selected) PureWhiteSurface else Color.Transparent,
+        label = "timeframe_row_bg"
+    )
+    val badgeBg by animateColorAsState(
+        targetValue = if (selected) NeoYellow else PureWhiteSurface.copy(alpha = 0.85f),
+        label = "timeframe_badge_bg"
+    )
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(rowBg)
+            .smoothPressClickable(role = Role.RadioButton, onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.weight(1f)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(20.dp)
+                    .clip(CircleShape)
+                    .background(if (selected) NeoYellow else Color.Transparent, CircleShape)
+                    .border(
+                        width = 1.5.dp,
+                        color = if (selected) InkBlack else InkMuted.copy(alpha = 0.5f),
+                        shape = CircleShape
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                if (selected) {
+                    Box(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .clip(CircleShape)
+                            .background(InkBlack, CircleShape)
+                    )
+                }
+            }
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+                ),
+                color = if (selected) InkBlack else InkCharcoal,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(50))
+                .background(badgeBg)
+                .border(
+                    width = 1.dp,
+                    color = if (selected) InkBlack else InkBlack.copy(alpha = 0.12f),
+                    shape = RoundedCornerShape(50)
+                )
+                .padding(horizontal = 10.dp, vertical = 3.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = count.toString(),
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold
+                ),
+                color = if (selected) InkBlack else InkMuted
+            )
+        }
+    }
+}
+
+@Composable
+private fun ExportSummaryTile(
+    caption: String,
+    value: String,
+    subtitle: String,
+    tint: Color,
+    modifier: Modifier = Modifier
+) {
+    val shape = RoundedCornerShape(16.dp)
+    Column(
+        modifier = modifier
+            .clip(shape)
+            .background(tint)
+            .border(1.dp, InkBlack.copy(alpha = 0.10f), shape)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        Text(
+            text = caption,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.6.sp
+            ),
+            color = InkCharcoal.copy(alpha = 0.7f),
+            maxLines = 1
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+            color = InkBlack,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = subtitle,
+            style = MaterialTheme.typography.labelSmall,
+            color = InkMuted,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun ExportActionButton(
+    label: String,
+    icon: ImageVector,
+    backgroundColor: Color,
+    contentColor: Color = InkBlack,
+    heightDp: Int = 46,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val shape = RoundedCornerShape(50)
+    Row(
+        modifier = modifier
+            .height(heightDp.dp)
+            .clip(shape)
+            .background(backgroundColor)
+            .border(1.5.dp, InkBlack, shape)
+            .smoothPressClickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 14.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = contentColor,
+            modifier = Modifier.size(17.dp)
+        )
+        Spacer(modifier = Modifier.width(7.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+            color = contentColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
