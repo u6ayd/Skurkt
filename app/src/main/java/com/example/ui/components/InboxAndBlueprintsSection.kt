@@ -383,21 +383,26 @@ fun ScheduleInboxMiniPopup(
                 .widthIn(max = 420.dp)
                 .fillMaxWidth(),
             backgroundColor = PureWhiteSurface,
-            cornerRadius = 22.dp,
-            contentPadding = PaddingValues(18.dp)
+            cornerRadius = 24.dp,
+            contentPadding = PaddingValues(20.dp)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(end = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
                         Text(
                             text = "Schedule into Flow",
                             style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
@@ -411,7 +416,23 @@ fun ScheduleInboxMiniPopup(
                             overflow = TextOverflow.Ellipsis
                         )
                     }
-                    NeoCircleCloseButton(onClick = onDismiss)
+                    Box(
+                        modifier = Modifier
+                            .minimumInteractiveComponentSize()
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(SoftSheetSurface, CircleShape)
+                            .smoothPressClickable(role = Role.Button, onClick = onDismiss)
+                            .testTag("close_schedule_popup_button"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = InkBlack,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
 
                 UnifiedTimeAndDurationPickerSection(
@@ -440,42 +461,54 @@ fun ScheduleInboxMiniPopup(
                 )
 
                 errorBanner?.let { msg ->
+                    val errShape = RoundedCornerShape(12.dp)
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(NeoYellow)
-                            .border(1.5.dp, InkBlack, RoundedCornerShape(12.dp))
-                            .padding(10.dp)
+                            .clip(errShape)
+                            .background(NeoYellow.copy(alpha = 0.35f))
+                            .border(1.dp, InkBlack.copy(alpha = 0.25f), errShape)
+                            .padding(horizontal = 12.dp, vertical = 10.dp)
                     ) {
                         Text(
                             text = msg,
-                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
                             color = InkBlack
                         )
                     }
                 }
 
-                NeoPillButton(
-                    text = "Schedule into Day Flow",
-                    selected = true,
-                    activeColor = NeoMintGreen,
-                    onClick = {
-                        val isTimed = selectedMode == TaskMode.TIMED_BLOCK
-                        val finalDur = if (isTimed) durationMin.coerceIn(5, 720) else durationMin.coerceIn(0, 720)
-                        if (isTimed && (startTimeMin + finalDur) > clockConfig.endOfDayMinutes) {
-                            errorBanner =
-                                "Task ends past End of Day (${formatMinutesAsClock(clockConfig.endOfDayMinutes, clockConfig.use24Hour)}). Adjust time or Settings."
-                            return@NeoPillButton
+                val ctaShape = RoundedCornerShape(50)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .clip(ctaShape)
+                        .background(NeoMintGreen)
+                        .border(1.5.dp, InkBlack, ctaShape)
+                        .smoothPressClickable(role = Role.Button) {
+                            val isTimed = selectedMode == TaskMode.TIMED_BLOCK
+                            val finalDur = if (isTimed) durationMin.coerceIn(5, 720) else durationMin.coerceIn(0, 720)
+                            if (isTimed && (startTimeMin + finalDur) > clockConfig.endOfDayMinutes) {
+                                errorBanner =
+                                    "Ends past End of Day (${formatMinutesAsClock(clockConfig.endOfDayMinutes, clockConfig.use24Hour)}). Tap Fit or adjust time."
+                                return@smoothPressClickable
+                            }
+                            onConfirmSchedule(
+                                isTimed,
+                                if (isTimed) startTimeMin else null,
+                                finalDur
+                            )
                         }
-                        onConfirmSchedule(
-                            isTimed,
-                            if (isTimed) startTimeMin else null,
-                            finalDur
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                        .testTag("confirm_schedule_flow_button"),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Schedule into Day Flow",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = InkBlack
+                    )
+                }
             }
         }
     }

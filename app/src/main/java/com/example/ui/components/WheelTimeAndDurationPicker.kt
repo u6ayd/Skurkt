@@ -1,13 +1,18 @@
 package com.example.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -31,15 +36,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.data.TaskMode
 import com.example.ui.theme.InkBlack
+import com.example.ui.theme.InkCharcoal
 import com.example.ui.theme.InkMuted
 import com.example.ui.theme.NeoCoral
 import com.example.ui.theme.NeoSkyBlue
@@ -58,34 +67,42 @@ private enum class TimedSelectorTab {
 internal fun NeoCompactMinutesRow(
     durationMinutes: Int,
     minAllowedDuration: Int,
-    onDurationChange: (Int) -> Unit
+    onDurationChange: (Int) -> Unit,
+    containerColor: Color = PureWhiteSurface
 ) {
     var textValue by remember(durationMinutes) {
         mutableStateOf(durationMinutes.coerceAtLeast(minAllowedDuration).toString())
     }
 
+    val shape = RoundedCornerShape(14.dp)
+
     Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(48.dp)
+            .clip(shape)
+            .background(containerColor)
+            .border(1.dp, InkBlack.copy(alpha = 0.12f), shape)
+            .padding(horizontal = 6.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
+        StepperIconCircle(
+            icon = Icons.Default.Remove,
+            contentDescription = "Decrease 5 Minutes",
+            onClick = {
+                val next = (durationMinutes - 5).coerceAtLeast(minAllowedDuration)
+                onDurationChange(next)
+                textValue = next.toString()
+            },
+            backgroundColor = if (containerColor == SoftSheetSurface) PureWhiteSurface else SoftSheetSurface
+        )
+
         Row(
-            modifier = Modifier
-                .weight(1f)
-                .height(44.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(PureWhiteSurface)
-                .border(1.5.dp, InkBlack, RoundedCornerShape(12.dp))
-                .padding(horizontal = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+            modifier = Modifier.weight(1f)
         ) {
-            Text(
-                text = "Minutes",
-                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-                color = InkMuted,
-                maxLines = 1
-            )
             BasicTextField(
                 value = textValue,
                 onValueChange = { raw ->
@@ -107,26 +124,27 @@ internal fun NeoCompactMinutesRow(
                 ),
                 cursorBrush = SolidColor(InkBlack),
                 modifier = Modifier
-                    .width(64.dp)
+                    .width(52.dp)
                     .testTag("custom_minutes_input")
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = "min",
+                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Medium),
+                color = InkMuted,
+                maxLines = 1
             )
         }
 
-        NeoPillButton(
-            text = "-5m",
-            onClick = {
-                val next = (durationMinutes - 5).coerceAtLeast(minAllowedDuration)
-                onDurationChange(next)
-                textValue = next.toString()
-            }
-        )
-        NeoPillButton(
-            text = "+5m",
+        StepperIconCircle(
+            icon = Icons.Default.Add,
+            contentDescription = "Increase 5 Minutes",
             onClick = {
                 val next = (durationMinutes + 5).coerceAtMost(720)
                 onDurationChange(next)
                 textValue = next.toString()
-            }
+            },
+            backgroundColor = if (containerColor == SoftSheetSurface) PureWhiteSurface else SoftSheetSurface
         )
     }
 }
@@ -136,194 +154,394 @@ internal fun NeoCompactClockSelector(
     clockMinutes: Int,
     onClockChange: (Int) -> Unit
 ) {
-    val currentHour = (clockMinutes / 60).coerceIn(0, 23)
+    val use24h = LocalClockFormat.current.use24Hour
+    val currentHour24 = (clockMinutes / 60).coerceIn(0, 23)
     val currentMinute = (clockMinutes % 60).coerceIn(0, 59)
+    val isPm = currentHour24 >= 12
+    val displayHour = if (use24h) {
+        currentHour24
+    } else {
+        when (val h = currentHour24 % 12) {
+            0 -> 12
+            else -> h
+        }
+    }
 
-    var hourText by remember(currentHour) {
-        mutableStateOf(String.format(Locale.US, "%02d", currentHour))
+    var hourText by remember(displayHour, use24h) {
+        mutableStateOf(
+            if (use24h) String.format(Locale.US, "%02d", displayHour)
+            else displayHour.toString()
+        )
     }
     var minText by remember(currentMinute) {
         mutableStateOf(String.format(Locale.US, "%02d", currentMinute))
     }
 
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically
+    val cardShape = RoundedCornerShape(16.dp)
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(cardShape)
+            .background(PureWhiteSurface)
+            .border(1.dp, InkBlack.copy(alpha = 0.08f), cardShape)
+            .padding(horizontal = 10.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Row(
-            modifier = Modifier
-                .weight(1f)
-                .clip(RoundedCornerShape(14.dp))
-                .background(PureWhiteSurface)
-                .border(1.5.dp, InkBlack, RoundedCornerShape(14.dp))
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier
-                    .size(30.dp)
-                    .clip(CircleShape)
-                    .background(SoftSheetSurface, CircleShape)
-                    .border(1.2.dp, InkBlack, CircleShape)
-                    .smoothPressClickable(role = Role.Button) {
-                        val prevHr = if (currentHour == 0) 23 else currentHour - 1
-                        onClockChange(prevHr * 60 + currentMinute)
-                    },
-                contentAlignment = Alignment.Center
+            // Hour stepper
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Icon(
-                    imageVector = Icons.Default.Remove,
+                StepperIconCircle(
+                    icon = Icons.Default.Remove,
                     contentDescription = "Previous Hour",
-                    tint = InkBlack,
-                    modifier = Modifier.size(15.dp)
+                    onClick = {
+                        val prevHr = if (currentHour24 == 0) 23 else currentHour24 - 1
+                        onClockChange(prevHr * 60 + currentMinute)
+                    }
                 )
-            }
 
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(
-                    text = "HR",
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                    color = InkMuted,
-                    maxLines = 1
-                )
-                BasicTextField(
-                    value = hourText,
-                    onValueChange = { raw ->
-                        val filtered = raw.filter { it.isDigit() }.take(2)
-                        hourText = filtered
-                        val h = filtered.toIntOrNull()
-                        if (h != null && h in 0..23) {
-                            onClockChange(h * 60 + currentMinute)
-                        }
-                    },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    textStyle = MaterialTheme.typography.titleLarge.copy(
-                        fontWeight = FontWeight.Bold,
-                        color = InkBlack,
-                        textAlign = TextAlign.Center
-                    ),
-                    cursorBrush = SolidColor(InkBlack),
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = "HR",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            letterSpacing = 0.6.sp
+                        ),
+                        color = InkMuted,
+                        maxLines = 1
+                    )
+                    BasicTextField(
+                        value = hourText,
+                        onValueChange = { raw ->
+                            val filtered = raw.filter { it.isDigit() }.take(2)
+                            hourText = filtered
+                            val h = filtered.toIntOrNull()
+                            if (h != null) {
+                                if (use24h && h in 0..23) {
+                                    onClockChange(h * 60 + currentMinute)
+                                } else if (!use24h && h in 1..12) {
+                                    val h24 = when {
+                                        isPm && h == 12 -> 12
+                                        isPm -> h + 12
+                                        h == 12 -> 0
+                                        else -> h
+                                    }
+                                    onClockChange(h24 * 60 + currentMinute)
+                                }
+                            }
+                        },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        textStyle = MaterialTheme.typography.headlineSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = InkBlack,
+                            textAlign = TextAlign.Center
+                        ),
+                        cursorBrush = SolidColor(InkBlack),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
 
-            Box(
-                modifier = Modifier
-                    .size(30.dp)
-                    .clip(CircleShape)
-                    .background(SoftSheetSurface, CircleShape)
-                    .border(1.2.dp, InkBlack, CircleShape)
-                    .smoothPressClickable(role = Role.Button) {
-                        val nextHr = (currentHour + 1) % 24
-                        onClockChange(nextHr * 60 + currentMinute)
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
+                StepperIconCircle(
+                    icon = Icons.Default.Add,
                     contentDescription = "Next Hour",
-                    tint = InkBlack,
-                    modifier = Modifier.size(15.dp)
+                    onClick = {
+                        val nextHr = (currentHour24 + 1) % 24
+                        onClockChange(nextHr * 60 + currentMinute)
+                    }
+                )
+            }
+
+            Text(
+                text = ":",
+                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                color = InkMuted,
+                modifier = Modifier.padding(top = 12.dp)
+            )
+
+            // Minute stepper
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                StepperIconCircle(
+                    icon = Icons.Default.Remove,
+                    contentDescription = "Decrease 5 Minutes",
+                    onClick = {
+                        onClockChange((clockMinutes - 5).coerceAtLeast(0))
+                    }
+                )
+
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = "MIN",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            letterSpacing = 0.6.sp
+                        ),
+                        color = InkMuted,
+                        maxLines = 1
+                    )
+                    BasicTextField(
+                        value = minText,
+                        onValueChange = { raw ->
+                            val filtered = raw.filter { it.isDigit() }.take(2)
+                            minText = filtered
+                            val m = filtered.toIntOrNull()
+                            if (m != null && m in 0..59) {
+                                onClockChange(currentHour24 * 60 + m)
+                            }
+                        },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        textStyle = MaterialTheme.typography.headlineSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = InkBlack,
+                            textAlign = TextAlign.Center
+                        ),
+                        cursorBrush = SolidColor(InkBlack),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                StepperIconCircle(
+                    icon = Icons.Default.Add,
+                    contentDescription = "Increase 5 Minutes",
+                    onClick = {
+                        onClockChange((clockMinutes + 5).coerceAtMost(23 * 60 + 59))
+                    }
                 )
             }
         }
 
-        Text(
-            text = ":",
-            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-            color = InkBlack
-        )
-
-        Row(
-            modifier = Modifier
-                .weight(1f)
-                .clip(RoundedCornerShape(14.dp))
-                .background(PureWhiteSurface)
-                .border(1.5.dp, InkBlack, RoundedCornerShape(14.dp))
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Box(
+        if (!use24h) {
+            Row(
                 modifier = Modifier
-                    .size(30.dp)
-                    .clip(CircleShape)
-                    .background(SoftSheetSurface, CircleShape)
-                    .border(1.2.dp, InkBlack, CircleShape)
-                    .smoothPressClickable(role = Role.Button) {
-                        onClockChange((clockMinutes - 5).coerceAtLeast(0))
-                    },
-                contentAlignment = Alignment.Center
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(SoftSheetSurface)
+                    .padding(3.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.Remove,
-                    contentDescription = "Decrease 5 Minutes",
-                    tint = InkBlack,
-                    modifier = Modifier.size(15.dp)
-                )
-            }
-
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(
-                    text = "MIN",
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                    color = InkMuted,
-                    maxLines = 1
-                )
-                BasicTextField(
-                    value = minText,
-                    onValueChange = { raw ->
-                        val filtered = raw.filter { it.isDigit() }.take(2)
-                        minText = filtered
-                        val m = filtered.toIntOrNull()
-                        if (m != null && m in 0..59) {
-                            onClockChange(currentHour * 60 + m)
-                        }
-                    },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    textStyle = MaterialTheme.typography.titleLarge.copy(
-                        fontWeight = FontWeight.Bold,
-                        color = InkBlack,
-                        textAlign = TextAlign.Center
-                    ),
-                    cursorBrush = SolidColor(InkBlack),
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-
-            Box(
-                modifier = Modifier
-                    .size(30.dp)
-                    .clip(CircleShape)
-                    .background(SoftSheetSurface, CircleShape)
-                    .border(1.2.dp, InkBlack, CircleShape)
-                    .smoothPressClickable(role = Role.Button) {
-                        onClockChange((clockMinutes + 5).coerceAtMost(23 * 60 + 59))
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = "Increase 5 Minutes",
-                    tint = InkBlack,
-                    modifier = Modifier.size(15.dp)
-                )
+                listOf(false to "AM", true to "PM").forEach { (targetPm, label) ->
+                    val selected = isPm == targetPm
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (selected) PureWhiteSurface else Color.Transparent)
+                            .then(
+                                if (selected) Modifier.border(1.dp, InkBlack.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
+                                else Modifier
+                            )
+                            .smoothPressClickable(role = Role.RadioButton) {
+                                if (isPm != targetPm) {
+                                    val toggledHour = if (targetPm) {
+                                        (currentHour24 + 12).coerceAtMost(23)
+                                    } else {
+                                        (currentHour24 - 12).coerceAtLeast(0)
+                                    }
+                                    onClockChange(toggledHour * 60 + currentMinute)
+                                }
+                            }
+                            .padding(horizontal = 16.dp, vertical = 5.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+                            ),
+                            color = if (selected) InkBlack else InkMuted
+                        )
+                    }
+                }
             }
         }
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun StepperIconCircle(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    backgroundColor: Color = SoftSheetSurface
+) {
+    Box(
+        modifier = Modifier
+            .size(36.dp)
+            .clip(CircleShape)
+            .background(backgroundColor, CircleShape)
+            .smoothPressClickable(role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = InkBlack,
+            modifier = Modifier.size(16.dp)
+        )
+    }
+}
+
+@Composable
+private fun ModeSegmentItem(
+    label: String,
+    selected: Boolean,
+    activeColor: Color,
+    activeContentColor: Color = InkBlack,
+    testTag: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val bgColor by animateColorAsState(
+        targetValue = if (selected) activeColor else Color.Transparent,
+        label = "mode_seg_bg"
+    )
+    val textColor by animateColorAsState(
+        targetValue = if (selected) activeContentColor else InkMuted,
+        label = "mode_seg_fg"
+    )
+    val shape = RoundedCornerShape(12.dp)
+
+    Box(
+        modifier = modifier
+            .height(40.dp)
+            .clip(shape)
+            .background(bgColor)
+            .then(
+                if (selected) Modifier.border(1.5.dp, InkBlack, shape)
+                else Modifier
+            )
+            .smoothPressClickable(role = Role.Tab, onClick = onClick)
+            .testTag(testTag),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge.copy(
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+            ),
+            color = textColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun TimedSummaryTab(
+    caption: String,
+    value: String,
+    selected: Boolean,
+    activeColor: Color,
+    activeContentColor: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val bgColor by animateColorAsState(
+        targetValue = if (selected) activeColor else PureWhiteSurface,
+        label = "timed_tab_bg"
+    )
+    val shape = RoundedCornerShape(12.dp)
+
+    Column(
+        modifier = modifier
+            .clip(shape)
+            .background(bgColor)
+            .border(
+                width = if (selected) 1.5.dp else 1.dp,
+                color = if (selected) InkBlack else InkBlack.copy(alpha = 0.08f),
+                shape = shape
+            )
+            .smoothPressClickable(role = Role.Tab, onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        Text(
+            text = caption,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 0.5.sp
+            ),
+            color = if (selected) activeContentColor.copy(alpha = 0.85f) else InkMuted,
+            maxLines = 1
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+            color = if (selected) activeContentColor else InkBlack,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun PresetGridChip(
+    label: String,
+    selected: Boolean,
+    activeColor: Color = NeoYellow,
+    activeContentColor: Color = InkBlack,
+    unselectedColor: Color = SoftSheetSurface,
+    unselectedBorderAlpha: Float = 0f,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val bgColor by animateColorAsState(
+        targetValue = if (selected) activeColor else unselectedColor,
+        label = "preset_chip_bg"
+    )
+    val shape = RoundedCornerShape(12.dp)
+
+    Box(
+        modifier = modifier
+            .height(40.dp)
+            .clip(shape)
+            .background(bgColor)
+            .then(
+                when {
+                    selected -> Modifier.border(1.5.dp, InkBlack, shape)
+                    unselectedBorderAlpha > 0f -> Modifier.border(
+                        1.dp,
+                        InkBlack.copy(alpha = unselectedBorderAlpha),
+                        shape
+                    )
+                    else -> Modifier
+                }
+            )
+            .smoothPressClickable(role = Role.RadioButton, onClick = onClick)
+            .padding(horizontal = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge.copy(
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+            ),
+            color = if (selected) activeContentColor else InkCharcoal,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
 @Composable
 fun UnifiedTimeAndDurationPickerSection(
     toInbox: Boolean,
@@ -371,16 +589,25 @@ fun UnifiedTimeAndDurationPickerSection(
         }
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        // Unified segmented mode switcher
         if (!toInbox) {
+            val trackShape = RoundedCornerShape(16.dp)
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(trackShape)
+                    .background(SoftSheetSurface)
+                    .border(1.dp, InkBlack.copy(alpha = 0.08f), trackShape)
+                    .padding(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                NeoPillButton(
-                    text = "Timeless",
+                ModeSegmentItem(
+                    label = "Timeless",
                     selected = taskMode == TaskMode.TIMELESS_STEP,
                     activeColor = NeoYellow,
+                    activeContentColor = InkBlack,
+                    testTag = "mode_segment_timeless",
                     onClick = {
                         if (taskMode == TaskMode.TIMED_BLOCK) {
                             onDurationChange(0)
@@ -390,10 +617,12 @@ fun UnifiedTimeAndDurationPickerSection(
                     },
                     modifier = Modifier.weight(1f)
                 )
-                NeoPillButton(
-                    text = "Timed",
+                ModeSegmentItem(
+                    label = "Timed",
                     selected = taskMode == TaskMode.TIMED_BLOCK,
                     activeColor = NeoCoral,
+                    activeContentColor = PureWhiteSurface,
+                    testTag = "mode_segment_timed",
                     onClick = {
                         if (durationMinutes <= 0) {
                             onDurationChange(60)
@@ -403,10 +632,12 @@ fun UnifiedTimeAndDurationPickerSection(
                     modifier = Modifier.weight(1f)
                 )
                 if (showBubbleOption) {
-                    NeoPillButton(
-                        text = "Bubble",
+                    ModeSegmentItem(
+                        label = "Bubble",
                         selected = taskMode == TaskMode.TOP_BUBBLE,
                         activeColor = NeoSkyBlue,
+                        activeContentColor = InkBlack,
+                        testTag = "mode_segment_bubble",
                         onClick = {
                             if (taskMode == TaskMode.TIMED_BLOCK) {
                                 onDurationChange(0)
@@ -423,97 +654,50 @@ fun UnifiedTimeAndDurationPickerSection(
         if (!toInbox && taskMode == TaskMode.TIMED_BLOCK) {
             val isBeforeStartOfDay = startTimeMinutes < startOfDayMin
             val isPastEndOfDay = (startTimeMinutes + effectiveTimedDuration) > endOfDayMin
+            val panelShape = RoundedCornerShape(18.dp)
 
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(18.dp))
+                    .clip(panelShape)
                     .background(SoftSheetSurface)
-                    .border(1.5.dp, InkBlack, RoundedCornerShape(18.dp))
+                    .border(1.dp, InkBlack.copy(alpha = 0.08f), panelShape)
                     .padding(12.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                // Summary selector strip
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    val startSelected = activeTimedTab == TimedSelectorTab.START
-                    val endSelected = activeTimedTab == TimedSelectorTab.END
-                    val durSelected = activeTimedTab == TimedSelectorTab.DURATION
-
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(if (startSelected) NeoCoral else PureWhiteSurface)
-                            .border(if (startSelected) 2.dp else 1.5.dp, InkBlack, RoundedCornerShape(12.dp))
-                            .smoothPressClickable { activeTimedTab = TimedSelectorTab.START }
-                            .padding(horizontal = 6.dp, vertical = 8.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = "START",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            color = if (startSelected) PureWhiteSurface else InkMuted,
-                            maxLines = 1
-                        )
-                        Text(
-                            text = formatMinutesAsClock(startTimeMinutes, use24h),
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = if (startSelected) PureWhiteSurface else InkBlack,
-                            maxLines = 1
-                        )
-                    }
-
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(if (endSelected) NeoCoral else PureWhiteSurface)
-                            .border(if (endSelected) 2.dp else 1.5.dp, InkBlack, RoundedCornerShape(12.dp))
-                            .smoothPressClickable { activeTimedTab = TimedSelectorTab.END }
-                            .padding(horizontal = 6.dp, vertical = 8.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = "END",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            color = if (endSelected) PureWhiteSurface else InkMuted,
-                            maxLines = 1
-                        )
-                        Text(
-                            text = formatMinutesAsClock(calculatedEndMinutes, use24h),
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = if (endSelected) PureWhiteSurface else InkBlack,
-                            maxLines = 1
-                        )
-                    }
-
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(if (durSelected) NeoYellow else PureWhiteSurface)
-                            .border(if (durSelected) 2.dp else 1.5.dp, InkBlack, RoundedCornerShape(12.dp))
-                            .smoothPressClickable { activeTimedTab = TimedSelectorTab.DURATION }
-                            .padding(horizontal = 6.dp, vertical = 8.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = "DURATION",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            color = if (durSelected) InkBlack else InkMuted,
-                            maxLines = 1
-                        )
-                        Text(
-                            text = formatDurationBadge(effectiveTimedDuration),
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = InkBlack,
-                            maxLines = 1
-                        )
-                    }
+                    TimedSummaryTab(
+                        caption = "START",
+                        value = formatMinutesAsClock(startTimeMinutes, use24h),
+                        selected = activeTimedTab == TimedSelectorTab.START,
+                        activeColor = NeoCoral,
+                        activeContentColor = PureWhiteSurface,
+                        onClick = { activeTimedTab = TimedSelectorTab.START },
+                        modifier = Modifier.weight(1f)
+                    )
+                    TimedSummaryTab(
+                        caption = "END",
+                        value = formatMinutesAsClock(calculatedEndMinutes, use24h),
+                        selected = activeTimedTab == TimedSelectorTab.END,
+                        activeColor = NeoCoral,
+                        activeContentColor = PureWhiteSurface,
+                        onClick = { activeTimedTab = TimedSelectorTab.END },
+                        modifier = Modifier.weight(1f)
+                    )
+                    TimedSummaryTab(
+                        caption = "DURATION",
+                        value = formatDurationBadge(effectiveTimedDuration),
+                        selected = activeTimedTab == TimedSelectorTab.DURATION,
+                        activeColor = NeoYellow,
+                        activeContentColor = InkBlack,
+                        onClick = { activeTimedTab = TimedSelectorTab.DURATION },
+                        modifier = Modifier.weight(1f)
+                    )
                 }
 
                 if (activeTimedTab == TimedSelectorTab.START || activeTimedTab == TimedSelectorTab.END) {
@@ -521,143 +705,195 @@ fun UnifiedTimeAndDurationPickerSection(
                         clockMinutes = selectedClockMinutes,
                         onClockChange = applyClockUpdate
                     )
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        listOf(
-                            -15 to "-15m",
-                            -5 to "-5m",
-                            5 to "+5m",
-                            15 to "+15m"
-                        ).forEach { (delta, label) ->
-                            NeoPillButton(
-                                text = label,
-                                onClick = { applyClockUpdate(selectedClockMinutes + delta) },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
                 } else {
-                    val timedPresets = remember {
-                        listOf(
-                            15 to "15m",
-                            30 to "30m",
-                            45 to "45m",
-                            60 to "1h",
-                            90 to "1.5h",
-                            120 to "2h"
-                        )
-                    }
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        timedPresets.forEach { (mins, label) ->
-                            NeoPillButton(
-                                text = label,
-                                selected = effectiveTimedDuration == mins,
-                                activeColor = NeoYellow,
-                                onClick = { onDurationChange(mins) }
-                            )
+                    val timedRow1 = remember { listOf(15 to "15m", 30 to "30m", 45 to "45m") }
+                    val timedRow2 = remember { listOf(60 to "1h", 90 to "1.5h", 120 to "2h") }
+
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            timedRow1.forEach { (mins, label) ->
+                                PresetGridChip(
+                                    label = label,
+                                    selected = effectiveTimedDuration == mins,
+                                    unselectedColor = PureWhiteSurface,
+                                    unselectedBorderAlpha = 0.08f,
+                                    onClick = { onDurationChange(mins) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            timedRow2.forEach { (mins, label) ->
+                                PresetGridChip(
+                                    label = label,
+                                    selected = effectiveTimedDuration == mins,
+                                    unselectedColor = PureWhiteSurface,
+                                    unselectedBorderAlpha = 0.08f,
+                                    onClick = { onDurationChange(mins) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
                         }
                     }
 
                     NeoCompactMinutesRow(
                         durationMinutes = effectiveTimedDuration,
                         minAllowedDuration = 5,
-                        onDurationChange = onDurationChange
+                        onDurationChange = onDurationChange,
+                        containerColor = PureWhiteSurface
                     )
                 }
 
                 if (isBeforeStartOfDay || isPastEndOfDay) {
-                    Column(
+                    val noticeShape = RoundedCornerShape(12.dp)
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(NeoYellow)
-                            .border(1.5.dp, InkBlack, RoundedCornerShape(12.dp))
-                            .padding(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                            .clip(noticeShape)
+                            .background(NeoYellow.copy(alpha = 0.35f))
+                            .border(1.dp, InkBlack.copy(alpha = 0.2f), noticeShape)
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = if (isPastEndOfDay) {
-                                "Exceeds End of Day (${formatMinutesAsClock(endOfDayMin, use24h)})"
+                                "Past End of Day (${formatMinutesAsClock(endOfDayMin, use24h)})"
                             } else {
-                                "Before Start of Day (${formatMinutesAsClock(startOfDayMin, use24h)})"
+                                "Before Start (${formatMinutesAsClock(startOfDayMin, use24h)})"
                             },
-                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                            color = InkBlack
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = InkBlack,
+                            modifier = Modifier.weight(1f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
-                        NeoPillButton(
-                            text = "Fit Within Day (${formatMinutesAsClock(startOfDayMin, use24h)}–${formatMinutesAsClock(endOfDayMin, use24h)})",
-                            selected = true,
-                            activeColor = PureWhiteSurface,
-                            onClick = {
-                                val safeStart = startTimeMinutes.coerceIn(startOfDayMin, (endOfDayMin - 15).coerceAtLeast(startOfDayMin))
-                                val maxDur = (endOfDayMin - safeStart).coerceAtLeast(5)
-                                onStartTimeChange(safeStart)
-                                onDurationChange(effectiveTimedDuration.coerceAtMost(maxDur))
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(PureWhiteSurface)
+                                .border(1.dp, InkBlack, RoundedCornerShape(50))
+                                .smoothPressClickable(role = Role.Button) {
+                                    val safeStart = startTimeMinutes.coerceIn(
+                                        startOfDayMin,
+                                        (endOfDayMin - 15).coerceAtLeast(startOfDayMin)
+                                    )
+                                    val maxDur = (endOfDayMin - safeStart).coerceAtLeast(5)
+                                    onStartTimeChange(safeStart)
+                                    onDurationChange(effectiveTimedDuration.coerceAtMost(maxDur))
+                                }
+                                .padding(horizontal = 12.dp, vertical = 5.dp)
+                        ) {
+                            Text(
+                                text = "Fit",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = InkBlack
+                            )
+                        }
                     }
                 }
             }
         } else {
-            val timelessPresets = remember {
-                listOf(
-                    0 to "None (0m)",
-                    15 to "15m",
-                    30 to "30m",
-                    45 to "45m",
-                    60 to "1h"
-                )
-            }
-
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                timelessPresets.forEach { (mins, label) ->
-                    val isSelected = !showCustomTimelessInput && durationMinutes == mins
-                    NeoPillButton(
-                        text = label,
-                        selected = isSelected,
-                        activeColor = NeoYellow,
-                        onClick = {
-                            showCustomTimelessInput = false
-                            onDurationChange(mins)
-                        }
+            // Timeless / Inbox optional duration selector in a balanced 3x2 grid
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 2.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "DURATION",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.8.sp
+                        ),
+                        color = InkMuted
+                    )
+                    Text(
+                        text = if (durationMinutes > 0) formatDurationBadge(durationMinutes) else "Optional",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = if (durationMinutes > 0) InkBlack else InkMuted
                     )
                 }
 
-                NeoPillButton(
-                    text = if (showCustomTimelessInput && durationMinutes > 0) {
-                        "Custom (${formatDurationBadge(durationMinutes)})"
-                    } else {
-                        "Custom"
-                    },
-                    selected = showCustomTimelessInput,
-                    activeColor = NeoCoral,
-                    onClick = {
-                        showCustomTimelessInput = true
-                        if (durationMinutes == 0) {
-                            onDurationChange(25)
+                val row1 = remember { listOf(0 to "None", 15 to "15m", 30 to "30m") }
+                val row2Presets = remember { listOf(45 to "45m", 60 to "1h") }
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        row1.forEach { (mins, label) ->
+                            val isSelected = !showCustomTimelessInput && durationMinutes == mins
+                            PresetGridChip(
+                                label = label,
+                                selected = isSelected,
+                                onClick = {
+                                    showCustomTimelessInput = false
+                                    onDurationChange(mins)
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
                         }
                     }
-                )
-            }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        row2Presets.forEach { (mins, label) ->
+                            val isSelected = !showCustomTimelessInput && durationMinutes == mins
+                            PresetGridChip(
+                                label = label,
+                                selected = isSelected,
+                                onClick = {
+                                    showCustomTimelessInput = false
+                                    onDurationChange(mins)
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        PresetGridChip(
+                            label = if (showCustomTimelessInput && durationMinutes > 0) {
+                                formatDurationBadge(durationMinutes)
+                            } else {
+                                "Custom"
+                            },
+                            selected = showCustomTimelessInput,
+                            activeColor = NeoCoral,
+                            activeContentColor = PureWhiteSurface,
+                            onClick = {
+                                showCustomTimelessInput = true
+                                if (durationMinutes == 0) {
+                                    onDurationChange(25)
+                                }
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
 
-            if (showCustomTimelessInput) {
-                NeoCompactMinutesRow(
-                    durationMinutes = durationMinutes,
-                    minAllowedDuration = 0,
-                    onDurationChange = onDurationChange
-                )
+                AnimatedVisibility(
+                    visible = showCustomTimelessInput,
+                    enter = fadeIn() + expandVertically(),
+                    exit = fadeOut() + shrinkVertically()
+                ) {
+                    NeoCompactMinutesRow(
+                        durationMinutes = durationMinutes,
+                        minAllowedDuration = 0,
+                        onDurationChange = onDurationChange,
+                        containerColor = SoftSheetSurface
+                    )
+                }
             }
         }
     }
