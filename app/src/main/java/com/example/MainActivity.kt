@@ -944,7 +944,7 @@ private fun DayFlowSheetContent(
                     )
                     SpineConnectorSegment(
                         isDottedBreak = false,
-                        height = 14.dp
+                        height = 16.sdp
                     )
                 }
 
@@ -1004,7 +1004,7 @@ private fun DayFlowSheetContent(
 
                                 SpineConnectorSegment(
                                     isDottedBreak = hasTimeGap,
-                                    height = if (hasTimeGap) 34.sdp else 16.sdp,
+                                    height = if (hasTimeGap) 38.sdp else 20.sdp,
                                     freeTimeLabel = freeTimeLabel
                                 )
                             }
@@ -1028,7 +1028,7 @@ private fun DayFlowSheetContent(
                 item(key = "flow_end_of_day_marker", contentType = "threshold_marker") {
                     SpineConnectorSegment(
                         isDottedBreak = true,
-                        height = 14.dp
+                        height = 16.sdp
                     )
                     DayThresholdMarkerRow(
                         timeMinutes = uiState.endOfDayMinutes,

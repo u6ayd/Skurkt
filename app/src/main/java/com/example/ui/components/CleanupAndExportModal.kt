@@ -73,7 +73,6 @@ import com.example.data.TaskWithSubtasks
 import com.example.ui.theme.InkBlack
 import com.example.ui.theme.InkCharcoal
 import com.example.ui.theme.InkMuted
-import com.example.ui.theme.NavRailDark
 import com.example.ui.theme.NeoCoral
 import com.example.ui.theme.NeoMintGreen
 import com.example.ui.theme.NeoSkyBlue
@@ -823,7 +822,11 @@ fun UniversalBulkSelectBar(
     modifier: Modifier = Modifier
 ) {
     val allSelected = totalVisibleCount > 0 && selectedCount >= totalVisibleCount
-    val pillShape = RoundedCornerShape(50)
+    val tileShape = RoundedCornerShape(14.sdp)
+    val selectAllBg by animateColorAsState(
+        targetValue = if (allSelected) NeoYellow else SoftSheetSurface,
+        label = "bulk_select_all_bg"
+    )
 
     val barContent: @Composable (Modifier) -> Unit = { rowModifier ->
         Row(
@@ -831,57 +834,93 @@ fun UniversalBulkSelectBar(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Left: Strukt rounded-square Select All / All tile
             Row(
+                modifier = Modifier
+                    .height(48.sdp)
+                    .clip(tileShape)
+                    .background(selectAllBg, tileShape)
+                    .border(
+                        width = if (allSelected) 1.5.dp else 1.2.dp,
+                        color = if (allSelected) InkBlack else InkBlack.copy(alpha = 0.25f),
+                        shape = tileShape
+                    )
+                    .smoothPressClickable(role = Role.Button, onClick = onSelectAll)
+                    .padding(horizontal = 12.sdp)
+                    .testTag("bulk_select_all_button"),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.weight(1f, fill = false)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Row(
-                    modifier = Modifier
-                        .height(38.sdp)
-                        .clip(pillShape)
-                        .background(if (allSelected) NeoYellow else PureWhiteSurface.copy(alpha = 0.14f))
-                        .then(
-                            if (allSelected) Modifier.border(1.2.dp, InkBlack, pillShape)
-                            else Modifier.border(1.dp, PureWhiteSurface.copy(alpha = 0.22f), pillShape)
-                        )
-                        .smoothPressClickable(role = Role.Button, onClick = onSelectAll)
-                        .padding(horizontal = 12.sdp)
-                        .testTag("bulk_select_all_button"),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Icon(
-                        imageVector = if (allSelected) Icons.Default.Check else Icons.Default.SelectAll,
-                        contentDescription = null,
-                        tint = if (allSelected) InkBlack else PureWhiteSurface,
-                        modifier = Modifier.size(16.sdp)
-                    )
-                    Text(
-                        text = if (allSelected) "Deselect All" else "Select All",
-                        style = MaterialTheme.typography.labelLarge.copy(
-                            fontSize = 12.5.ssp,
-                            fontWeight = FontWeight.SemiBold
-                        ),
-                        color = if (allSelected) InkBlack else PureWhiteSurface,
-                        maxLines = 1
-                    )
-                }
-
+                Icon(
+                    imageVector = if (allSelected) Icons.Default.Check else Icons.Default.SelectAll,
+                    contentDescription = null,
+                    tint = InkBlack,
+                    modifier = Modifier.size(17.sdp)
+                )
                 Text(
-                    text = "$selectedCount selected",
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontSize = 13.ssp,
+                    text = if (allSelected) "All" else "Select All",
+                    style = MaterialTheme.typography.labelLarge.copy(
+                        fontSize = 12.5.ssp,
                         fontWeight = FontWeight.SemiBold
                     ),
-                    color = PureWhiteSurface.copy(alpha = 0.9f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    color = InkBlack,
+                    maxLines = 1
                 )
             }
 
-            Spacer(modifier = Modifier.width(8.dp))
+            // Center: Tactile count badge matching Strukt stationery badges
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 8.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (selectedCount > 0) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(NeoYellow)
+                            .border(1.2.dp, InkBlack, RoundedCornerShape(50))
+                            .padding(horizontal = 8.sdp, vertical = 2.sdp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = selectedCount.toString(),
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontSize = 12.ssp,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = InkBlack,
+                            maxLines = 1
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "selected",
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontSize = 12.5.ssp,
+                            fontWeight = FontWeight.Medium
+                        ),
+                        color = InkCharcoal,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                } else {
+                    Text(
+                        text = "Tap to select",
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontSize = 12.5.ssp,
+                            fontWeight = FontWeight.Medium
+                        ),
+                        color = InkMuted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
 
+            // Right: NeoCoral Delete tile + SoftSheetSurface Close tile (mirrors bottom nav 14.sdp geometry)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -889,9 +928,10 @@ fun UniversalBulkSelectBar(
                 if (selectedCount > 0) {
                     Row(
                         modifier = Modifier
-                            .height(38.sdp)
-                            .clip(pillShape)
-                            .background(NeoCoral)
+                            .height(48.sdp)
+                            .clip(tileShape)
+                            .background(NeoCoral, tileShape)
+                            .border(1.5.dp, InkBlack, tileShape)
                             .smoothPressClickable(role = Role.Button, onClick = onDeleteSelected)
                             .padding(horizontal = 13.sdp)
                             .testTag("bulk_delete_selected_button"),
@@ -902,10 +942,10 @@ fun UniversalBulkSelectBar(
                             imageVector = Icons.Default.Delete,
                             contentDescription = null,
                             tint = PureWhiteSurface,
-                            modifier = Modifier.size(16.sdp)
+                            modifier = Modifier.size(18.sdp)
                         )
                         Text(
-                            text = "Delete ($selectedCount)",
+                            text = "Delete",
                             style = MaterialTheme.typography.labelLarge.copy(
                                 fontSize = 12.5.ssp,
                                 fontWeight = FontWeight.Bold
@@ -918,10 +958,10 @@ fun UniversalBulkSelectBar(
 
                 Box(
                     modifier = Modifier
-                        .minimumInteractiveComponentSize()
-                        .size(38.sdp)
-                        .clip(CircleShape)
-                        .background(PureWhiteSurface.copy(alpha = 0.14f), CircleShape)
+                        .size(48.sdp)
+                        .clip(tileShape)
+                        .background(SoftSheetSurface, tileShape)
+                        .border(1.2.dp, InkBlack.copy(alpha = 0.25f), tileShape)
                         .smoothPressClickable(role = Role.Button, onClick = onCancel)
                         .testTag("bulk_cancel_button"),
                     contentAlignment = Alignment.Center
@@ -929,8 +969,8 @@ fun UniversalBulkSelectBar(
                     Icon(
                         imageVector = Icons.Default.Close,
                         contentDescription = "Exit Multi-Select",
-                        tint = PureWhiteSurface,
-                        modifier = Modifier.size(18.sdp)
+                        tint = InkBlack,
+                        modifier = Modifier.size(20.sdp)
                     )
                 }
             }
@@ -941,7 +981,7 @@ fun UniversalBulkSelectBar(
         Column(
             modifier = modifier
                 .fillMaxWidth()
-                .background(NavRailDark)
+                .background(PureWhiteSurface)
                 .navigationBarsPadding()
                 .testTag("universal_bulk_select_bar"),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -957,19 +997,19 @@ fun UniversalBulkSelectBar(
                     .widthIn(max = 680.dp)
                     .fillMaxWidth()
                     .height(66.sdp)
-                    .padding(horizontal = 14.dp)
+                    .padding(horizontal = 16.dp)
             )
         }
     } else {
-        val capsuleShape = RoundedCornerShape(50)
+        val floatingShape = RoundedCornerShape(20.dp)
         Box(
             modifier = modifier
-                .widthIn(max = 560.dp)
+                .widthIn(max = 520.dp)
                 .fillMaxWidth()
-                .shadow(10.dp, capsuleShape, clip = false)
-                .clip(capsuleShape)
-                .background(NavRailDark, capsuleShape)
-                .border(1.dp, PureWhiteSurface.copy(alpha = 0.16f), capsuleShape)
+                .shadow(6.dp, floatingShape, clip = false)
+                .clip(floatingShape)
+                .background(PureWhiteSurface, floatingShape)
+                .border(1.5.dp, InkBlack, floatingShape)
                 .testTag("universal_bulk_select_bar")
         ) {
             barContent(

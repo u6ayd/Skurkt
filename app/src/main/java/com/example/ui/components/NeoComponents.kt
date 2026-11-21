@@ -862,7 +862,7 @@ fun NeoSubtaskChecklistSection(
                         .clip(RoundedCornerShape(10.dp))
                         .background(PureWhiteSurface)
                         .smoothPressClickable { onToggleSubtask(sub) }
-                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     NeoSquareCheckbox(
