@@ -62,6 +62,13 @@ data class PendingOverlapConflict(
 )
 
 @Immutable
+data class PendingBulkDelete(
+    val targetEpochDay: Long?,
+    val oneTimeTaskIds: List<Long>,
+    val recurringTasks: List<TaskEntity>
+)
+
+@Immutable
 data class PlannerUiState(
     val selectedDateEpochDay: Long = LocalDate.now().toEpochDay(),
     val selectedLocalDate: LocalDate = LocalDate.now(),
@@ -98,6 +105,7 @@ data class PlannerUiState(
     val isCleanupExportVisible: Boolean = false,
     val isMultiSelectActive: Boolean = false,
     val selectedTaskIds: Set<Long> = emptySet(),
+    val pendingBulkDelete: PendingBulkDelete? = null,
     val use24HourFormat: Boolean = true,
     val startOfDayMinutes: Int = 8 * 60,
     val endOfDayMinutes: Int = 22 * 60
@@ -136,6 +144,7 @@ private data class LocalNavState(
     val isCleanupExportVisible: Boolean = false,
     val isMultiSelectActive: Boolean = false,
     val selectedTaskIds: Set<Long> = emptySet(),
+    val pendingBulkDelete: PendingBulkDelete? = null,
     val use24HourFormat: Boolean = true,
     val startOfDayMinutes: Int = 8 * 60,
     val endOfDayMinutes: Int = 22 * 60
@@ -217,7 +226,7 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
                 if (colors.size < 4) {
                     for (rec in recurringTasks) {
                         if (colors.size >= 4) break
-                        if (rec.task.dateEpochDay != dayEpoch && matchesDate(rec.task, day)) {
+                        if (matchesDate(rec.task, day)) {
                             colors.add(rec.task.colorKey)
                         }
                     }
@@ -397,6 +406,7 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
             isCleanupExportVisible = nav.isCleanupExportVisible,
             isMultiSelectActive = nav.isMultiSelectActive,
             selectedTaskIds = nav.selectedTaskIds,
+            pendingBulkDelete = nav.pendingBulkDelete,
             use24HourFormat = nav.use24HourFormat,
             startOfDayMinutes = nav.startOfDayMinutes,
             endOfDayMinutes = nav.endOfDayMinutes
@@ -474,7 +484,18 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun selectDate(epochDay: Long) {
-        navState.update { it.copy(selectedDateEpochDay = epochDay) }
+        navState.update { state ->
+            if (state.selectedDateEpochDay == epochDay) {
+                state
+            } else {
+                state.copy(
+                    selectedDateEpochDay = epochDay,
+                    isMultiSelectActive = false,
+                    selectedTaskIds = emptySet(),
+                    pendingBulkDelete = null
+                )
+            }
+        }
     }
 
     fun setDestination(destination: StruktDestination) {
@@ -482,13 +503,24 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
             it.copy(
                 activeDestination = destination,
                 isMultiSelectActive = false,
-                selectedTaskIds = emptySet()
+                selectedTaskIds = emptySet(),
+                pendingBulkDelete = null
             )
         }
     }
 
     fun setFlowFilter(filter: FlowFilterMode) {
-        navState.update { it.copy(flowFilter = filter) }
+        navState.update { state ->
+            if (state.flowFilter == filter) {
+                state
+            } else {
+                state.copy(
+                    flowFilter = filter,
+                    selectedTaskIds = emptySet(),
+                    pendingBulkDelete = null
+                )
+            }
+        }
     }
 
     fun setSearchQuery(query: String) {
@@ -640,13 +672,94 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
         navState.update {
             it.copy(
                 isMultiSelectActive = false,
-                selectedTaskIds = emptySet()
+                selectedTaskIds = emptySet(),
+                pendingBulkDelete = null
             )
         }
     }
 
-    fun bulkDeleteSelectedTasks() {
-        val idsToDelete = navState.value.selectedTaskIds.toList()
+    fun bulkDeleteSelectedTasks(visibleTaskIds: List<Long>? = null) {
+        val rawSelected = navState.value.selectedTaskIds
+        val effectiveIds = if (visibleTaskIds != null) {
+            val visibleSet = visibleTaskIds.toSet()
+            rawSelected.filter { it in visibleSet }
+        } else {
+            rawSelected.toList()
+        }
+        if (effectiveIds.isEmpty()) return
+
+        val effectiveSet = effectiveIds.toSet()
+        val selectedTasks = uiState.value.allTasks
+            .map { it.task }
+            .filter { it.id in effectiveSet }
+
+        val recurringTasks = selectedTasks.filter { it.recurrenceEnum != RecurrenceRule.NONE }
+        val oneTimeIds = selectedTasks
+            .filter { it.recurrenceEnum == RecurrenceRule.NONE }
+            .map { it.id }
+
+        if (recurringTasks.isNotEmpty()) {
+            val targetEpochDay = if (navState.value.activeDestination == StruktDestination.FLOW) {
+                navState.value.selectedDateEpochDay
+            } else {
+                null
+            }
+            navState.update {
+                it.copy(
+                    pendingBulkDelete = PendingBulkDelete(
+                        targetEpochDay = targetEpochDay,
+                        oneTimeTaskIds = oneTimeIds,
+                        recurringTasks = recurringTasks
+                    )
+                )
+            }
+            return
+        }
+
+        executePermanentBulkDelete(effectiveIds)
+    }
+
+    fun confirmBulkDeleteThisDayOnly() {
+        val pending = navState.value.pendingBulkDelete ?: return
+        val targetDay = pending.targetEpochDay ?: navState.value.selectedDateEpochDay
+        val oneTimeSet = pending.oneTimeTaskIds.toSet()
+        val recurringSet = pending.recurringTasks.map { it.id }.toSet()
+        val totalRemoved = pending.oneTimeTaskIds.size + pending.recurringTasks.size
+
+        viewModelScope.launch {
+            if (pending.oneTimeTaskIds.isNotEmpty()) {
+                repository.deleteTasksByIds(pending.oneTimeTaskIds)
+            }
+            if (pending.recurringTasks.isNotEmpty()) {
+                repository.excludeRecurringTasksOnDay(pending.recurringTasks, targetDay)
+            }
+            navState.update { state ->
+                state.copy(
+                    isMultiSelectActive = false,
+                    selectedTaskIds = emptySet(),
+                    pendingBulkDelete = null,
+                    focusedTaskId = if (state.focusedTaskId in oneTimeSet || state.focusedTaskId in recurringSet) null else state.focusedTaskId,
+                    focusTimersByTaskDay = state.focusTimersByTaskDay.filterKeys { (taskId, day) ->
+                        taskId !in oneTimeSet && !(taskId in recurringSet && day == targetDay)
+                    },
+                    inspectingTaskId = if (state.inspectingTaskId in oneTimeSet || state.inspectingTaskId in recurringSet) null else state.inspectingTaskId,
+                    statusBannerMessage = "Removed $totalRemoved task(s) for this day"
+                )
+            }
+        }
+    }
+
+    fun confirmBulkDeleteAllOccurrences() {
+        val pending = navState.value.pendingBulkDelete ?: return
+        val allIds = pending.oneTimeTaskIds + pending.recurringTasks.map { it.id }
+        executePermanentBulkDelete(allIds)
+    }
+
+    fun dismissPendingBulkDelete() {
+        navState.update { it.copy(pendingBulkDelete = null) }
+    }
+
+    private fun executePermanentBulkDelete(idsToDelete: List<Long>) {
         if (idsToDelete.isEmpty()) return
         val idsSet = idsToDelete.toSet()
         viewModelScope.launch {
@@ -655,6 +768,7 @@ class PlannerViewModel(application: Application) : AndroidViewModel(application)
                 it.copy(
                     isMultiSelectActive = false,
                     selectedTaskIds = emptySet(),
+                    pendingBulkDelete = null,
                     focusedTaskId = if (it.focusedTaskId in idsSet) null else it.focusedTaskId,
                     focusTimersByTaskDay = it.focusTimersByTaskDay.filterKeys { (taskId, _) -> taskId !in idsSet },
                     inspectingTaskId = if (it.inspectingTaskId in idsSet) null else it.inspectingTaskId,

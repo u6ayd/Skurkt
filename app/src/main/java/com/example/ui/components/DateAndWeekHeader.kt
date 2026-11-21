@@ -359,26 +359,27 @@ fun TopAnytimeBubblesRow(
 
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.width(74.sdp)
+                modifier = Modifier
+                    .width(74.sdp)
+                    .smoothCombinedClickable(
+                        role = Role.Button,
+                        onLongClick = { onEnterMultiSelectWithTask(task.id) },
+                        onClick = {
+                            if (isMultiSelectActive) {
+                                onToggleSelectTask(task.id)
+                            } else {
+                                onInspectBubble(item)
+                            }
+                        }
+                    )
+                    .testTag("top_bubble_${task.id}")
             ) {
                 Box(
                     modifier = Modifier
                         .size(52.sdp)
-                        .smoothCombinedClickable(
-                            role = Role.Checkbox,
-                            onLongClick = { onEnterMultiSelectWithTask(task.id) },
-                            onClick = {
-                                if (isMultiSelectActive) {
-                                    onToggleSelectTask(task.id)
-                                } else {
-                                    onToggleBubbleDone(item)
-                                }
-                            }
-                        )
                         .clip(CircleShape)
                         .background(animatedBubbleFill, CircleShape)
-                        .border(if (isSelected) 2.2.dp else 1.5.dp, InkBlack, CircleShape)
-                        .testTag("top_bubble_${task.id}"),
+                        .border(if (isSelected) 2.2.dp else 1.5.dp, InkBlack, CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -399,14 +400,7 @@ fun TopAnytimeBubblesRow(
                     color = if (task.isCompleted) InkMuted else InkBlack,
                     textAlign = TextAlign.Center,
                     maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.smoothPressClickable(role = Role.Button) {
-                        if (isMultiSelectActive) {
-                            onToggleSelectTask(task.id)
-                        } else {
-                            onInspectBubble(item)
-                        }
-                    }
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }

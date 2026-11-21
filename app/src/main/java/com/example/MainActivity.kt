@@ -67,6 +67,7 @@ import com.example.ui.PlannerUiState
 import com.example.ui.PlannerViewModel
 import com.example.ui.StruktDestination
 import com.example.ui.components.AntiParalysisFocusScreen
+import com.example.ui.components.BulkDeleteRecurringModal
 import com.example.ui.components.CleanupAndExportModal
 import com.example.ui.components.ClockFormatConfig
 import com.example.ui.components.DateAndWeekHeader
@@ -99,6 +100,9 @@ import com.example.ui.theme.NeoYellow
 import com.example.ui.theme.PureWhiteSurface
 import com.example.ui.theme.sdp
 import kotlinx.coroutines.delay
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -147,7 +151,8 @@ fun StruktPlannerApp(
     }
 
     BackHandler(
-        enabled = uiState.pendingOverlapConflict != null ||
+        enabled = uiState.pendingBulkDelete != null ||
+            uiState.pendingOverlapConflict != null ||
             uiState.isCleanupExportVisible ||
             uiState.isSettingsVisible ||
             uiState.isEditorVisible ||
@@ -158,6 +163,7 @@ fun StruktPlannerApp(
             uiState.activeDestination != StruktDestination.FLOW
     ) {
         when {
+            uiState.pendingBulkDelete != null -> viewModel.dismissPendingBulkDelete()
             uiState.pendingOverlapConflict != null -> viewModel.dismissOverlapConflict()
             uiState.isCleanupExportVisible -> viewModel.closeCleanupExportModal()
             uiState.isSettingsVisible -> viewModel.closeSettingsModal()
@@ -232,6 +238,9 @@ fun StruktPlannerApp(
                     }
                 }
 
+                val visibleIdSet = visibleIds.toSet()
+                val visibleSelectedCount = uiState.selectedTaskIds.count { it in visibleIdSet }
+
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
@@ -243,10 +252,10 @@ fun StruktPlannerApp(
                         )
                 ) {
                     UniversalBulkSelectBar(
-                        selectedCount = uiState.selectedTaskIds.size,
+                        selectedCount = visibleSelectedCount,
                         totalVisibleCount = visibleIds.size,
                         onSelectAll = { viewModel.selectOrDeselectAllTasks(visibleIds) },
-                        onDeleteSelected = viewModel::bulkDeleteSelectedTasks,
+                        onDeleteSelected = { viewModel.bulkDeleteSelectedTasks(visibleIds) },
                         onCancel = viewModel::exitMultiSelectMode
                     )
                 }
@@ -387,6 +396,25 @@ fun StruktPlannerApp(
                     onAutoShift = viewModel::resolveOverlapAutoShift,
                     onAllowSimultaneous = viewModel::resolveOverlapAllowSimultaneous,
                     onDismiss = viewModel::dismissOverlapConflict
+                )
+            }
+
+            uiState.pendingBulkDelete?.let { pending ->
+                val formattedDateLabel = pending.targetEpochDay?.let { epoch ->
+                    LocalDate.ofEpochDay(epoch)
+                        .format(DateTimeFormatter.ofPattern("MMM d", Locale.ENGLISH))
+                }
+                BulkDeleteRecurringModal(
+                    selectedDateLabel = formattedDateLabel,
+                    oneTimeCount = pending.oneTimeTaskIds.size,
+                    recurringCount = pending.recurringTasks.size,
+                    onDeleteThisDayOnly = if (pending.targetEpochDay != null) {
+                        viewModel::confirmBulkDeleteThisDayOnly
+                    } else {
+                        null
+                    },
+                    onDeleteAllOccurrences = viewModel::confirmBulkDeleteAllOccurrences,
+                    onDismiss = viewModel::dismissPendingBulkDelete
                 )
             }
         }

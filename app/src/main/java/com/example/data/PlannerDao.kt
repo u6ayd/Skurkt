@@ -29,6 +29,9 @@ interface PlannerDao {
     @Update
     suspend fun updateTask(task: TaskEntity)
 
+    @Query("UPDATE tasks SET excludedEpochDaysCsv = :excludedCsv WHERE id = :taskId")
+    suspend fun updateTaskExcludedEpochDays(taskId: Long, excludedCsv: String)
+
     @Query("DELETE FROM tasks WHERE id = :taskId")
     suspend fun deleteTaskById(taskId: Long)
 

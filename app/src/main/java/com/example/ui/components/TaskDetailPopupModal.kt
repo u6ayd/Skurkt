@@ -302,7 +302,7 @@ fun TaskDetailPopupModal(
                                 modifier = Modifier.weight(1f)
                             )
                             NeoPillButton(
-                                text = if (task.isCompleted) "Completed" else "Mark Done",
+                                text = if (task.isCompleted) "Mark Undone" else "Mark Done",
                                 icon = Icons.Default.Check,
                                 selected = true,
                                 activeColor = NeoMintGreen,

@@ -673,6 +673,143 @@ private fun ExportActionButton(
 }
 
 @Composable
+fun BulkDeleteRecurringModal(
+    selectedDateLabel: String?,
+    oneTimeCount: Int,
+    recurringCount: Int,
+    onDeleteThisDayOnly: (() -> Unit)?,
+    onDeleteAllOccurrences: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val totalCount = oneTimeCount + recurringCount
+    val recurringLabel = if (recurringCount == 1) "1 recurring task" else "$recurringCount recurring tasks"
+    val oneTimeSuffix = when (oneTimeCount) {
+        0 -> ""
+        1 -> " and 1 one-time task"
+        else -> " and $oneTimeCount one-time tasks"
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true
+        )
+    ) {
+        NeoCard(
+            modifier = Modifier
+                .widthIn(max = 420.dp)
+                .fillMaxWidth(),
+            backgroundColor = PureWhiteSurface,
+            cornerRadius = 24.dp,
+            contentPadding = PaddingValues(20.dp)
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(end = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(
+                            text = "Delete $totalCount Selected",
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                            color = InkBlack
+                        )
+                        Text(
+                            text = "Includes $recurringLabel$oneTimeSuffix.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = InkMuted
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .minimumInteractiveComponentSize()
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(SoftSheetSurface, CircleShape)
+                            .smoothPressClickable(role = Role.Button, onClick = onDismiss)
+                            .testTag("bulk_delete_close_button"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = InkBlack,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+
+                Text(
+                    text = if (onDeleteThisDayOnly != null && !selectedDateLabel.isNullOrBlank()) {
+                        "Choose whether to remove recurring tasks only from $selectedDateLabel (keeping future days intact) or delete every occurrence."
+                    } else {
+                        "Deleting recurring tasks here will remove all future and past occurrences."
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = InkCharcoal
+                )
+
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (onDeleteThisDayOnly != null && !selectedDateLabel.isNullOrBlank()) {
+                        ExportActionButton(
+                            label = "This Day Only ($selectedDateLabel)",
+                            icon = Icons.Default.Check,
+                            backgroundColor = NeoYellow,
+                            contentColor = InkBlack,
+                            onClick = onDeleteThisDayOnly,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("bulk_delete_this_day_button")
+                        )
+                    }
+
+                    ExportActionButton(
+                        label = "Delete All Occurrences",
+                        icon = Icons.Default.Delete,
+                        backgroundColor = NeoCoral,
+                        contentColor = PureWhiteSurface,
+                        onClick = onDeleteAllOccurrences,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("bulk_delete_all_occurrences_button")
+                    )
+
+                    val cancelShape = RoundedCornerShape(50)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp)
+                            .clip(cancelShape)
+                            .background(SoftSheetSurface)
+                            .border(1.dp, InkBlack.copy(alpha = 0.14f), cancelShape)
+                            .smoothPressClickable(role = Role.Button, onClick = onDismiss)
+                            .testTag("bulk_delete_cancel_button"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Cancel",
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                            color = InkCharcoal
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun UniversalBulkSelectBar(
     selectedCount: Int,
     totalVisibleCount: Int,

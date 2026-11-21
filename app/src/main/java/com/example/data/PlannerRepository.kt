@@ -385,7 +385,15 @@ class PlannerRepository(private val dao: PlannerDao) {
     suspend fun excludeRecurringTaskOnDay(task: TaskEntity, epochDay: Long) {
         val updatedSet = (task.excludedEpochDays + epochDay).sorted()
         val updatedCsv = updatedSet.joinToString(",")
-        dao.updateTask(task.copy(excludedEpochDaysCsv = updatedCsv))
+        dao.updateTaskExcludedEpochDays(task.id, updatedCsv)
+    }
+
+    suspend fun excludeRecurringTasksOnDay(tasks: List<TaskEntity>, epochDay: Long) {
+        tasks.forEach { task ->
+            val updatedSet = (task.excludedEpochDays + epochDay).sorted()
+            val updatedCsv = updatedSet.joinToString(",")
+            dao.updateTaskExcludedEpochDays(task.id, updatedCsv)
+        }
     }
 
     private val realtimeLock = Any()
