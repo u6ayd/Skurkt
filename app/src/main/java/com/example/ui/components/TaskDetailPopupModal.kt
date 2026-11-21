@@ -192,6 +192,24 @@ fun TaskDetailPopupModal(
                             )
                         }
 
+                        if (hasBreakLoop) {
+                            val workedMin = task.totalWorkedMinutes.coerceAtLeast(1)
+                            val breakMin = task.totalBreakMinutes.coerceAtLeast(1)
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(50))
+                                    .background(SoftSheetSurface)
+                                    .border(1.dp, InkBlack.copy(alpha = 0.14f), RoundedCornerShape(50))
+                                    .padding(horizontal = 10.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = "Worked ${formatDurationBadge(workedMin)} · Break ${formatDurationBadge(breakMin)}",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium),
+                                    color = InkCharcoal
+                                )
+                            }
+                        }
+
                         if (task.modeEnum != TaskMode.TOP_BUBBLE) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),

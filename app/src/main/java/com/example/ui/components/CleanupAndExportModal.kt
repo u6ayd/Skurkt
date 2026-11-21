@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -54,6 +55,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -71,6 +73,7 @@ import com.example.data.TaskWithSubtasks
 import com.example.ui.theme.InkBlack
 import com.example.ui.theme.InkCharcoal
 import com.example.ui.theme.InkMuted
+import com.example.ui.theme.NavRailDark
 import com.example.ui.theme.NeoCoral
 import com.example.ui.theme.NeoMintGreen
 import com.example.ui.theme.NeoSkyBlue
@@ -816,70 +819,164 @@ fun UniversalBulkSelectBar(
     onSelectAll: () -> Unit,
     onDeleteSelected: () -> Unit,
     onCancel: () -> Unit,
+    docked: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val allSelected = totalVisibleCount > 0 && selectedCount >= totalVisibleCount
-    NeoCard(
-        modifier = modifier
-            .widthIn(max = 640.dp)
-            .fillMaxWidth()
-            .testTag("universal_bulk_select_bar"),
-        backgroundColor = PureWhiteSurface,
-        cornerRadius = 20.dp,
-        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
-    ) {
+    val pillShape = RoundedCornerShape(50)
+
+    val barContent: @Composable (Modifier) -> Unit = { rowModifier ->
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = rowModifier,
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.weight(1f, fill = false)
             ) {
-                NeoPillButton(
-                    text = if (allSelected) "Deselect All" else "Select All",
-                    icon = if (allSelected) Icons.Default.Check else Icons.Default.SelectAll,
-                    selected = allSelected,
-                    activeColor = NeoYellow,
-                    onClick = onSelectAll,
-                    modifier = Modifier.testTag("bulk_select_all_button")
-                )
+                Row(
+                    modifier = Modifier
+                        .height(38.sdp)
+                        .clip(pillShape)
+                        .background(if (allSelected) NeoYellow else PureWhiteSurface.copy(alpha = 0.14f))
+                        .then(
+                            if (allSelected) Modifier.border(1.2.dp, InkBlack, pillShape)
+                            else Modifier.border(1.dp, PureWhiteSurface.copy(alpha = 0.22f), pillShape)
+                        )
+                        .smoothPressClickable(role = Role.Button, onClick = onSelectAll)
+                        .padding(horizontal = 12.sdp)
+                        .testTag("bulk_select_all_button"),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = if (allSelected) Icons.Default.Check else Icons.Default.SelectAll,
+                        contentDescription = null,
+                        tint = if (allSelected) InkBlack else PureWhiteSurface,
+                        modifier = Modifier.size(16.sdp)
+                    )
+                    Text(
+                        text = if (allSelected) "Deselect All" else "Select All",
+                        style = MaterialTheme.typography.labelLarge.copy(
+                            fontSize = 12.5.ssp,
+                            fontWeight = FontWeight.SemiBold
+                        ),
+                        color = if (allSelected) InkBlack else PureWhiteSurface,
+                        maxLines = 1
+                    )
+                }
+
                 Text(
                     text = "$selectedCount selected",
                     style = MaterialTheme.typography.titleMedium.copy(
-                        fontSize = 13.5.ssp,
-                        fontWeight = FontWeight.Bold
+                        fontSize = 13.ssp,
+                        fontWeight = FontWeight.SemiBold
                     ),
-                    color = InkBlack,
+                    color = PureWhiteSurface.copy(alpha = 0.9f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
+
+            Spacer(modifier = Modifier.width(8.dp))
 
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 if (selectedCount > 0) {
-                    NeoPillButton(
-                        text = "Delete ($selectedCount)",
-                        icon = Icons.Default.Delete,
-                        selected = true,
-                        activeColor = NeoCoral,
-                        onClick = onDeleteSelected,
-                        modifier = Modifier.testTag("bulk_delete_selected_button")
-                    )
+                    Row(
+                        modifier = Modifier
+                            .height(38.sdp)
+                            .clip(pillShape)
+                            .background(NeoCoral)
+                            .smoothPressClickable(role = Role.Button, onClick = onDeleteSelected)
+                            .padding(horizontal = 13.sdp)
+                            .testTag("bulk_delete_selected_button"),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = null,
+                            tint = PureWhiteSurface,
+                            modifier = Modifier.size(16.sdp)
+                        )
+                        Text(
+                            text = "Delete ($selectedCount)",
+                            style = MaterialTheme.typography.labelLarge.copy(
+                                fontSize = 12.5.ssp,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = PureWhiteSurface,
+                            maxLines = 1
+                        )
+                    }
                 }
 
-                NeoCircleCloseButton(
-                    onClick = onCancel,
-                    contentDescription = "Exit Multi-Select",
-                    size = 36.sdp,
-                    iconSize = 18.sdp,
-                    modifier = Modifier.testTag("bulk_cancel_button")
-                )
+                Box(
+                    modifier = Modifier
+                        .minimumInteractiveComponentSize()
+                        .size(38.sdp)
+                        .clip(CircleShape)
+                        .background(PureWhiteSurface.copy(alpha = 0.14f), CircleShape)
+                        .smoothPressClickable(role = Role.Button, onClick = onCancel)
+                        .testTag("bulk_cancel_button"),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Exit Multi-Select",
+                        tint = PureWhiteSurface,
+                        modifier = Modifier.size(18.sdp)
+                    )
+                }
             }
+        }
+    }
+
+    if (docked) {
+        Column(
+            modifier = modifier
+                .fillMaxWidth()
+                .background(NavRailDark)
+                .navigationBarsPadding()
+                .testTag("universal_bulk_select_bar"),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.5.dp)
+                    .background(InkBlack)
+            )
+            barContent(
+                Modifier
+                    .widthIn(max = 680.dp)
+                    .fillMaxWidth()
+                    .height(66.sdp)
+                    .padding(horizontal = 14.dp)
+            )
+        }
+    } else {
+        val capsuleShape = RoundedCornerShape(50)
+        Box(
+            modifier = modifier
+                .widthIn(max = 560.dp)
+                .fillMaxWidth()
+                .shadow(10.dp, capsuleShape, clip = false)
+                .clip(capsuleShape)
+                .background(NavRailDark, capsuleShape)
+                .border(1.dp, PureWhiteSurface.copy(alpha = 0.16f), capsuleShape)
+                .testTag("universal_bulk_select_bar")
+        ) {
+            barContent(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 10.dp)
+            )
         }
     }
 }

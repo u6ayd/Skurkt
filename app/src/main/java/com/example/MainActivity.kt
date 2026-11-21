@@ -197,6 +197,21 @@ fun StruktPlannerApp(
                 }
             }
 
+            val visibleIds = remember(
+                uiState.activeDestination,
+                uiState.inboxTasks,
+                uiState.folders,
+                uiState.selectedFolderId,
+                uiState.allTasks,
+                uiState.topBubbles,
+                uiState.spineFlowTasks,
+                isLandscapeSplitLayout
+            ) {
+                computeVisibleMultiSelectIds(uiState, isLandscapeSplitLayout)
+            }
+            val visibleIdSet = remember(visibleIds) { visibleIds.toSet() }
+            val visibleSelectedCount = uiState.selectedTaskIds.count { it in visibleIdSet }
+
             if (isLandscapeSplitLayout) {
                 TabletLandscapeSplitLayout(
                     uiState = uiState,
@@ -206,57 +221,26 @@ fun StruktPlannerApp(
             } else {
                 PortraitHandheldLayout(
                     uiState = uiState,
-                    viewModel = viewModel
+                    viewModel = viewModel,
+                    visibleMultiSelectIds = visibleIds,
+                    visibleSelectedCount = visibleSelectedCount
                 )
             }
 
-            if (uiState.isMultiSelectActive) {
-                val effectiveDestination = if (isLandscapeSplitLayout && uiState.activeDestination == StruktDestination.INBOX) {
-                    StruktDestination.FLOW
-                } else {
-                    uiState.activeDestination
-                }
-                val visibleIds = when (effectiveDestination) {
-                    StruktDestination.INBOX -> uiState.inboxTasks.map { it.task.id }
-                    StruktDestination.FOLDERS -> {
-                        val activeFolder = uiState.folders.firstOrNull { it.id == uiState.selectedFolderId }
-                        if (activeFolder != null) {
-                            uiState.allTasks
-                                .filter { it.task.folderName.equals(activeFolder.name, ignoreCase = true) }
-                                .map { it.task.id }
-                        } else {
-                            uiState.allTasks.map { it.task.id }
-                        }
-                    }
-                    else -> {
-                        val flowIds = uiState.topBubbles.map { it.task.id } + uiState.spineFlowTasks.map { it.task.id }
-                        if (isLandscapeSplitLayout) {
-                            (flowIds + uiState.inboxTasks.map { it.task.id }).distinct()
-                        } else {
-                            flowIds
-                        }
-                    }
-                }
-
-                val visibleIdSet = visibleIds.toSet()
-                val visibleSelectedCount = uiState.selectedTaskIds.count { it in visibleIdSet }
-
+            if (uiState.isMultiSelectActive && isLandscapeSplitLayout) {
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .navigationBarsPadding()
-                        .padding(
-                            start = 16.dp,
-                            end = 16.dp,
-                            bottom = if (isLandscapeSplitLayout) 16.dp else 76.sdp
-                        )
+                        .padding(start = 24.dp, end = 24.dp, bottom = 18.dp)
                 ) {
                     UniversalBulkSelectBar(
                         selectedCount = visibleSelectedCount,
                         totalVisibleCount = visibleIds.size,
                         onSelectAll = { viewModel.selectOrDeselectAllTasks(visibleIds) },
                         onDeleteSelected = { viewModel.bulkDeleteSelectedTasks(visibleIds) },
-                        onCancel = viewModel::exitMultiSelectMode
+                        onCancel = viewModel::exitMultiSelectMode,
+                        docked = false
                     )
                 }
             }
@@ -581,10 +565,44 @@ private fun TabletLandscapeSplitLayout(
     }
 }
 
+private fun computeVisibleMultiSelectIds(
+    uiState: PlannerUiState,
+    isLandscapeSplitLayout: Boolean
+): List<Long> {
+    val effectiveDestination = if (isLandscapeSplitLayout && uiState.activeDestination == StruktDestination.INBOX) {
+        StruktDestination.FLOW
+    } else {
+        uiState.activeDestination
+    }
+    return when (effectiveDestination) {
+        StruktDestination.INBOX -> uiState.inboxTasks.map { it.task.id }
+        StruktDestination.FOLDERS -> {
+            val activeFolder = uiState.folders.firstOrNull { it.id == uiState.selectedFolderId }
+            if (activeFolder != null) {
+                uiState.allTasks
+                    .filter { it.task.folderName.equals(activeFolder.name, ignoreCase = true) }
+                    .map { it.task.id }
+            } else {
+                uiState.allTasks.map { it.task.id }
+            }
+        }
+        else -> {
+            val flowIds = uiState.topBubbles.map { it.task.id } + uiState.spineFlowTasks.map { it.task.id }
+            if (isLandscapeSplitLayout) {
+                (flowIds + uiState.inboxTasks.map { it.task.id }).distinct()
+            } else {
+                flowIds
+            }
+        }
+    }
+}
+
 @Composable
 private fun PortraitHandheldLayout(
     uiState: PlannerUiState,
-    viewModel: PlannerViewModel
+    viewModel: PlannerViewModel,
+    visibleMultiSelectIds: List<Long>,
+    visibleSelectedCount: Int
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         Box(
@@ -608,23 +626,43 @@ private fun PortraitHandheldLayout(
             }
         }
 
-        PermanentStraightBottomBar(
-            activeDestination = uiState.activeDestination,
-            onSelectDestination = viewModel::setDestination,
-            onAddTaskClick = {
-                val selectedFolderObj = if (uiState.activeDestination == StruktDestination.FOLDERS) {
-                    uiState.folders.firstOrNull { it.id == uiState.selectedFolderId }
-                } else {
-                    null
-                }
-                viewModel.openCreateTaskSheet(
-                    defaultMode = TaskMode.TIMELESS_STEP,
-                    forInbox = uiState.activeDestination == StruktDestination.INBOX,
-                    preselectedFolder = selectedFolderObj?.name,
-                    preselectedSection = selectedFolderObj?.sections?.firstOrNull()
+        AnimatedContent(
+            targetState = uiState.isMultiSelectActive,
+            transitionSpec = {
+                fadeIn(animationSpec = tween(durationMillis = 160)) togetherWith
+                    fadeOut(animationSpec = tween(durationMillis = 120))
+            },
+            label = "portrait_bottom_bar_swap"
+        ) { selecting ->
+            if (selecting) {
+                UniversalBulkSelectBar(
+                    selectedCount = visibleSelectedCount,
+                    totalVisibleCount = visibleMultiSelectIds.size,
+                    onSelectAll = { viewModel.selectOrDeselectAllTasks(visibleMultiSelectIds) },
+                    onDeleteSelected = { viewModel.bulkDeleteSelectedTasks(visibleMultiSelectIds) },
+                    onCancel = viewModel::exitMultiSelectMode,
+                    docked = true
+                )
+            } else {
+                PermanentStraightBottomBar(
+                    activeDestination = uiState.activeDestination,
+                    onSelectDestination = viewModel::setDestination,
+                    onAddTaskClick = {
+                        val selectedFolderObj = if (uiState.activeDestination == StruktDestination.FOLDERS) {
+                            uiState.folders.firstOrNull { it.id == uiState.selectedFolderId }
+                        } else {
+                            null
+                        }
+                        viewModel.openCreateTaskSheet(
+                            defaultMode = TaskMode.TIMELESS_STEP,
+                            forInbox = uiState.activeDestination == StruktDestination.INBOX,
+                            preselectedFolder = selectedFolderObj?.name,
+                            preselectedSection = selectedFolderObj?.sections?.firstOrNull()
+                        )
+                    }
                 )
             }
-        )
+        }
     }
 }
 

@@ -518,28 +518,59 @@ fun HybridSpineTaskRow(
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            Box(
+            Column(
                 modifier = Modifier
                     .weight(1f)
-                    .heightIn(min = topHalfHeight + 8.dp),
-                contentAlignment = Alignment.CenterStart
+                    .fillMaxHeight()
             ) {
-                TaskRightTitleAndCheckRow(
-                    item = item,
-                    isUpNext = isUpNext,
-                    isSimultaneous = isSimultaneous || (isTimed && task.allowSimultaneous),
-                    isMultiSelectActive = isMultiSelectActive,
-                    isSelected = isSelected,
-                    accentColor = accentColor,
-                    onToggleComplete = {
-                        if (isMultiSelectActive) {
-                            onToggleSelect()
-                        } else {
-                            onToggleComplete()
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = topHalfHeight),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    TaskRightTitleAndCheckRow(
+                        item = item,
+                        isUpNext = isUpNext,
+                        isSimultaneous = isSimultaneous || (isTimed && task.allowSimultaneous),
+                        isMultiSelectActive = isMultiSelectActive,
+                        isSelected = isSelected,
+                        accentColor = accentColor,
+                        onToggleComplete = {
+                            if (isMultiSelectActive) {
+                                onToggleSelect()
+                            } else {
+                                onToggleComplete()
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(loopHeight),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    val breakMin = task.totalBreakMinutes.coerceAtLeast(1)
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(SoftSheetSurface)
+                            .border(1.dp, InkBlack.copy(alpha = 0.25f), RoundedCornerShape(50))
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "${formatDurationBadge(breakMin)} break",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 10.ssp,
+                                fontWeight = FontWeight.Medium
+                            ),
+                            color = InkMuted
+                        )
+                    }
+                }
             }
         }
         }
@@ -614,38 +645,56 @@ private fun TaskRightTitleAndCheckRow(
                 }
             }
 
-            val metadataParts = buildList {
-                if (task.durationMinutes > 0) {
-                    add(formatDurationBadge(task.durationMinutes))
-                }
-                if (item.subtasks.isNotEmpty()) {
-                    add("${item.completedSubtasksCount}/${item.subtasks.size} steps")
-                }
-                if (hasPauseBreak) {
-                    val workedMin = task.totalWorkedMinutes.coerceAtLeast(1)
-                    val breakMin = task.totalBreakMinutes.coerceAtLeast(1)
-                    add("${formatDurationBadge(workedMin)} work · ${formatDurationBadge(breakMin)} break")
-                }
-            }
+            val hasDuration = task.durationMinutes > 0
+            val hasSubtasks = item.subtasks.isNotEmpty()
 
-            if (metadataParts.isNotEmpty() || isSimultaneous) {
+            if (hasDuration || hasSubtasks || isSimultaneous) {
                 Spacer(modifier = Modifier.height(3.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    if (metadataParts.isNotEmpty()) {
+                    if (hasDuration) {
                         Text(
-                            text = metadataParts.joinToString(" · "),
+                            text = formatDurationBadge(task.durationMinutes),
                             style = MaterialTheme.typography.labelMedium.copy(
                                 fontSize = 11.5.ssp,
                                 fontWeight = FontWeight.Normal
                             ),
                             color = InkMuted,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f, fill = false)
+                            maxLines = 1
                         )
+                    }
+
+                    if (hasDuration && hasSubtasks) {
+                        Text(
+                            text = "·",
+                            style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.5.ssp),
+                            color = InkMuted
+                        )
+                    }
+
+                    if (hasSubtasks) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Checklist,
+                                contentDescription = "Subtasks",
+                                tint = InkMuted,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Text(
+                                text = "${item.completedSubtasksCount}/${item.subtasks.size}",
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    fontSize = 11.5.ssp,
+                                    fontWeight = FontWeight.Normal
+                                ),
+                                color = InkMuted,
+                                maxLines = 1
+                            )
+                        }
                     }
 
                     if (isSimultaneous) {
